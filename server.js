@@ -32,7 +32,7 @@ app.post('/criar-pagamento', async (req, res) => {
         items: [{
           title: "Assinatura Plano Profissional - Salaodigital",
           quantity: 1,
-          unit_price: 29.90,
+          unit_price: 250.00,
           currency_id: 'BRL'
         }],
         metadata: { barber_id: barberId },
