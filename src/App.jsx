@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 
 const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co'; 
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDg0MjksImV4cCI6MjA4ODQyNDQyOX0.6EcebGjxj05dDyKl5l5DKKBtLvkC5w-Var1MEyzxzrY';
   
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
