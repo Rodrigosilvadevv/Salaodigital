@@ -1367,22 +1367,24 @@ export default function App() {
     }
   };
 
-  const handleUpdateStatus = async (id, status) => {
-    if (user?.isGuest) return; 
+  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
+  if (user?.isGuest) return; 
 
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('id', id);
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status })
+    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
 
-    if (!error) {
-      if (status === 'rejected') {
-        setAppointments(prev => prev.filter(a => a.id !== id));
-      } else {
-        setAppointments(prev => prev.map(a => a.id === id ? { ...a, status } : a));
-      }
+  if (!error) {
+    if (status === 'rejected') {
+      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
+    } else {
+      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
     }
-  };
+  } else {
+    console.error("Erro 400 resolvido:", error);
+  }
+};
   const handleUpdateProfile = async (updatedUser) => {
     try {
       const dataToSave = {
