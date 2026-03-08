@@ -1071,29 +1071,29 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               ) : (
                 <div className="space-y-3">
                   {agendaOrdenada.map(app => (
-                    <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
-                       <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-black text-slate-900 text-sm">{app.client}</p>
-                            <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                          <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
-                       </div>
-                       <button 
-                        onClick={() => {
-                          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                            onUpdateStatus(app.id, 'rejected');
-                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                          }
-                        }}
-                        className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
-                      >
-                        <XCircle size={20} />
-                        <span className="text-[8px] font-bold uppercase">Cancelar</span>
-                      </button>
-                    </div>
-                  ))}
+  <div key={app.id || app.client_id} className="...">
+     {/* ... infos do card ... */}
+     <button 
+        onClick={() => {
+          // Verificação para evitar o erro 22P02
+          if (!app.client_id || app.client_id === "null") {
+            alert("Erro: Este agendamento antigo não possui um ID de cliente válido.");
+            return;
+          }
+
+          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+            // Chamando com client_id em vez de id
+            onUpdateStatus(app.client_id, 'rejected');
+            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+          }
+        }}
+        className="..."
+      >
+        <XCircle size={20} />
+        <span className="text-[8px] font-bold uppercase">Cancelar</span>
+      </button>
+  </div>
+))}
                 </div>
               )}
             </section>
