@@ -714,54 +714,95 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
 
-  // Filtros de Agendamentos
   const myAppointments = (appointments || []).filter(a => 
-    String(a.barber_id || a.barberId) === String(user.id)
+    String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
   );
 
-  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => {
-    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
+  const pending = myAppointments.filter(a => a.status === 'pending');
+  
+  // Ordenação das solicitações pendentes por data/hora
+  pending.sort((a, b) => {
+    const dataA = new Date(`${a.date}T${a.time}`);
+    const dataB = new Date(`${b.date}T${b.time}`);
+    return dataA - dataB;
   });
 
-  const confirmed = myAppointments.filter(a => a.status === 'confirmed').sort((a, b) => {
+  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
+  
+  // Ordenação da agenda de confirmados (mais próximos primeiro)
+  const agendaOrdenada = [...confirmed].sort((a, b) => {
     return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
   });
 
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
-  // Efeitos e Handlers originais
   useEffect(() => {
-    const interval = setInterval(() => console.log("Sincronizando..."), 30000);
+    const interval = setInterval(() => {
+      console.log("Sincronizando dados...");
+    }, 30000);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
-    if (queryParams.get('status') === 'approved' && !user.plano_ativo) {
-        alert('Pagamento confirmado!');
-        onUpdateProfile({ ...user, plano_ativo: true, data_assinatura: new Date().toISOString() });
+    const status = queryParams.get('status');
+    if (status === 'approved' && !user.plano_ativo) {
+        alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
+        onUpdateProfile({ 
+          ...user, 
+          plano_ativo: true, 
+          is_visible: true,
+          plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() 
+        });
         window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [user, onUpdateProfile]);
+  }, [user.plano_ativo, onUpdateProfile, user]);
 
-  const handleDeleteAppointment = async (id) => {
-    if (!window.confirm("Deseja excluir este registro permanentemente?")) return;
-    try {
-      const { error } = await supabase.from('appointments').delete().eq('id', id);
-      if (error) throw error;
-      alert("Excluído com sucesso");
-    } catch (err) {
-      alert("Erro ao excluir");
+  const toggleDateAvailability = (date) => {
+    const currentDates = user.available_dates || [];
+    let newDates;
+    
+    if (currentDates.includes(date)) {
+        newDates = currentDates.filter(d => d !== date); 
+    } else {
+        newDates = [...currentDates, date].sort(); 
     }
+    
+    const currentSchedule = user.schedule || {};
+    onUpdateProfile({ ...user, available_dates: newDates, schedule: currentSchedule });
+    setSelectedDateConfig(date); 
   };
 
   const toggleSlotForDate = async (date, slot) => {
     const currentSlots = user.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
-    const newSlots = slotsForDay.includes(slot) ? slotsForDay.filter(s => s !== slot) : [...slotsForDay, slot].sort();
-    const updated = { ...currentSlots, [date]: newSlots };
-    onUpdateProfile({ ...user, available_slots: updated });
-    await supabase.from('profiles').update({ available_slots: updated }).eq('id', user.id);
+
+    let newSlots;
+    if (slotsForDay.includes(slot)) {
+      newSlots = slotsForDay.filter(s => s !== slot);
+    } else {
+      newSlots = [...slotsForDay, slot].sort();
+    }
+
+    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
+
+    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ available_slots: updatedAvailableSlots })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Erro ao salvar no Supabase:", err.message);
+    }
+  };
+
+  const handleDeleteAppointment = async (id) => {
+    if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
+        onUpdateStatus(id, 'rejected'); // Usando a prop existente para limpar da vista
+    }
   };
 
   const handlePayment = async () => {
@@ -771,178 +812,351 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Pro" })
+        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
       });
+      if (!response.ok) throw new Error("Erro API");
       const data = await response.json();
       if (data.init_point) window.location.href = data.init_point;
+      else alert("Erro ao gerar link.");
     } catch (error) {
-      alert("Erro no pagamento");
-    } finally { setIsPaying(false); }
+      console.error(error);
+      alert("Erro ao conectar ao pagamento.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const handleToggleVisibility = () => {
+    onUpdateProfile({ ...user, is_visible: !user.is_visible });
   };
 
   const toggleService = (serviceId, defaultPrice) => {
-    const current = user.my_services || [];
-    const exists = current.find(s => s.id === serviceId);
-    if (!exists && !user.plano_ativo && current.length >= 3) {
-      setShowPayModal(true);
-      return;
+    const currentServices = user.my_services || [];
+    const exists = currentServices.find(s => s.id === serviceId);
+    
+    if (!exists) {
+        if (!user.plano_ativo && currentServices.length >= 3) {
+            setShowPayModal(true); 
+            return; 
+        }
     }
-    const newServices = exists ? current.filter(s => s.id !== serviceId) : [...current, { id: serviceId, price: defaultPrice }];
+
+    let newServices = exists 
+      ? currentServices.filter(s => s.id !== serviceId) 
+      : [...currentServices, { id: serviceId, price: defaultPrice }];
+    onUpdateProfile({ ...user, my_services: newServices });
+  };
+
+  const updateServicePrice = (serviceId, newPrice) => {
+    const newServices = (user.my_services || []).map(s => 
+      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
+    );
     onUpdateProfile({ ...user, my_services: newServices });
   };
 
   const handleUploadPhoto = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
+
     try {
-      const filePath = `avatar-${user.id}-${Date.now()}`;
-      await supabase.storage.from('barber-photos').upload(filePath, file);
-      const { data: { publicUrl } } = supabase.storage.from('barber-photos').getPublicUrl(filePath);
+      const fileExt = file.name.split('.').pop();
+      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+      const { error: uploadError } = await supabase.storage
+        .from('barber-photos')
+        .upload(filePath, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('barber-photos')
+        .getPublicUrl(filePath);
+
       onUpdateProfile({ ...user, avatar_url: publicUrl });
-    } catch (e) { alert("Erro no upload"); }
+      alert('Foto de perfil atualizada!');
+    } catch (error) {
+      console.error(error);
+      alert('Erro ao carregar foto.');
+    }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-32 font-sans relative">
-      {/* Modal de Pagamento */}
+    <div className="min-h-screen bg-slate-50 pb-24 font-sans">
+      
       {showPayModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center">
-            <Lock size={32} className="mx-auto mb-4 text-amber-600" />
-            <h2 className="text-xl font-black mb-2">Libere Serviços Ilimitados</h2>
-            <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
-              {isPaying ? "Processando..." : "Assinar Pro (R$ 29,90)"}
-            </button>
-            <button onClick={() => setShowPayModal(false)} className="mt-4 text-slate-400 text-sm">Agora não</button>
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
+            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
+            <div className="space-y-3">
+              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
+                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
+              </button>
+              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20 flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border">
-            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <User className="p-2 text-slate-400" />}
+      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <User className="w-full h-full p-2 text-slate-400" />}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
+              </div>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-black leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
-            <span className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? '• Online' : '• Offline'}</span>
-          </div>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+            <LogOut size={18}/>
+          </button>
         </div>
-        <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400"><LogOut size={18}/></button>
       </header>
 
-      {/* Tabs */}
-      <div className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b sticky top-[88px] z-10">
-        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-500'}`}>Início</button>
-        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-500'}`}>Serviços</button>
-        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-500'}`}>Perfil & Agenda</button>
-      </div>
+      <nav className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
+        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Início</button>
+        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Serviços</button>
+        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Perfil & Agenda</button>
+      </nav>
 
       <main className="p-6 max-w-md mx-auto">
         {activeTab === 'home' && (
           <div className="space-y-6">
-            {/* Stats */}
             <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-900 text-white p-5 rounded-2xl">
-                <p className="text-slate-400 text-[10px] font-bold uppercase">Faturamento</p>
+              <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
+                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1">Faturamento</p>
                 <p className="text-2xl font-black">R$ {revenue}</p>
               </div>
-              <div className="bg-white border p-5 rounded-2xl">
-                <p className="text-slate-400 text-[10px] font-bold uppercase">Confirmados</p>
-                <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1">Agendamentos</p>
+                <div className="flex gap-2 items-baseline">
+                    <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
+                    <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
+                </div>
               </div>
             </div>
 
-            {/* Pendentes */}
+            {/* SEÇÃO DE SOLICITAÇÕES PENDENTES */}
             <section>
-              <h3 className="font-bold mb-4 flex justify-between items-center text-slate-900">Solicitações Pendentes</h3>
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
+                Novas Solicitações
+                {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pending.length}</span>}
+              </h3>
               {pending.length === 0 ? (
-                <div className="py-8 text-center border-2 border-dashed rounded-2xl text-slate-400 text-sm">Sem pendências</div>
+                <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                  <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+                </div>
               ) : (
                 pending.map(app => (
-                  <div key={app.id} className="bg-white p-4 rounded-2xl border mb-3 shadow-sm">
-                    <div className="flex justify-between mb-3">
+                  <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
                       <div>
                         <p className="font-bold text-slate-900">{app.client}</p>
-                        <p className="text-[10px] text-blue-600 font-bold uppercase">{app.service?.name}</p>
-                        <p className="text-xs text-slate-500">{app.time} - {app.date?.split('-').reverse().join('/')}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service?.name || 'Serviço'}</p>
+                        <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
+                            <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
+                        </div>
                       </div>
-                      <button onClick={() => handleDeleteAppointment(app.id)} className="text-red-400 p-1"><Trash2 size={16}/></button>
+                      <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => onUpdateStatus(app.id, 'confirmed')} className="flex-1 bg-green-600 text-white py-2 rounded-lg font-bold text-xs">Aceitar</button>
-                      <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="px-3 bg-red-50 text-red-500 rounded-lg"><X size={16}/></button>
+                      <button onClick={() => {
+                        onUpdateStatus(app.id, 'confirmed');
+                        if (app.date && app.time) toggleSlotForDate(app.date, app.time);
+                        const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                        const fone = app.phone?.toString().replace(/\D/g, '');
+                        if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                      }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                        <CheckCircle size={14} /> Aceitar
+                      </button>
+                      
+                      <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
+                        <XCircle size={18} />
+                      </button>
+
+                      {/* BOTÃO EXCLUIR SOLICITAÇÃO */}
+                      <button onClick={() => handleDeleteAppointment(app.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   </div>
                 ))
               )}
             </section>
 
-            {/* Ver Agenda (Confirmados) */}
+            {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
             <section className="mt-8">
-                <h3 className="font-bold mb-4 text-slate-900 flex items-center gap-2">
-                    <Calendar size={18} className="text-blue-500"/> Agenda de Clientes
-                </h3>
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
+              </h3>
+              {agendaOrdenada.length === 0 ? (
+                 <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                    <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+                 </div>
+              ) : (
                 <div className="space-y-3">
-                    {confirmed.length === 0 ? (
-                        <p className="text-center text-slate-400 text-xs py-4">Nenhum cliente agendado.</p>
-                    ) : (
-                        confirmed.map(app => (
-                            <div key={app.id} className="flex items-center justify-between bg-blue-50/50 p-4 rounded-2xl border border-blue-100">
-                                <div>
-                                    <p className="font-bold text-slate-900 text-sm">{app.client}</p>
-                                    <p className="text-[10px] font-bold text-slate-500">{app.date?.split('-').reverse().join('/')} às {app.time}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-xs font-black text-slate-900">R$ {app.price}</p>
-                                    <button onClick={() => handleDeleteAppointment(app.id)} className="text-[9px] text-red-400 font-bold uppercase mt-1">Remover</button>
-                                </div>
-                            </div>
-                        ))
-                    )}
+                  {agendaOrdenada.map(app => (
+                    <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-blue-500 shadow-sm">
+                       <div>
+                          <p className="font-black text-slate-900 text-sm">{app.client}</p>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                       </div>
+                       <div className="text-right">
+                          <p className="text-blue-600 font-black text-xs">{app.time}</p>
+                          <p className="text-[9px] text-slate-400 font-bold">{app.date?.split('-').reverse().join('/')}</p>
+                       </div>
+                    </div>
+                  ))}
                 </div>
+              )}
             </section>
           </div>
         )}
 
-        {/* Outras abas (Services/Config) permanecem com sua lógica original de mapeamento de MASTER_SERVICES e inputs de endereço */}
         {activeTab === 'services' && (
-            <div className="space-y-4">
-                 <p className="text-xs text-blue-700 bg-blue-50 p-4 rounded-xl font-medium">
-                    {user.plano_ativo ? '✅ Plano Pro Ativo' : `Gratuito: ${user.my_services?.length || 0}/3 serviços`}
-                 </p>
-                 {/* ... Mapeamento dos serviços igual ao original ... */}
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-2xl mb-4">
+                <p className="text-xs text-blue-700 font-medium">
+                  <span className="font-bold">{user.plano_ativo ? 'Plano Pro Ativo' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
+                </p>
             </div>
+            {MASTER_SERVICES.map(service => {
+              const userServiceData = user.my_services?.find(s => s.id === service.id);
+              const isActive = !!userServiceData;
+              return (
+                <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>{service.icon}</div>
+                      <div>
+                        <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
+                        <p className="text-[10px] text-slate-400">{service.duration}</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
+                        {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
+                      <input type="number" value={userServiceData.price || ''} onChange={(e) => updateServicePrice(service.id, e.target.value)} className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {activeTab === 'config' && (
-            <div className="space-y-6">
-                {/* ... Inputs de Endereço e Foto igual ao original ... */}
-                <section className="bg-white p-5 rounded-2xl border">
-                    <h3 className="font-bold text-sm mb-4">Minha Agenda</h3>
-                    {/* ... Componente de calendário original ... */}
-                </section>
+          <div className="space-y-6">
+            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
+                <div className="flex flex-col items-center mb-6">
+                    <div className="relative">
+                        <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
+                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
+                        </div>
+                        <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
+                            <Camera size={16} />
+                        </label>
+                        <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} />
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
+                        <input type="text" value={user.address || ''} onChange={(e) => onUpdateProfile({ ...user, address: e.target.value })} className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium"/>
+                    </div>
+                    <button onClick={() => {
+                        if ("geolocation" in navigator) {
+                            navigator.geolocation.getCurrentPosition((pos) => {
+                                onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                                alert("Localização capturada!");
+                            });
+                        }
+                    }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                        <MapPin size={14} /> Atualizar Localização GPS
+                    </button>
+                </div>
+
+                <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
+                    <div onClick={handleToggleVisibility} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
+                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
+                    </div>
+                </div>
+            </section>
+
+            {/* GERENCIAR AGENDA / CALENDÁRIO */}
+            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+                <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
+                    <div className="flex items-center gap-3">
+                        <CalendarDays size={20} />
+                        <h3 className="font-bold text-sm">Horários Disponíveis</h3>
+                    </div>
+                    <ChevronRight size={18} className={showCalendar ? 'rotate-90' : ''} />
+                </div>
+                {showCalendar && (
+                    <div className="p-5">
+                        <div className="grid grid-cols-7 gap-2 mb-6">
+                            {Array.from({ length: 30 }, (_, i) => {
+                                const d = String(i + 1).padStart(2, '0');
+                                const fullDate = `2026-03-${d}`; // Simplificado para exemplo
+                                const isSelected = selectedDateConfig === fullDate;
+                                const isAvailable = user.available_slots?.[fullDate]?.length > 0;
+                                return (
+                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white' : 'bg-white text-slate-400'}`}>
+                                        {i + 1}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                            <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {GLOBAL_TIME_SLOTS.map(slot => (
+                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-blue-600 text-white' : 'bg-white'}`}>
+                                        {slot}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </section>
+
+            {/* DATA DE EXPIRAÇÃO DO PLANO */}
+            <div className="pt-4 text-center">
+               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
+                  <p className="text-sm font-black text-slate-900 mt-1">
+                    {user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
+                  </p>
+                  {user.plano_ativo && user.plano_expiracao && (
+                    <p className="text-[11px] text-slate-500 mt-2">
+                       Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span>
+                    </p>
+                  )}
+                  {!user.plano_ativo && (
+                    <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
+                  )}
+               </div>
+               <p className="text-[9px] text-slate-400 mt-6 uppercase font-bold tracking-tighter">Salão Digital © 2026 - Todos os direitos reservados</p>
             </div>
+          </div>
         )}
       </main>
-
-      {/* Footer com Expiração */}
-      <footer className="fixed bottom-0 left-0 w-full bg-white border-t p-4 text-center z-30">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            {user.plano_ativo ? (
-                <span className="text-green-600">
-                    Assinatura Pro expira em: {
-                        user.data_assinatura 
-                        ? new Date(new Date(user.data_assinatura).getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('pt-BR')
-                        : '30 dias após ativação'
-                    }
-                </span>
-            ) : (
-                "Modo Gratuito - Sem expiração"
-            )}
-        </p>
-      </footer>
     </div>
   );
 };
