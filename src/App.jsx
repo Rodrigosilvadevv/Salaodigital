@@ -1048,14 +1048,15 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   ) : (
     pending.map(app => {
-      // VALIDAÇÃO DE SEGURANÇA: Garante que pegamos o ID independente de estar maiúsculo ou minúsculo
       const appointmentId = app.id || app.ID;
+      // Usando client_name conforme enviado pelo cliente
+      const nomeExibicao = app.client_name || app.client || "Cliente";
 
       return (
         <div key={appointmentId || Math.random()} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
           <div className="flex justify-between items-start mb-3">
             <div>
-              <p className="font-bold text-slate-900">{app.client}</p>
+              <p className="font-bold text-slate-900">{nomeExibicao}</p>
               <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
               <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
                   <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
@@ -1066,23 +1067,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           <div className="flex gap-2">
             <button 
               onClick={async () => {
-                if (!appointmentId) {
-                  alert("Erro: Este agendamento não possui um ID válido no banco.");
-                  console.error("Dados do agendamento sem ID:", app);
-                  return;
-                }
-
-                // 1. ATUALIZA A TELA INSTANTANEAMENTE
+                if (!appointmentId) return;
                 setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'confirmed' } : a));
-                
-                // 2. Manda atualizar no banco (Usando o ID validado)
                 onUpdateStatus(appointmentId, 'confirmed');
-                
-                // 3. Fecha o horário na agenda 
                 if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
                 
-                // 4. WhatsApp
-                const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                // WhatsApp usando client_name
+                const mensagem = `Olá ${nomeExibicao}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                 const fone = app.phone?.toString().replace(/\D/g, '');
                 if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
               }} 
@@ -1090,24 +1081,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             >
               <CheckCircle size={14} /> Aceitar
             </button>
-            
-            <button 
-              onClick={() => {
+            <button onClick={() => {
                 if (!appointmentId) return;
                 setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'rejected' } : a));
                 onUpdateStatus(appointmentId, 'rejected');
                 if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-              }} 
-              className="p-3 bg-orange-50 text-orange-500 rounded-xl"
-            >
+              }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
               <XCircle size={18} />
-            </button>
-
-            <button 
-              onClick={() => appointmentId && handleDeleteAppointment(app)} 
-              className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors"
-            >
-              <Trash2 size={18} />
             </button>
           </div>
         </div>
@@ -1116,54 +1096,53 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   )}
 </section>
 
-            {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
-            <section className="mt-8">
-              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
-              </h3>
-              {agendaOrdenada.length === 0 ? (
-                 <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                    <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {agendaOrdenada.map(app => (
-                    <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
-                       <div className="flex-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-black text-slate-900 text-sm">{app.client}</p>
-                            <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                          <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
-                       </div>
-                       
-                       <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => {
-                              if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                                // CANCELAR: Remove da agenda visualmente na mesma hora
-                                setLocalAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'rejected' } : a));
-                                
-                                onUpdateStatus(app.id, 'rejected');
-                                // ABRE o horário na agenda automaticamente
-                                if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                              }
-                            }}
-                            className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
-                          >
-                            <XCircle size={20} />
-                            <span className="text-[8px] font-bold uppercase">Cancelar</span>
-                          </button>
-                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
+{/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
+<section className="mt-8">
+  <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+    <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
+  </h3>
+  {agendaOrdenada.length === 0 ? (
+     <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+        <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+     </div>
+  ) : (
+    <div className="space-y-3">
+      {agendaOrdenada.map(app => {
+        const appointmentId = app.id || app.ID;
+        const nomeExibicao = app.client_name || app.client || "Cliente";
 
+        return (
+          <div key={appointmentId || Math.random()} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
+             <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="font-black text-slate-900 text-sm">{nomeExibicao}</p>
+                  <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
+             </div>
+             <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    if (!appointmentId) return;
+                    if(window.confirm(`Deseja CANCELAR o horário de ${nomeExibicao}?`)) {
+                      setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'rejected' } : a));
+                      onUpdateStatus(appointmentId, 'rejected');
+                      if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                >
+                  <XCircle size={20} />
+                  <span className="text-[8px] font-bold uppercase">Cancelar</span>
+                </button>
+             </div>
+          </div>
+        );
+      })}
+    </div>
+  )}
+</section>
         {activeTab === 'services' && (
           <div className="space-y-4">
             <div className="p-4 bg-blue-50 rounded-2xl mb-4">
