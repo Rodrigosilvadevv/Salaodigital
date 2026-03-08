@@ -1096,7 +1096,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   )}
 </section>
 
-{/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
+            {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
 <section className="mt-8">
   <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
     <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
@@ -1143,6 +1143,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   )}
 </section>
+          </div>
+        )}
+
         {activeTab === 'services' && (
           <div className="space-y-4">
             <div className="p-4 bg-blue-50 rounded-2xl mb-4">
