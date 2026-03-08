@@ -977,153 +977,140 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
       <main className="p-6 max-w-md mx-auto">
         {activeTab === 'home' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
-                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1">Faturamento</p>
-                <p className="text-2xl font-black">R$ {revenue}</p>
-              </div>
-              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1">Agendamentos</p>
-                <div className="flex gap-2 items-baseline">
-                    <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
-                    <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
-                </div>
-              </div>
-            </div>
-
-            <section>
-              <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
-                Novas Solicitações
-                {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pending.length}</span>}
-              </h3>
-              {pending.length === 0 ? (
-                <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
-                  <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-                </div>
-              ) : (
-                pending.map(app => (
-                  <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <p className="font-bold text-slate-900">{app.client}</p>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                        <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
-                            <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
-                        </div>
-                      </div>
-                      <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
-                    </div>
-                    <div className="flex gap-2">
-                     <button 
-  onClick={async () => {
-    // Trocamos app.id por app.client_id
-    if (!app.client_id) {
-      alert("Erro: Este cliente não possui um ID válido.");
-      return;
-    }
-
-    try {
-      // 1. Atualiza usando o client_id
-      await onUpdateStatus(app.client_id, 'confirmed'); 
-      
-      // 2. Ocupa o slot
-      if (app.date && app.time) {
-        await setSlotAvailability(app.date, app.time, false);
-      }
-      
-      // 3. WhatsApp...
-      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-      const fone = app.phone?.toString().replace(/\D/g, '');
-      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-      
-    } catch (err) {
-      console.error("Erro na confirmação:", err);
-      alert("Falha ao salvar confirmação.");
-    }
-  }} 
-  className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
->
-  <CheckCircle size={14} /> Aceitar
-</button>
-
-{/* Botão REJEITAR */}
-<button onClick={() => {
-  onUpdateStatus(app.client_id, 'rejected'); // Trocado para client_id
-  if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-}} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
-  <XCircle size={18} />
-</button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </section>
-
-            <section className="mt-8">
-              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-                <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
-              </h3>
-              {agendaOrdenada.length === 0 ? (
-                 <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                    <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {agendaOrdenada.map(app => (
-  <div 
-    key={app.id || app.client_id} 
-    className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all mb-3"
-  >
-    {/* Conteúdo à Esquerda: Info do Cliente */}
-    <div className="flex-1">
-      <div className="flex items-center gap-2 mb-1">
-        <p className="font-black text-slate-900 text-sm tracking-tight">
-          {app.client}
-        </p>
-        <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-          Confirmado
-        </span>
+  <div className="space-y-6">
+    {/* Status Cards */}
+    <div className="grid grid-cols-2 gap-4">
+      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
+        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
+        <p className="text-2xl font-black">R$ {revenue}</p>
       </div>
-      
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
-          {app.service_name || 'Serviço'}
-        </p>
-        <div className="flex items-center gap-1.5 text-blue-600 font-bold">
-          <Clock size={12} strokeWidth={3} />
-          <span className="text-[10px]">
-            {app.time} • {app.date?.split('-').reverse().join('/')}
-          </span>
+      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
+        <div className="flex gap-2 items-baseline">
+          <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
+          <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
         </div>
       </div>
     </div>
 
-    {/* Botão de Cancelar: Estilo Minimalista */}
-    <button 
-      onClick={() => {
-        if (!app.client_id || app.client_id === "null") {
-          alert("Ops! Este agendamento não possui um ID válido para cancelamento.");
-          return;
-        }
-
-        if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-          onUpdateStatus(app.client_id, 'rejected');
-          if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-        }
-      }}
-      className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all active:scale-95 group-hover:border-red-100 border border-transparent"
-    >
-      <XCircle size={20} />
-      <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
-    </button>
-  </div>
-))}
-                </div>
-              )}
-            </section>
-          </div>
+    {/* Section: Novas Solicitações */}
+    <section>
+      <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
+        Novas Solicitações
+        {pending.length > 0 && (
+          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+            {pending.length}
+          </span>
         )}
+      </h3>
+      
+      {pending.length === 0 ? (
+        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+        </div>
+      ) : (
+        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
+        pending
+          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+          .map(app => (
+            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
+                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+                    <Clock size={12} strokeWidth={3} />
+                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
+                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    if (!app.client_id) return alert("ID inválido.");
+                    try {
+                      await onUpdateStatus(app.client_id, 'confirmed');
+                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                      const fone = app.phone?.toString().replace(/\D/g, '');
+                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                    } catch (err) { console.error(err); }
+                  }} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
+                >
+                  <CheckCircle size={14} /> Aceitar Solicitação
+                </button>
+                
+                <button 
+                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
+                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+                >
+                  <XCircle size={18} />
+                </button>
+              </div>
+            </div>
+          ))
+      )}
+    </section>
+
+    {/* Section: Próximos na Agenda */}
+    <section className="mt-8">
+      <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
+      </h3>
+      
+      {agendaOrdenada.length === 0 ? (
+        <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+          <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* FILTRO ANTI-DUPLICIDADE também na agenda */}
+          {agendaOrdenada
+            .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+            .map(app => (
+              <div 
+                key={app.client_id} 
+                className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-black text-slate-900 text-sm tracking-tight">{app.client}</p>
+                    <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Confirmado</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço'}</p>
+                    <div className="flex items-center gap-1.5 text-blue-600 font-bold">
+                      <Clock size={12} strokeWidth={3} />
+                      <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={() => {
+                    if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+                      onUpdateStatus(app.client_id, 'rejected');
+                      if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all border border-transparent"
+                >
+                  <XCircle size={20} />
+                  <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+    </section>
+  </div>
+)}
 
         {activeTab === 'services' && (
           <div className="space-y-4">
