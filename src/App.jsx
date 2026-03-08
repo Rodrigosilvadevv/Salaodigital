@@ -1034,13 +1034,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
                 <div className="flex gap-2">
                   <button onClick={async () => {
-                    // 1. Atualiza para confirmado (move automaticamente para a agenda)
                     await onUpdateStatus(app.id, 'confirmed');
-                    
-                    // 2. Remove o horário da lista de disponíveis
                     if (app.date && app.time) toggleSlotForDate(app.date, app.time);
-                    
-                    // 3. Notificação via WhatsApp
                     const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                     const fone = app.phone?.toString().replace(/\D/g, '');
                     if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
@@ -1094,15 +1089,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                    <div className="flex items-center gap-2">
                       <button 
                         onClick={() => {
-                          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}? O horário voltará a ficar disponível.`)) {
+                          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
                             onUpdateStatus(app.id, 'rejected');
-                            // Devolve o horário para a lista de disponíveis
                             if (app.date && app.time) toggleSlotForDate(app.date, app.time);
-                            
-                            // Avisar o cliente via WhatsApp sobre o cancelamento
-                            const msgCancel = `Olá ${app.client}, infelizmente precisei cancelar seu horário para o dia ${app.date?.split('-').reverse().join('/')}. Por favor, escolha um novo horário no app.`;
-                            const fone = app.phone?.toString().replace(/\D/g, '');
-                            if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${msgCancel}`, '_blank');
                           }
                         }}
                         className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
@@ -1116,6 +1105,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             </div>
           )}
         </section>
+      </div>
+    </main>
 
         {activeTab === 'services' && (
           <div className="space-y-4">
