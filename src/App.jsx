@@ -846,9 +846,45 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     }
   };
 
-  const handleDeleteAppointment = async (id) => {
+  // NOVA FUNÇÃO: Força a abertura ou fechamento do horário (mais seguro que o toggle)
+  const setSlotAvailability = async (date, slot, makeAvailable) => {
+    const currentSlots = user.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
+
+    let newSlots;
+    if (makeAvailable) {
+      if (!slotsForDay.includes(slot)) {
+        newSlots = [...slotsForDay, slot].sort();
+      } else {
+        return; // Já está disponível
+      }
+    } else {
+      if (slotsForDay.includes(slot)) {
+        newSlots = slotsForDay.filter(s => s !== slot);
+      } else {
+        return; // Já está fechado
+      }
+    }
+
+    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
+    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ available_slots: updatedAvailableSlots })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Erro ao salvar no Supabase:", err.message);
+    }
+  };
+
+  const handleDeleteAppointment = async (app) => {
     if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
-        onUpdateStatus(id, 'rejected');
+        onUpdateStatus(app.id, 'rejected');
+        // Abre o horário novamente na agenda
+        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
     }
   };
 
@@ -1017,7 +1053,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     <div className="flex gap-2">
                       <button onClick={async () => {
                         await onUpdateStatus(app.id, 'confirmed');
-                        if (app.date && app.time) toggleSlotForDate(app.date, app.time);
+                        // FECHA o horário na agenda automaticamente
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
+                        
                         const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                         const fone = app.phone?.toString().replace(/\D/g, '');
                         if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
@@ -1025,11 +1063,15 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         <CheckCircle size={14} /> Aceitar
                       </button>
                       
-                      <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
+                      <button onClick={() => {
+                        onUpdateStatus(app.id, 'rejected');
+                        // ABRE o horário na agenda automaticamente
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                      }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
                         <XCircle size={18} />
                       </button>
 
-                      <button onClick={() => handleDeleteAppointment(app.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
+                      <button onClick={() => handleDeleteAppointment(app)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
                         <Trash2 size={18} />
                       </button>
                     </div>
@@ -1065,7 +1107,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                             onClick={() => {
                               if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
                                 onUpdateStatus(app.id, 'rejected');
-                                if (app.date && app.time) toggleSlotForDate(app.date, app.time);
+                                // ABRE o horário na agenda automaticamente
+                                if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
                               }
                             }}
                             className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
