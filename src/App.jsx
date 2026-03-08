@@ -773,13 +773,22 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 };
 
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
+  // ESTADO LOCAL PARA ATUALIZAÇÃO INSTANTÂNEA NA TELA
+  const [localAppointments, setLocalAppointments] = useState(appointments || []);
+  
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
 
-  const myAppointments = (appointments || []).filter(a => 
+  // Mantém o estado local sincronizado com as novidades do banco
+  useEffect(() => {
+    setLocalAppointments(appointments || []);
+  }, [appointments]);
+
+  // Usa o estado local para renderizar as listas instantaneamente
+  const myAppointments = localAppointments.filter(a => 
     String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
   );
 
@@ -846,7 +855,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     }
   };
 
-  // NOVA FUNÇÃO: Força a abertura ou fechamento do horário (mais seguro que o toggle)
   const setSlotAvailability = async (date, slot, makeAvailable) => {
     const currentSlots = user.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
@@ -856,13 +864,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       if (!slotsForDay.includes(slot)) {
         newSlots = [...slotsForDay, slot].sort();
       } else {
-        return; // Já está disponível
+        return; 
       }
     } else {
       if (slotsForDay.includes(slot)) {
         newSlots = slotsForDay.filter(s => s !== slot);
       } else {
-        return; // Já está fechado
+        return; 
       }
     }
 
@@ -882,8 +890,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const handleDeleteAppointment = async (app) => {
     if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
+        // Remove visualmente na mesma hora
+        setLocalAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'rejected' } : a));
         onUpdateStatus(app.id, 'rejected');
-        // Abre o horário novamente na agenda
         if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
     }
   };
@@ -1052,10 +1061,16 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     </div>
                     <div className="flex gap-2">
                       <button onClick={async () => {
-                        await onUpdateStatus(app.id, 'confirmed');
-                        // FECHA o horário na agenda automaticamente
+                        // 1. ATUALIZA A TELA INSTANTANEAMENTE (Some das pendentes e vai pra agenda)
+                        setLocalAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'confirmed' } : a));
+                        
+                        // 2. Manda atualizar no banco
+                        onUpdateStatus(app.id, 'confirmed');
+                        
+                        // 3. Fecha o horário na agenda 
                         if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
                         
+                        // 4. WhatsApp
                         const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                         const fone = app.phone?.toString().replace(/\D/g, '');
                         if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
@@ -1064,8 +1079,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       </button>
                       
                       <button onClick={() => {
+                        // REJEITAR: Remove visualmente instantaneamente
+                        setLocalAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'rejected' } : a));
                         onUpdateStatus(app.id, 'rejected');
-                        // ABRE o horário na agenda automaticamente
                         if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
                       }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
                         <XCircle size={18} />
@@ -1106,6 +1122,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                           <button 
                             onClick={() => {
                               if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+                                // CANCELAR: Remove da agenda visualmente na mesma hora
+                                setLocalAppointments(prev => prev.map(a => a.id === app.id ? { ...a, status: 'rejected' } : a));
+                                
                                 onUpdateStatus(app.id, 'rejected');
                                 // ABRE o horário na agenda automaticamente
                                 if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
