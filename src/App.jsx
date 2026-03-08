@@ -785,7 +785,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const pending = myAppointments.filter(a => a.status === 'pending');
   
-  // Ordenação das solicitações pendentes por data/hora
   pending.sort((a, b) => {
     const dataA = new Date(`${a.date}T${a.time}`);
     const dataB = new Date(`${b.date}T${b.time}`);
@@ -794,7 +793,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const confirmed = myAppointments.filter(a => a.status === 'confirmed');
   
-  // Ordenação da agenda de confirmados (mais próximos primeiro)
   const agendaOrdenada = [...confirmed].sort((a, b) => {
     return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
   });
@@ -823,21 +821,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     }
   }, [user.plano_ativo, onUpdateProfile, user]);
 
-  const toggleDateAvailability = (date) => {
-    const currentDates = user.available_dates || [];
-    let newDates;
-    
-    if (currentDates.includes(date)) {
-        newDates = currentDates.filter(d => d !== date); 
-    } else {
-        newDates = [...currentDates, date].sort(); 
-    }
-    
-    const currentSchedule = user.schedule || {};
-    onUpdateProfile({ ...user, available_dates: newDates, schedule: currentSchedule });
-    setSelectedDateConfig(date); 
-  };
-
   const toggleSlotForDate = async (date, slot) => {
     const currentSlots = user.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
@@ -850,7 +833,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     }
 
     const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
-
     onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
 
     try {
@@ -866,7 +848,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const handleDeleteAppointment = async (id) => {
     if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
-        onUpdateStatus(id, 'rejected'); // Usando a prop existente para limpar da vista
+        onUpdateStatus(id, 'rejected');
     }
   };
 
@@ -1009,104 +991,96 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-{/* SEÇÃO DE SOLICITAÇÕES PENDENTES */}
-        <section>
-          <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
-            Novas Solicitações
-            {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pending.length}</span>}
-          </h3>
-          {pending.length === 0 ? (
-            <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
-              <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-            </div>
-          ) : (
-            pending.map(app => (
-              <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <p className="font-bold text-slate-900">{app.client}</p>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                    <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
-                        <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
+            {/* SEÇÃO DE SOLICITAÇÕES PENDENTES */}
+            <section>
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
+                Novas Solicitações
+                {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{pending.length}</span>}
+              </h3>
+              {pending.length === 0 ? (
+                <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl">
+                  <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+                </div>
+              ) : (
+                pending.map(app => (
+                  <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{app.client}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                        <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
+                            <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
+                        </div>
+                      </div>
+                      <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        await onUpdateStatus(app.id, 'confirmed');
+                        if (app.date && app.time) toggleSlotForDate(app.date, app.time);
+                        const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                        const fone = app.phone?.toString().replace(/\D/g, '');
+                        if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                      }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                        <CheckCircle size={14} /> Aceitar
+                      </button>
+                      
+                      <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
+                        <XCircle size={18} />
+                      </button>
+
+                      <button onClick={() => handleDeleteAppointment(app.id)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
                     </div>
                   </div>
-                  <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
-                </div>
-                <div className="flex gap-2">
-                  <button onClick={async () => {
-                    await onUpdateStatus(app.id, 'confirmed');
-                    if (app.date && app.time) toggleSlotForDate(app.date, app.time);
-                    const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                    const fone = app.phone?.toString().replace(/\D/g, '');
-                    if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-                  }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                    <CheckCircle size={14} /> Aceitar
-                  </button>
-                  
-                  <button onClick={() => {
-                    if(window.confirm("Deseja recusar esta solicitação?")) {
-                        onUpdateStatus(app.id, 'rejected');
-                    }
-                  }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
-                    <XCircle size={18} />
-                  </button>
+                ))
+              )}
+            </section>
 
-                  <button onClick={() => {
-                    if(window.confirm("Excluir permanentemente do histórico?")) {
-                        handleDeleteAppointment(app.id);
-                    }
-                  }} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
-                    <Trash2 size={18} />
-                  </button>
+            {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
+            <section className="mt-8">
+              <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+                <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
+              </h3>
+              {agendaOrdenada.length === 0 ? (
+                 <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                    <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+                 </div>
+              ) : (
+                <div className="space-y-3">
+                  {agendaOrdenada.map(app => (
+                    <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
+                       <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-black text-slate-900 text-sm">{app.client}</p>
+                            <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                          <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
+                       </div>
+                       
+                       <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => {
+                              if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+                                onUpdateStatus(app.id, 'rejected');
+                                if (app.date && app.time) toggleSlotForDate(app.date, app.time);
+                              }
+                            }}
+                            className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                          >
+                            <XCircle size={20} />
+                            <span className="text-[8px] font-bold uppercase">Cancelar</span>
+                          </button>
+                       </div>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            ))
-          )}
-        </section>
-
-        {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
-        <section className="mt-8">
-          <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-            <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
-          </h3>
-          {agendaOrdenada.length === 0 ? (
-             <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-             </div>
-          ) : (
-            <div className="space-y-3">
-              {agendaOrdenada.map(app => (
-                <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
-                   <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="font-black text-slate-900 text-sm">{app.client}</p>
-                        <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
-                      </div>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                      <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
-                   </div>
-                   
-                   <div className="flex items-center gap-2">
-                      <button 
-                        onClick={() => {
-                          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                            onUpdateStatus(app.id, 'rejected');
-                            if (app.date && app.time) toggleSlotForDate(app.date, app.time);
-                          }
-                        }}
-                        className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
-                      >
-                        <XCircle size={20} />
-                        <span className="text-[8px] font-bold uppercase">Cancelar</span>
-                      </button>
-                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </main>
+              )}
+            </section>
+          </div>
+        )}
 
         {activeTab === 'services' && (
           <div className="space-y-4">
@@ -1185,7 +1159,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
             </section>
 
-            {/* GERENCIAR AGENDA / CALENDÁRIO */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
                 <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
                     <div className="flex items-center gap-3">
@@ -1199,7 +1172,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         <div className="grid grid-cols-7 gap-2 mb-6">
                             {Array.from({ length: 30 }, (_, i) => {
                                 const d = String(i + 1).padStart(2, '0');
-                                const fullDate = `2026-03-${d}`; // Simplificado para exemplo
+                                const fullDate = `2026-03-${d}`; 
                                 const isSelected = selectedDateConfig === fullDate;
                                 const isAvailable = user.available_slots?.[fullDate]?.length > 0;
                                 return (
@@ -1246,7 +1219,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   );
 };
-
 export default function App() {
   const [currentMode, setCurrentMode] = useState(null); 
   const [user, setUser] = useState(null);
