@@ -191,85 +191,21 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
   );
 };
 
-// --- COMPONENTE PRINCIPAL COM PERSISTÊNCIA ---
-export default function App() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [view, setView] = useState('welcome');
-  const [userType, setUserType] = useState(null);
-
-  useEffect(() => {
-    // Verifica sessão ao carregar a página
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setUser(session.user);
-      }
-      setLoading(false);
-    });
-
-    // Ouve mudanças na autenticação (login social recarrega a página)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-blue-600" size={40} />
-      </div>
-    );
-  }
-
-  // Se estiver logado via Google mas sem telefone, você pode redirecionar para completar perfil
-  // Aqui você define a lógica de navegação baseada no estado do 'user'
-
-  return (
-    <div className="App">
-      {!user ? (
-        view === 'welcome' ? (
-          <WelcomeScreen onSelectMode={(mode) => { setUserType(mode); setView('auth'); }} />
-        ) : (
-          <AuthScreen 
-            userType={userType} 
-            onBack={() => setView('welcome')}
-            onLogin={async (p, s) => { /* sua logica de login */ }}
-            onRegister={async (n, p, s) => { /* sua logica de register */ }}
-          />
-        )
-      ) : (
-        <div className="p-10 text-center">
-          <h1 className="text-2xl font-bold">Bem-vindo, {user.email || user.user_metadata.full_name}</h1>
-          {!user.phone && <p className="text-red-500 mt-2 italic font-bold">Atenção: Adicione seu WhatsApp nas configurações!</p>}
-          <Button onClick={() => supabase.auth.signOut()} className="mt-4 max-w-xs mx-auto">Sair</Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES }) => {
   const [view, setView] = useState('home');
   const [step, setStep] = useState(1);
   const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
   const [userCoords, setUserCoords] = useState(null);
   useEffect(() => {
-  // 1. Verificar se existe usuário salvo localmente ao abrir o app
   const savedUser = localStorage.getItem('salao_user');
   if (savedUser) {
     const userData = JSON.parse(savedUser);
     setUser(userData);
-    setUserMode(userData.type); // 'client' ou 'barber'
+    setUserMode(userData.type); 
   }
 
-  // 2. Ouvir mudanças de autenticação do Supabase
   const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
     if (event === 'SIGNED_IN' && session) {
-      // Aqui você buscaria os dados do perfil no seu banco e salvaria no localStorage
-      // localStorage.setItem('salao_user', JSON.stringify(perfil));
     }
     if (event === 'SIGNED_OUT') {
       localStorage.removeItem('salao_user');
@@ -280,7 +216,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   return () => authListener.subscription.unsubscribe();
 }, []);
 
-  // --- NOVA FUNÇÃO PARA EXCLUSÃO DE CONTA (REQUISITO APPLE) ---
   const handleDeleteAccount = async () => {
     const confirmacao = window.confirm(
       "Deseja realmente excluir sua conta? Todos os seus dados e agendamentos serão apagados permanentemente conforme as diretrizes da App Store."
@@ -288,7 +223,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 
     if (confirmacao) {
       try {
-        // Deleta agendamentos do cliente
         const { error: errorApp } = await supabase
           .from('appointments')
           .delete()
@@ -296,7 +230,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 
         if (errorApp) throw errorApp;
 
-        // Deleta perfil do cliente
         const { error: errorProf } = await supabase
           .from('profiles')
           .delete()
@@ -315,9 +248,9 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   const handleSocialLogin = async (provider) => {
   try {
     const { error } = await supabase.auth.signInWithOAuth({
-      provider: provider, // 'google' ou 'apple'
+      provider: provider, 
       options: {
-        redirectTo: window.location.origin, // Para onde o usuário volta após o login
+        redirectTo: window.location.origin,
       }
     });
     if (error) throw error;
