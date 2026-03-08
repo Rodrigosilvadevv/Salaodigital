@@ -18,8 +18,14 @@ workflows:
           npx cap sync ios
       - name: Build iOS with Xcode
         script: | 
-          # Comando para build usando Swift Package Manager (sem Pods)
-          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release archive -archivePath ios/App/App.xcarchive CODE_SIGNING_ALLOWED=NO
+          # Este comando procura o arquivo workspace automaticamente
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -n 1)
+          xcodebuild -workspace "$WORKSPACE_PATH" \
+                     -scheme App \
+                     -configuration Release \
+                     archive \
+                     -archivePath ios/App/App.xcarchive \
+                     CODE_SIGNING_ALLOWED=NO
     artifacts:
       - ios/App/App.xcarchive
       - /tmp/xcodebuild_logs/*.log
