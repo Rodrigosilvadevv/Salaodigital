@@ -14,12 +14,14 @@ workflows:
       - name: Build Web Project
         script: | 
           npm run build
-      - name: Capacitor Sync
+      - name: Capacitor Sync and Pods
         script: | 
           npx cap sync ios
+          cd ios/App && pod install
       - name: Build iOS with Xcode
         script: | 
-          npx cap build ios --build-config=Release
+          # Comando simplificado para rodar na nuvem
+          xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release archive -archivePath ios/App/App.xcarchive CODE_SIGNING_ALLOWED=NO
     artifacts:
       - ios/App/App.xcarchive
       - /tmp/xcodebuild_logs/*.log
