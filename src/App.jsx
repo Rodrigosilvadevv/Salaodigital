@@ -550,13 +550,12 @@ return (
                 <div key={d} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
               ))}
 
-              {Array.from({ length: 28 }, (_, i) => {
-                const dia = (i + 1).toString().padStart(2, '0');
-                const dataFormatada = `2026-02-${dia}`;
-                
-                const daySlots = bookingData.barber?.available_slots?.[dataFormatada] || [];
-                const isAvailable = daySlots.length > 0;
-                const isSelected = bookingData.date === dataFormatada;
+              {Array.from({ length: 31 }, (_, i) => {
+               const dia = (i + 1).toString().padStart(2, '0');
+               const dataFormatada = `2026-03-${dia}`; 
+               const daySlots = bookingData.barber?.available_slots?.[dataFormatada] || [];
+               const isAvailable = daySlots.length > 0;
+               const isSelected = bookingData.date === dataFormatada;
 
                 return (
                   <button
