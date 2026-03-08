@@ -15,7 +15,7 @@ import {
   CheckCircle, ArrowLeft 
 } from 'lucide-react';
 
-const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co'; 
+const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
   
 export const supabase = createClient(supabaseUrl, supabaseKey);
@@ -168,7 +168,6 @@ const WelcomeScreen = ({ onSelectMode }) => {
             Sou Profissional
           </Button>
 
-          {/* LINK PARA POLÍTICA DE PRIVACIDADE */}
           <button 
             onClick={() => setShowPrivacy(true)}
             className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100"
@@ -195,12 +194,27 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
     setError('');
     setLoading(true);
     try {
-        if (mode === 'login') await onLogin(phone, password);
-        else await onRegister(name, phone, password);
+      if (mode === 'login') await onLogin(phone, password);
+      else await onRegister(name, phone, password);
     } catch (err) {
-        setError(err.message);
+      setError(err.message);
     } finally {
-        setLoading(false);
+      setLoading(false);
+    }
+  };
+
+  // Função para Login Social (Google/Apple)
+  const handleSocialLogin = async (provider) => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          redirectTo: window.location.origin,
+        }
+      });
+      if (error) throw error;
+    } catch (err) {
+      setError(err.message);
     }
   };
 
@@ -250,6 +264,32 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
           <Button onClick={handleSubmit} loading={loading}>
             {mode === 'login' ? 'Entrar' : 'Cadastrar'}
           </Button>
+
+          {/* Divisor Visual */}
+          <div className="flex items-center gap-2 my-2">
+            <div className="h-[1px] bg-slate-200 flex-1"></div>
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou entre com</span>
+            <div className="h-[1px] bg-slate-200 flex-1"></div>
+          </div>
+
+          {/* Botões de Login Social */}
+          <div className="grid grid-cols-2 gap-3">
+            <button 
+              onClick={() => handleSocialLogin('google')}
+              className="flex items-center justify-center gap-2 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
+            >
+              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="Google" />
+              <span className="text-xs font-bold text-slate-700">Google</span>
+            </button>
+            
+            <button 
+              onClick={() => handleSocialLogin('apple')}
+              className="flex items-center justify-center gap-2 p-3 bg-black text-white rounded-xl hover:opacity-90 transition-all active:scale-95"
+            >
+              <Lock size={14} className="fill-current" />
+              <span className="text-xs font-bold">Apple</span>
+            </button>
+          </div>
           
           <button 
             onClick={() => {setMode(mode === 'login' ? 'register' : 'login'); setError('')}} 
@@ -262,11 +302,35 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
     </div>
   );
 };
+
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES }) => {
   const [view, setView] = useState('home');
   const [step, setStep] = useState(1);
   const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
   const [userCoords, setUserCoords] = useState(null);
+  useEffect(() => {
+  // 1. Verificar se existe usuário salvo localmente ao abrir o app
+  const savedUser = localStorage.getItem('salao_user');
+  if (savedUser) {
+    const userData = JSON.parse(savedUser);
+    setUser(userData);
+    setUserMode(userData.type); // 'client' ou 'barber'
+  }
+
+  // 2. Ouvir mudanças de autenticação do Supabase
+  const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'SIGNED_IN' && session) {
+      // Aqui você buscaria os dados do perfil no seu banco e salvaria no localStorage
+      // localStorage.setItem('salao_user', JSON.stringify(perfil));
+    }
+    if (event === 'SIGNED_OUT') {
+      localStorage.removeItem('salao_user');
+      setUser(null);
+    }
+  });
+
+  return () => authListener.subscription.unsubscribe();
+}, []);
 
   // --- NOVA FUNÇÃO PARA EXCLUSÃO DE CONTA (REQUISITO APPLE) ---
   const handleDeleteAccount = async () => {
@@ -300,6 +364,19 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
       }
     }
   };
+  const handleSocialLogin = async (provider) => {
+  try {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: provider, // 'google' ou 'apple'
+      options: {
+        redirectTo: window.location.origin, // Para onde o usuário volta após o login
+      }
+    });
+    if (error) throw error;
+  } catch (error) {
+    alert('Erro ao conectar: ' + error.message);
+  }
+};
 
   useEffect(() => {
     if ("geolocation" in navigator) {
