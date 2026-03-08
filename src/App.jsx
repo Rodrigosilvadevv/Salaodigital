@@ -1015,47 +1015,45 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button 
+                     <button 
   onClick={async () => {
-    if (!app.id) {
-      alert("Erro: Este agendamento não possui um ID. Verifique o banco de dados.");
+    // Trocamos app.id por app.client_id
+    if (!app.client_id) {
+      alert("Erro: Este cliente não possui um ID válido.");
       return;
     }
 
     try {
-      // 1. Atualiza o status no Supabase
-      await onUpdateStatus(app.id, 'confirmed');
+      // 1. Atualiza usando o client_id
+      await onUpdateStatus(app.client_id, 'confirmed'); 
       
-      // 2. Ocupa o slot na agenda local/db
+      // 2. Ocupa o slot
       if (app.date && app.time) {
         await setSlotAvailability(app.date, app.time, false);
       }
       
-      // 3. Dispara o WhatsApp
+      // 3. WhatsApp...
       const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
       const fone = app.phone?.toString().replace(/\D/g, '');
       if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
       
     } catch (err) {
       console.error("Erro na confirmação:", err);
-      alert("Falha ao salvar confirmação. Tente novamente.");
+      alert("Falha ao salvar confirmação.");
     }
   }} 
   className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
 >
   <CheckCircle size={14} /> Aceitar
 </button>
-                      
-                      <button onClick={() => {
-                        onUpdateStatus(app.id, 'rejected');
-                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                      }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
-                        <XCircle size={18} />
-                      </button>
 
-                      <button onClick={() => handleDeleteAppointment(app)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
-                        <Trash2 size={18} />
-                      </button>
+{/* Botão REJEITAR */}
+<button onClick={() => {
+  onUpdateStatus(app.client_id, 'rejected'); // Trocado para client_id
+  if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+}} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
+  <XCircle size={18} />
+</button>
                     </div>
                   </div>
                 ))
