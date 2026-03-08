@@ -1071,27 +1071,52 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               ) : (
                 <div className="space-y-3">
                   {agendaOrdenada.map(app => (
-  <div key={app.id || app.client_id} className="...">
-     {/* ... infos do card ... */}
-     <button 
-        onClick={() => {
-          // Verificação para evitar o erro 22P02
-          if (!app.client_id || app.client_id === "null") {
-            alert("Erro: Este agendamento antigo não possui um ID de cliente válido.");
-            return;
-          }
+  <div 
+    key={app.id || app.client_id} 
+    className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all mb-3"
+  >
+    {/* Conteúdo à Esquerda: Info do Cliente */}
+    <div className="flex-1">
+      <div className="flex items-center gap-2 mb-1">
+        <p className="font-black text-slate-900 text-sm tracking-tight">
+          {app.client}
+        </p>
+        <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+          Confirmado
+        </span>
+      </div>
+      
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">
+          {app.service_name || 'Serviço'}
+        </p>
+        <div className="flex items-center gap-1.5 text-blue-600 font-bold">
+          <Clock size={12} strokeWidth={3} />
+          <span className="text-[10px]">
+            {app.time} • {app.date?.split('-').reverse().join('/')}
+          </span>
+        </div>
+      </div>
+    </div>
 
-          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-            // Chamando com client_id em vez de id
-            onUpdateStatus(app.client_id, 'rejected');
-            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-          }
-        }}
-        className="..."
-      >
-        <XCircle size={20} />
-        <span className="text-[8px] font-bold uppercase">Cancelar</span>
-      </button>
+    {/* Botão de Cancelar: Estilo Minimalista */}
+    <button 
+      onClick={() => {
+        if (!app.client_id || app.client_id === "null") {
+          alert("Ops! Este agendamento não possui um ID válido para cancelamento.");
+          return;
+        }
+
+        if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+          onUpdateStatus(app.client_id, 'rejected');
+          if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+        }
+      }}
+      className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all active:scale-95 group-hover:border-red-100 border border-transparent"
+    >
+      <XCircle size={20} />
+      <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
+    </button>
   </div>
 ))}
                 </div>
