@@ -272,18 +272,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
             <div className="h-[1px] bg-slate-200 flex-1"></div>
           </div>
 
-          {/* Botões de Login Social */}
-          <div className="grid grid-cols-2 gap-3">
-            <button 
-              onClick={() => handleSocialLogin('google')}
-              className="flex items-center justify-center gap-2 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
-            >
-              <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="Google" />
-              <span className="text-xs font-bold text-slate-700">Google</span>
-            </button>
-            
-            
-          </div>
+         
           
           <button 
             onClick={() => {setMode(mode === 'login' ? 'register' : 'login'); setError('')}} 
