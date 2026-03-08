@@ -1015,15 +1015,36 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={async () => {
-                        await onUpdateStatus(app.id, 'confirmed');
-                        if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
-                        const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                        const fone = app.phone?.toString().replace(/\D/g, '');
-                        if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-                      }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                        <CheckCircle size={14} /> Aceitar
-                      </button>
+                      <button 
+  onClick={async () => {
+    if (!app.id) {
+      alert("Erro: Este agendamento não possui um ID. Verifique o banco de dados.");
+      return;
+    }
+
+    try {
+      // 1. Atualiza o status no Supabase
+      await onUpdateStatus(app.id, 'confirmed');
+      
+      // 2. Ocupa o slot na agenda local/db
+      if (app.date && app.time) {
+        await setSlotAvailability(app.date, app.time, false);
+      }
+      
+      // 3. Dispara o WhatsApp
+      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+      const fone = app.phone?.toString().replace(/\D/g, '');
+      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+      
+    } catch (err) {
+      console.error("Erro na confirmação:", err);
+      alert("Falha ao salvar confirmação. Tente novamente.");
+    }
+  }} 
+  className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2"
+>
+  <CheckCircle size={14} /> Aceitar
+</button>
                       
                       <button onClick={() => {
                         onUpdateStatus(app.id, 'rejected');
