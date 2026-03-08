@@ -39,13 +39,10 @@ const GLOBAL_TIME_SLOTS = ['08:00', '8:30', '09:00', '10:00', '11:00', '13:00', 
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-  
   const R = 6371; 
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return parseFloat((R * c).toFixed(1)); 
 };
@@ -64,13 +61,6 @@ const Button = ({ children, onClick, variant = 'primary', className = '', disabl
   );
 };
 
-const Card = ({ children, selected, onClick }) => (
-  <div onClick={onClick} className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${selected ? 'border-blue-600 bg-blue-50/50' : 'border-transparent bg-white shadow-sm hover:border-slate-200'}`}>
-    {selected && <div className="absolute top-3 right-3 text-blue-600"><CheckCircle2 size={18} fill="currentColor" className="text-white"/></div>}
-    {children}
-  </div>
-);
-
 // --- COMPONENTE DE POLÍTICA DE PRIVACIDADE ---
 const PrivacyModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -87,97 +77,6 @@ const PrivacyModal = ({ isOpen, onClose }) => {
         </div>
         <Button onClick={onClose} className="mt-8">Entendi</Button>
       </div>
-    </div>
-  );
-};
-
-const WelcomePopup = ({ onClose }) => (
-  <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}></div>
-    
-    <div className="relative bg-white w-full max-w-[360px] h-[70vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
-      
-      <div className="flex-1 w-full overflow-hidden">
-        <img 
-          src={imgPopup} 
-          alt="Bem-vindo" 
-          className="w-full h-full object-cover"
-        />
-      </div>
-
-      <div className="p-6 bg-white w-full flex items-center justify-center">
-        <Button 
-          variant="secondary" 
-          onClick={onClose} 
-          className="w-full py-4 text-lg shadow-xl shadow-blue-600/20"
-        >
-          Começar Agora
-        </Button>
-      </div>
-    </div>
-  </div>
-);
-
-const WelcomeScreen = ({ onSelectMode }) => {
-  const [showPrivacy, setShowPrivacy] = useState(false);
-
-  return (
-    <div 
-      className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
-      style={{
-        backgroundImage: `url('/backgr.png')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"></div>
-      
-      <div className="relative z-10 flex flex-col items-center">
-        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50">
-          <Scissors size={40} className="text-white" />
-        </div>
-        
-        <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">
-          SALÃO<span className="text-blue-500">DIGITAL</span>
-        </h1>
-        
-        <div className="w-full max-w-xs space-y-3 mt-10">
-          <Button variant="secondary" onClick={() => onSelectMode('client')}>
-            Sou Cliente
-          </Button>
-
-          <Button 
-            variant="outline" 
-            className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" 
-            onClick={() => onSelectMode('guest')}
-          >
-            Explorar como Convidado
-          </Button>
-
-          <div className="py-2 flex items-center gap-4">
-            <div className="h-[1px] bg-white/20 flex-1"></div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
-            <div className="h-[1px] bg-white/20 flex-1"></div>
-          </div>
-
-          <Button 
-            variant="outline" 
-            className="text-white border-white/20 hover:bg-white/5" 
-            onClick={() => onSelectMode('barber')}
-          >
-            Sou Profissional
-          </Button>
-
-          <button 
-            onClick={() => setShowPrivacy(true)}
-            className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100"
-          >
-            Política de Privacidade
-          </button>
-        </div>
-      </div>
-
-      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
   );
 };
@@ -203,7 +102,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
     }
   };
 
-  // Função para Login Social (Google/Apple)
   const handleSocialLogin = async (provider) => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
@@ -265,29 +163,19 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
             {mode === 'login' ? 'Entrar' : 'Cadastrar'}
           </Button>
 
-          {/* Divisor Visual */}
           <div className="flex items-center gap-2 my-2">
             <div className="h-[1px] bg-slate-200 flex-1"></div>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou entre com</span>
             <div className="h-[1px] bg-slate-200 flex-1"></div>
           </div>
 
-          {/* Botões de Login Social */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1">
             <button 
               onClick={() => handleSocialLogin('google')}
               className="flex items-center justify-center gap-2 p-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all active:scale-95"
             >
               <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" alt="Google" />
-              <span className="text-xs font-bold text-slate-700">Google</span>
-            </button>
-            
-            <button 
-              onClick={() => handleSocialLogin('apple')}
-              className="flex items-center justify-center gap-2 p-3 bg-black text-white rounded-xl hover:opacity-90 transition-all active:scale-95"
-            >
-              <Lock size={14} className="fill-current" />
-              <span className="text-xs font-bold">Apple</span>
+              <span className="text-xs font-bold text-slate-700">Entrar com Google</span>
             </button>
           </div>
           
@@ -302,6 +190,66 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
     </div>
   );
 };
+
+// --- COMPONENTE PRINCIPAL COM PERSISTÊNCIA ---
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [view, setView] = useState('welcome');
+  const [userType, setUserType] = useState(null);
+
+  useEffect(() => {
+    // Verifica sessão ao carregar a página
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        setUser(session.user);
+      }
+      setLoading(false);
+    });
+
+    // Ouve mudanças na autenticação (login social recarrega a página)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" size={40} />
+      </div>
+    );
+  }
+
+  // Se estiver logado via Google mas sem telefone, você pode redirecionar para completar perfil
+  // Aqui você define a lógica de navegação baseada no estado do 'user'
+
+  return (
+    <div className="App">
+      {!user ? (
+        view === 'welcome' ? (
+          <WelcomeScreen onSelectMode={(mode) => { setUserType(mode); setView('auth'); }} />
+        ) : (
+          <AuthScreen 
+            userType={userType} 
+            onBack={() => setView('welcome')}
+            onLogin={async (p, s) => { /* sua logica de login */ }}
+            onRegister={async (n, p, s) => { /* sua logica de register */ }}
+          />
+        )
+      ) : (
+        <div className="p-10 text-center">
+          <h1 className="text-2xl font-bold">Bem-vindo, {user.email || user.user_metadata.full_name}</h1>
+          {!user.phone && <p className="text-red-500 mt-2 italic font-bold">Atenção: Adicione seu WhatsApp nas configurações!</p>}
+          <Button onClick={() => supabase.auth.signOut()} className="mt-4 max-w-xs mx-auto">Sair</Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES }) => {
   const [view, setView] = useState('home');
