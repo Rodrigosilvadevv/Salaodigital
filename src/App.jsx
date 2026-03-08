@@ -597,25 +597,57 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
           <div className="space-y-4 animate-in slide-in-from-right">
              <button onClick={() => setStep(step - 1)} className={`${step === 1 ? 'hidden' : 'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
           
-            {step === 1 && (
-                <>
-                  <h3 className="font-bold text-lg mb-4">Escolha o Serviço</h3>
-                  <div className="space-y-3">
-                    {MASTER_SERVICES.map(s => (
-                      <Card key={s.id} selected={bookingData.service?.id === s.id} onClick={() => setBookingData({...bookingData, service: s})}>
-                        <div className="flex items-center gap-3">
-                            <div className="p-2 bg-slate-100 rounded-lg">{s.icon}</div>
-                            <div>
-                                <p className="font-bold">{s.name}</p>
-                                <p className="text-xs text-slate-400">{s.duration}</p>
-                            </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                  <Button className="mt-4 w-full" onClick={() => setStep(2)} disabled={!bookingData.service}>Próximo</Button>
-                </>
-            )}
+           {step === 1 && (
+  <div className="flex flex-col h-full relative">
+    {/* Título e Lista de Serviços */}
+    <div className="flex-1 pb-24"> {/* pb-24 dá espaço para o botão não cobrir o último item */}
+      <h3 className="font-bold text-lg mb-4 text-slate-900">Escolha o Serviço</h3>
+      <div className="space-y-3">
+        {MASTER_SERVICES.map(s => (
+          <Card 
+            key={s.id} 
+            selected={bookingData.service?.id === s.id} 
+            onClick={() => setBookingData({...bookingData, service: s})}
+            className="transition-all active:scale-[0.98]"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id === s.id ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>
+                  {s.icon}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900">{s.name}</p>
+                  <p className="text-xs text-slate-400 font-medium">{s.duration}</p>
+                </div>
+              </div>
+              {/* Indicador visual de seleção opcional */}
+              {bookingData.service?.id === s.id && (
+                <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+              )}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
+
+    {/* Botão Próximo Fixo na Base */}
+    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
+      <div className="max-w-md mx-auto"> {/* Mantém o botão centralizado se a tela for larga */}
+        <Button 
+          className={`w-full py-4 rounded-2xl font-bold text-sm transition-all duration-300 shadow-lg ${
+            !bookingData.service 
+            ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
+            : 'bg-blue-600 text-white shadow-blue-200 active:scale-95'
+          }`} 
+          onClick={() => setStep(2)} 
+          disabled={!bookingData.service}
+        >
+          {bookingData.service ? `Próximo: Agendar ${bookingData.service.name}` : 'Selecione um serviço'}
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
 
             {step === 2 && (
               <>
