@@ -190,7 +190,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
     </div>
   );
 };
-
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES }) => {
   const [view, setView] = useState('home');
   const [step, setStep] = useState(1);
