@@ -1119,12 +1119,74 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   );
 };
 
+// ... (mantenha todos os seus imports e constantes MASTER_SERVICES, etc, iguais)
+
 export default function App() {
-  const [currentMode, setCurrentMode] = useState(null); 
   const [user, setUser] = useState(null);
+  const [currentMode, setCurrentMode] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
+  const [loading, setLoading] = useState(true); // Estado para evitar piscar tela de login
+
+  // --- NOVO: PERSISTÊNCIA E LOGIN SOCIAL ---
+  useEffect(() => {
+    const initializeAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        await handleSyncProfile(session.user);
+      }
+      setLoading(false);
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_IN' && session) {
+        await handleSyncProfile(session.user);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setCurrentMode(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSyncProfile = async (authData) => {
+    // Busca o perfil na sua tabela 'profiles' usando o ID do Auth ou Email
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('*')
+      .or(`id.eq.${authData.id},email.eq.${authData.email}`)
+      .single();
+
+    if (profile) {
+      setUser(profile);
+      setCurrentMode(profile.role);
+    } else {
+      // Se logou pelo Google mas não tem perfil, cria um perfil inicial de cliente
+      const newProfile = {
+        id: authData.id,
+        name: authData.user_metadata.full_name || 'Usuário Google',
+        email: authData.email,
+        phone: '', // Ficará vazio para forçar o preenchimento
+        role: 'client',
+        is_visible: false,
+        my_services: [],
+        available_slots: GLOBAL_TIME_SLOTS
+      };
+      
+      const { data: created } = await supabase
+        .from('profiles')
+        .insert([newProfile])
+        .select()
+        .single();
+      
+      setUser(created);
+      setCurrentMode('client');
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -1157,6 +1219,7 @@ export default function App() {
     fetchData();
   }, [user]);
 
+  // --- SUAS FUNÇÕES ORIGINAIS MANTIDAS ---
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
       setUser({ id: 'guest', name: 'Visitante', isGuest: true });
@@ -1165,6 +1228,7 @@ export default function App() {
       setCurrentMode(mode);
     }
   };
+
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -1200,7 +1264,6 @@ export default function App() {
       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
       throw new Error(error.message);
     }
-
     setUser(data);
   };
 
@@ -1244,14 +1307,12 @@ export default function App() {
       }]);
       alert("Agendamento realizado!");
     } else {
-      console.error("Erro detalhado:", error);
       alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
     }
   };
 
   const handleUpdateStatus = async (id, status) => {
     if (user?.isGuest) return; 
-
     const { error } = await supabase
       .from('appointments')
       .update({ status })
@@ -1265,66 +1326,93 @@ export default function App() {
       }
     }
   };
+
   const handleUpdateProfile = async (updatedUser) => {
     try {
-      const dataToSave = {
-        address: updatedUser.address,
-        latitude: updatedUser.latitude,   
-        longitude: updatedUser.longitude, 
-        avatar_url: updatedUser.avatar_url,
-        is_visible: updatedUser.is_visible,
-        plano_ativo: updatedUser.plano_ativo,
-        my_services: updatedUser.my_services,
-        available_dates: updatedUser.available_dates,
-        available_slots: updatedUser.available_slots 
-      };
-
       const { error } = await supabase
         .from('profiles')
-        .update(dataToSave)
+        .update({
+          address: updatedUser.address,
+          latitude: updatedUser.latitude, 
+          longitude: updatedUser.longitude, 
+          avatar_url: updatedUser.avatar_url,
+          is_visible: updatedUser.is_visible,
+          name: updatedUser.name,
+          phone: updatedUser.phone, // Importante para salvar o telefone do Google dps
+          my_services: updatedUser.my_services,
+          available_dates: updatedUser.available_dates,
+          available_slots: updatedUser.available_slots 
+        })
         .eq('id', updatedUser.id);
 
       if (error) throw error;
       setUser(updatedUser);
     } catch (error) {
-      console.error("Erro completo:", error);
       alert("Erro ao salvar: " + error.message);
     }
   };
+
+  // --- RENDERIZAÇÃO ---
+  if (loading) return (
+    <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+      <Loader2 className="animate-spin text-blue-500" size={40} />
+    </div>
+  );
+
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
 
-      {(!currentMode && !user) ? (
-        <WelcomeScreen onSelectMode={handleSelectMode} />
-      ) : !user ? (
-        <AuthScreen 
-          userType={currentMode} 
-          onBack={() => setCurrentMode(null)} 
-          onLogin={handleLogin} 
-          onRegister={handleRegister} 
-        />
-      ) : currentMode === 'barber' ? (
-        <BarberDashboard 
-          user={user} 
-          appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }} 
-          onUpdateStatus={handleUpdateStatus} 
-          onUpdateProfile={handleUpdateProfile}
-          MASTER_SERVICES={MASTER_SERVICES} 
-          GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
-          supabase={supabase} 
-        />
+      {/* TRAVA DE TELEFONE: Se logou com Google mas não tem telefone, obriga a preencher */}
+      {user && !user.isGuest && !user.phone ? (
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-sm text-center">
+            <Phone className="mx-auto text-blue-600 mb-4" size={48} />
+            <h2 className="text-xl font-bold mb-2">Quase lá!</h2>
+            <p className="text-slate-500 text-sm mb-6">Precisamos do seu WhatsApp para confirmar os agendamentos.</p>
+            <input 
+              type="tel" 
+              placeholder="DDD + Número" 
+              className="w-full p-4 bg-slate-100 rounded-xl mb-4 outline-none focus:ring-2 ring-blue-500"
+              onChange={(e) => setUser({...user, phone: e.target.value})}
+            />
+            <Button onClick={() => handleUpdateProfile(user)}>Salvar e Continuar</Button>
+          </div>
+        </div>
       ) : (
-        <ClientApp 
-          user={user} 
-          barbers={barbers} 
-          appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }}
-          onBookingSubmit={handleBookingSubmit}
-          onUpdateStatus={handleUpdateStatus}
-          MASTER_SERVICES={MASTER_SERVICES}
-        />
+        <>
+          {(!currentMode && !user) ? (
+            <WelcomeScreen onSelectMode={handleSelectMode} />
+          ) : !user ? (
+            <AuthScreen 
+              userType={currentMode} 
+              onBack={() => setCurrentMode(null)} 
+              onLogin={handleLogin} 
+              onRegister={handleRegister} 
+            />
+          ) : currentMode === 'barber' ? (
+            <BarberDashboard 
+              user={user} 
+              appointments={appointments} 
+              onLogout={async () => { await supabase.auth.signOut(); setUser(null); setCurrentMode(null); }} 
+              onUpdateStatus={handleUpdateStatus} 
+              onUpdateProfile={handleUpdateProfile}
+              MASTER_SERVICES={MASTER_SERVICES} 
+              GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
+              supabase={supabase} 
+            />
+          ) : (
+            <ClientApp 
+              user={user} 
+              barbers={barbers} 
+              appointments={appointments} 
+              onLogout={async () => { await supabase.auth.signOut(); setUser(null); setCurrentMode(null); }}
+              onBookingSubmit={handleBookingSubmit}
+              onUpdateStatus={handleUpdateStatus}
+              MASTER_SERVICES={MASTER_SERVICES}
+            />
+          )}
+        </>
       )}
     </>
   );
