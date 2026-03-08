@@ -16,12 +16,12 @@ import {
 } from 'lucide-react';
 
 const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co'; 
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI4NDg0MjksImV4cCI6MjA4ODQyNDQyOX0.6EcebGjxj05dDyKl5l5DKKBtLvkC5w-Var1MEyzxzrY';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
   
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 const MASTER_SERVICES = [
-  { id: 1, name: 'Corte Degradê', defaultPrice: 55, duration: '45min', icon: <Scissors size={20}/>, category: 'hair' },
+  { id: 1, name: 'Corte Degradê', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'hair' },
   { id: 2, name: 'Barba Terapia', defaultPrice: 40, duration: '30min', icon: <User size={20}/>, category: 'beard' },
   { id: 3, name: 'Combo Completo', defaultPrice: 80, duration: '1h 15min', icon: <Star size={20}/>, category: 'combo' },
   { id: 4, name: 'Luzes / Platinado', defaultPrice: 120, duration: '2h', icon: <Sparkles size={20}/>, category: 'chemical' },
