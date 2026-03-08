@@ -449,89 +449,85 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
         )}
 
         {view === 'history' && (
-          <div className="space-y-4 animate-in slide-in-from-right">
-            <button 
-              onClick={() => setView('home')} 
-              className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1 hover:text-slate-600 transition-colors"
-            >
-              <ArrowLeft size={16} /> Voltar
-            </button>
-            <h3 className="font-bold text-lg text-slate-900 mb-4">Meus Agendamentos</h3>
+  <div className="space-y-4 animate-in slide-in-from-right">
+    <button 
+      onClick={() => setView('home')} 
+      className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1 hover:text-slate-600 transition-colors"
+    >
+      <ArrowLeft size={16} /> Voltar
+    </button>
+
+    {/* TÍTULO E BOTÃO DE EXCLUIR ALINHADOS */}
+    <div className="flex justify-between items-end mb-4">
+      <h3 className="font-bold text-lg text-slate-900">Meus Agendamentos</h3>
+      <button 
+        onClick={handleDeleteAccount}
+        className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5 hover:text-red-600 transition-colors"
+      >
+        Excluir Conta
+      </button>
+    </div>
+    
+    {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
+      <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
+        Ainda não tem agendamentos.
+      </div>
+    ) : (
+      <div className="space-y-3">
+        {(appointments || [])
+          .filter(a => String(a.client_id) === String(user.id))
+          .sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`))
+          .map(app => {
+            const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
             
-            {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
-              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
-                Ainda não tem agendamentos.
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {(appointments || [])
-                  .filter(a => String(a.client_id) === String(user.id))
-                  .sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`))
-                  .map(app => {
-                    const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
-                    
-                    return (
-                      <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                        <div className="flex gap-3 items-center">
-                          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                            <User size={18} />
-                          </div>
-                          <div>
-                            <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
-                            <p className="text-[10px] text-blue-600 font-bold uppercase">
-                              Profissional: {professional?.name || app.barber_name || "Profissional"}
-                            </p>
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                              <Clock size={10} />
-                              {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button 
-                          onClick={() => {
-                            if(window.confirm("Deseja reagendar este serviço? O horário atual será cancelado.")) {
-                              const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
-                              setBookingData({
-                                service: serviceObj,
-                                barber: professional,
-                                price: app.price
-                              });
-                              
-                              if (typeof onUpdateStatus === 'function') {
-                                onUpdateStatus(app.id, 'rejected');
-                              }
-                              
-                              setView('booking');
-                              setStep(3);
-                            }
-                          }}
-                          className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                        >
-                          <CalendarDays size={20} />
-                          <span className="text-[9px] font-bold uppercase">Reagendar</span>
-                        </button>
-                      </div>
-                    );
-                  })}
-
-                {/* BOTÃO DE EXCLUSÃO DE CONTA (DENTRO DO HISTÓRICO) */}
-                <div className="mt-10 pt-6 border-t border-slate-100">
-                  <button 
-                    onClick={handleDeleteAccount}
-                    className="w-full p-4 text-[10px] text-red-400 font-black uppercase tracking-widest border border-red-50 rounded-2xl hover:bg-red-50 transition-all"
-                  >
-                    Excluir minha conta e dados
-                  </button>
-                  <p className="text-[9px] text-slate-400 text-center mt-2 px-4">
-                    Seus dados pessoais e histórico de agendamentos serão removidos permanentemente.
-                  </p>
+            return (
+              <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                <div className="flex gap-3 items-center">
+                  <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
+                    <User size={18} />
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
+                    <p className="text-[10px] text-blue-600 font-bold uppercase">
+                      Profissional: {professional?.name || app.barber_name || "Profissional"}
+                    </p>
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                      <Clock size={10} />
+                      {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
-        )}
 
+                <button 
+                  onClick={() => {
+                    if(window.confirm("Deseja reagendar este serviço? O horário atual será cancelado.")) {
+                      const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
+                      setBookingData({
+                        service: serviceObj,
+                        barber: professional,
+                        price: app.price
+                      });
+                      
+                      if (typeof onUpdateStatus === 'function') {
+                        onUpdateStatus(app.id, 'rejected');
+                      }
+                      
+                      setView('booking');
+                      setStep(3);
+                    }
+                  }}
+                  className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                >
+                  <CalendarDays size={20} />
+                  <span className="text-[9px] font-bold uppercase">Reagendar</span>
+                </button>
+              </div>
+            );
+          })}
+      </div>
+    )}
+  </div>
+)}
         {view === 'booking' && (
           <div className="space-y-4 animate-in slide-in-from-right">
              <button onClick={() => setStep(step - 1)} className={`${step === 1 ? 'hidden' : 'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
