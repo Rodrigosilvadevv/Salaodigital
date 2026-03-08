@@ -6,7 +6,6 @@ workflows:
     environment:
       node: latest
       xcode: latest
-      cocoapods: default
     scripts:
       - name: Install dependencies
         script: | 
@@ -14,13 +13,12 @@ workflows:
       - name: Build Web Project
         script: | 
           npm run build
-      - name: Capacitor Sync and Pods
+      - name: Capacitor Sync
         script: | 
           npx cap sync ios
-          cd ios/App && pod install
       - name: Build iOS with Xcode
         script: | 
-          # Comando simplificado para rodar na nuvem
+          # Comando para build usando Swift Package Manager (sem Pods)
           xcodebuild -workspace ios/App/App.xcworkspace -scheme App -configuration Release archive -archivePath ios/App/App.xcarchive CODE_SIGNING_ALLOWED=NO
     artifacts:
       - ios/App/App.xcarchive
