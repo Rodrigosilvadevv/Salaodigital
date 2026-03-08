@@ -779,23 +779,14 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
 
-  // --- INÍCIO DA CORREÇÃO ---
-  // 1. Criamos um estado local para os agendamentos para permitir atualização instantânea
-  const [localAppointments, setLocalAppointments] = useState(appointments || []);
-
-  // Sincroniza o estado local sempre que a prop original mudar (ex: novo agendamento vindo do banco)
-  useEffect(() => {
-    setLocalAppointments(appointments || []);
-  }, [appointments]);
-
-  // 2. Filtramos usando o estado LOCAL
-  const myAppointments = localAppointments.filter(a => 
+  // Filtros de agendamentos
+  const myAppointments = (appointments || []).filter(a => 
     String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
   );
 
-  const pending = myAppointments
-    .filter(a => a.status === 'pending')
-    .sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => {
+    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
+  });
 
   const confirmed = myAppointments.filter(a => a.status === 'confirmed');
   
@@ -804,11 +795,185 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   });
 
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-  // --- FIM DA LÓGICA DE FILTROS ---
+
+  // Sincronização e Verificação de Pagamento
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log("Sincronizando dados...");
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const status = queryParams.get('status');
+    if (status === 'approved' && !user.plano_ativo) {
+        alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
+        onUpdateProfile({ 
+          ...user, 
+          plano_ativo: true, 
+          is_visible: true,
+          plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() 
+        });
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [user, onUpdateProfile]);
+
+  // Gerenciamento de Slots
+  const setSlotAvailability = async (date, slot, makeAvailable) => {
+    const currentSlots = user.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
+
+    let newSlots;
+    if (makeAvailable) {
+      if (!slotsForDay.includes(slot)) {
+        newSlots = [...slotsForDay, slot].sort();
+      } else return;
+    } else {
+      if (slotsForDay.includes(slot)) {
+        newSlots = slotsForDay.filter(s => s !== slot);
+      } else return;
+    }
+
+    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
+    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
+
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ available_slots: updatedAvailableSlots })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Erro ao salvar no Supabase:", err.message);
+    }
+  };
+
+  const toggleSlotForDate = async (date, slot) => {
+    const currentSlots = user.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
+    const isAvailable = slotsForDay.includes(slot);
+    await setSlotAvailability(date, slot, !isAvailable);
+  };
+
+  const handleDeleteAppointment = async (app) => {
+    if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
+        onUpdateStatus(app.id, 'rejected');
+        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+    }
+  };
+
+  const handlePayment = async () => {
+    setIsPaying(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
+      const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
+      });
+      const data = await response.json();
+      if (data.init_point) window.location.href = data.init_point;
+      else alert("Erro ao gerar link.");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao conectar ao pagamento.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  const toggleService = (serviceId, defaultPrice) => {
+    const currentServices = user.my_services || [];
+    const exists = currentServices.find(s => s.id === serviceId);
+    
+    if (!exists && !user.plano_ativo && currentServices.length >= 3) {
+        setShowPayModal(true); 
+        return; 
+    }
+
+    let newServices = exists 
+      ? currentServices.filter(s => s.id !== serviceId) 
+      : [...currentServices, { id: serviceId, price: defaultPrice }];
+    onUpdateProfile({ ...user, my_services: newServices });
+  };
+
+  const updateServicePrice = (serviceId, newPrice) => {
+    const newServices = (user.my_services || []).map(s => 
+      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
+    );
+    onUpdateProfile({ ...user, my_services: newServices });
+  };
+
+  const handleUploadPhoto = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('barber-photos')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('barber-photos')
+        .getPublicUrl(fileName);
+
+      onUpdateProfile({ ...user, avatar_url: publicUrl });
+      alert('Foto atualizada!');
+    } catch (error) {
+      alert('Erro ao carregar foto.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
-      {/* ... (Mantenha seu código do PayModal e Header igual) ... */}
+      
+      {showPayModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
+            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
+            <div className="space-y-3">
+              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
+                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
+              </button>
+              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+            <LogOut size={18}/>
+          </button>
+        </div>
+      </header>
+
+      <nav className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
+        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Início</button>
+        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Serviços</button>
+        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Perfil & Agenda</button>
+      </nav>
 
       <main className="p-6 max-w-md mx-auto">
         {activeTab === 'home' && (
@@ -827,7 +992,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-            {/* SEÇÃO DE SOLICITAÇÕES PENDENTES */}
             <section>
               <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
                 Novas Solicitações
@@ -838,55 +1002,45 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
                 </div>
               ) : (
-                pending.map(app => {
-                  const appointmentId = app.id || app.ID;
-                  return (
-                    <div key={appointmentId} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
-                      <div className="flex justify-between items-start mb-3">
-                        <div>
-                          <p className="font-bold text-slate-900">{app.client || app.client_name || "Cliente"}</p>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                          <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
-                              <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
-                          </div>
+                pending.map(app => (
+                  <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <p className="font-bold text-slate-900">{app.client}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                        <div className="flex items-center gap-1 text-blue-600 font-bold text-xs mt-1">
+                            <Clock size={12} /> {app.time} - {app.date?.split('-').reverse().join('/')}
                         </div>
-                        <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
                       </div>
-                      <div className="flex gap-2">
-                        <button onClick={async () => {
-                          // ATUALIZAÇÃO LOCAL IMEDIATA
-                          setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'confirmed' } : a));
-                          
-                          // BANCO DE DADOS
-                          await onUpdateStatus(appointmentId, 'confirmed');
-                          if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
-                          
-                          const mensagem = `Olá ${app.client || app.client_name}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                          const fone = app.phone?.toString().replace(/\D/g, '');
-                          if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-                        }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
-                          <CheckCircle size={14} /> Aceitar
-                        </button>
-                        
-                        <button onClick={async () => {
-                          setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'rejected' } : a));
-                          await onUpdateStatus(appointmentId, 'rejected');
-                          if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                        }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
-                          <XCircle size={18} />
-                        </button>
-
-                        <button onClick={() => handleDeleteAppointment(app)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
+                      <p className="font-bold text-slate-900 text-sm">R$ {app.price}</p>
                     </div>
-                  );
-                })
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        await onUpdateStatus(app.id, 'confirmed');
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, false); 
+                        const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                        const fone = app.phone?.toString().replace(/\D/g, '');
+                        if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                      }} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2">
+                        <CheckCircle size={14} /> Aceitar
+                      </button>
+                      
+                      <button onClick={() => {
+                        onUpdateStatus(app.id, 'rejected');
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                      }} className="p-3 bg-orange-50 text-orange-500 rounded-xl">
+                        <XCircle size={18} />
+                      </button>
+
+                      <button onClick={() => handleDeleteAppointment(app)} className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-100 transition-colors">
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                ))
               )}
             </section>
 
-            {/* SEÇÃO DA AGENDA (CONFIRMADOS) */}
             <section className="mt-8">
               <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
                 <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
@@ -897,49 +1051,41 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                  </div>
               ) : (
                 <div className="space-y-3">
-                  {agendaOrdenada.map(app => {
-                    const appointmentId = app.id || app.ID;
-                    return (
-                      <div key={appointmentId} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
-                         <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <p className="font-black text-slate-900 text-sm">{app.client || app.client_name}</p>
-                              <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
-                            </div>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                            <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
-                         </div>
-                         
-                         <div className="flex items-center gap-2">
-                            <button 
-                              onClick={() => {
-                                if(window.confirm(`Deseja CANCELAR o horário de ${app.client || app.client_name}?`)) {
-                                  setLocalAppointments(prev => prev.map(a => (a.id === appointmentId || a.ID === appointmentId) ? { ...a, status: 'rejected' } : a));
-                                  onUpdateStatus(appointmentId, 'rejected');
-                                  if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                                }
-                              }}
-                              className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
-                            >
-                              <XCircle size={20} />
-                              <span className="text-[8px] font-bold uppercase">Cancelar</span>
-                            </button>
-                         </div>
-                      </div>
-                    );
-                  })}
+                  {agendaOrdenada.map(app => (
+                    <div key={app.id} className="flex items-center justify-between p-4 bg-white rounded-2xl border-l-4 border-green-500 shadow-sm">
+                       <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="font-black text-slate-900 text-sm">{app.client}</p>
+                            <span className="text-[8px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold uppercase">Confirmado</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                          <p className="text-[10px] text-blue-600 font-bold mt-1">{app.time} • {app.date?.split('-').reverse().join('/')}</p>
+                       </div>
+                       <button 
+                        onClick={() => {
+                          if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+                            onUpdateStatus(app.id, 'rejected');
+                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                          }
+                        }}
+                        className="flex flex-col items-center gap-1 p-2 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                      >
+                        <XCircle size={20} />
+                        <span className="text-[8px] font-bold uppercase">Cancelar</span>
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
             </section>
           </div>
         )}
 
-
         {activeTab === 'services' && (
           <div className="space-y-4">
             <div className="p-4 bg-blue-50 rounded-2xl mb-4">
                 <p className="text-xs text-blue-700 font-medium">
-                  <span className="font-bold">{user.plano_ativo ? 'Plano Pro Ativo' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
+                  <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
                 </p>
             </div>
             {MASTER_SERVICES.map(service => {
@@ -978,7 +1124,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 <div className="flex flex-col items-center mb-6">
                     <div className="relative">
                         <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
-                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
+                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
                         </div>
                         <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
                             <Camera size={16} />
@@ -1006,7 +1152,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
                 <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
                     <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
-                    <div onClick={handleToggleVisibility} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
+                    <div onClick={() => onUpdateProfile({ ...user, is_visible: !user.is_visible })} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
                         <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
                     </div>
                 </div>
@@ -1023,13 +1169,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 {showCalendar && (
                     <div className="p-5">
                         <div className="grid grid-cols-7 gap-2 mb-6">
-                            {Array.from({ length: 30 }, (_, i) => {
-                                const d = String(i + 1).padStart(2, '0');
-                                const fullDate = `2026-03-${d}`; 
+                            {Array.from({ length: 31 }, (_, i) => {
+                                const day = String(i + 1).padStart(2, '0');
+                                const fullDate = `2026-03-${day}`; 
                                 const isSelected = selectedDateConfig === fullDate;
                                 const isAvailable = user.available_slots?.[fullDate]?.length > 0;
                                 return (
-                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white' : 'bg-white text-slate-400'}`}>
+                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
                                         {i + 1}
                                     </button>
                                 );
@@ -1039,7 +1185,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                             <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
                             <div className="grid grid-cols-4 gap-2">
                                 {GLOBAL_TIME_SLOTS.map(slot => (
-                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-blue-600 text-white' : 'bg-white'}`}>
+                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-slate-200 text-slate-600'}`}>
                                         {slot}
                                     </button>
                                 ))}
