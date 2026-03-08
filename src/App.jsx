@@ -33,8 +33,7 @@ const MASTER_SERVICES = [
   { id: 12, name: 'Lash design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'lash' },
   { id: 13, name: 'Micro Pig Sobrancelha', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
   { id: 14, name: 'Designer com Henna', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-  { id: 15, name: 'Curso Designer sobrancelha', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-
+  
 ];
 
 const GLOBAL_TIME_SLOTS = ['08:00', '8:30', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '19:30', '20:00', '21:00'];
@@ -235,227 +234,269 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
   const [userCoords, setUserCoords] = useState(null);
 
-useEffect(() => {
-  if ("geolocation" in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setUserCoords({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude
-        });
-        console.log("📍 Localização do cliente capturada com sucesso!");
-      },
-      (err) => {
-        console.error("❌ Erro ao obter localização:", err.message);
-      },
-      { enableHighAccuracy: true }
+  // --- NOVA FUNÇÃO PARA EXCLUSÃO DE CONTA (REQUISITO APPLE) ---
+  const handleDeleteAccount = async () => {
+    const confirmacao = window.confirm(
+      "Deseja realmente excluir sua conta? Todos os seus dados e agendamentos serão apagados permanentemente conforme as diretrizes da App Store."
     );
-  }
-}, []);
 
-  
+    if (confirmacao) {
+      try {
+        // Deleta agendamentos do cliente
+        const { error: errorApp } = await supabase
+          .from('appointments')
+          .delete()
+          .eq('client_id', user.id);
 
- useEffect(() => {
-  const interval = setInterval(() => {
-    fetchBarbers(); 
-    fetchAppointments();
-    console.log("Dados atualizados silenciosamente!");
-  }, 30000);
-  return () => clearInterval(interval);
-}, []);
+        if (errorApp) throw errorApp;
 
- const processedBarbers = useMemo(() => {
-  return (barbers || [])
-    .filter(b => b.is_visible)
-    .map(b => {
-      const dist = calculateDistance(
-        userCoords?.lat, 
-        userCoords?.lng, 
-        b.latitude, 
-        b.longitude
+        // Deleta perfil do cliente
+        const { error: errorProf } = await supabase
+          .from('profiles')
+          .delete()
+          .eq('id', user.id);
+
+        if (errorProf) throw errorProf;
+
+        alert("Sua conta e seus dados foram removidos.");
+        onLogout(); 
+      } catch (error) {
+        console.error("Erro ao excluir:", error.message);
+        alert("Erro ao processar exclusão. Tente novamente.");
+      }
+    }
+  };
+
+  useEffect(() => {
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setUserCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude
+          });
+          console.log("📍 Localização do cliente capturada com sucesso!");
+        },
+        (err) => {
+          console.error("❌ Erro ao obter localização:", err.message);
+        },
+        { enableHighAccuracy: true }
       );
-      
-      let label = null;
-      if (dist !== null) {
-        if (dist < 1) {
-          label = `${Math.floor(dist * 1000)} m`;
-        } else {
-          label = `${dist.toFixed(1)} km`; 
+    }
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (typeof fetchBarbers === 'function') fetchBarbers(); 
+      if (typeof fetchAppointments === 'function') fetchAppointments();
+      console.log("Dados atualizados silenciosamente!");
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const processedBarbers = useMemo(() => {
+    return (barbers || [])
+      .filter(b => b.is_visible)
+      .map(b => {
+        const dist = calculateDistance(
+          userCoords?.lat, 
+          userCoords?.lng, 
+          b.latitude, 
+          b.longitude
+        );
+        
+        let label = null;
+        if (dist !== null) {
+          if (dist < 1) {
+            label = `${Math.floor(dist * 1000)} m`;
+          } else {
+            label = `${dist.toFixed(1)} km`; 
+          }
         }
+
+        return {
+          ...b,
+          distance: dist,     
+          distanceLabel: label 
+        };
+      })
+      .sort((a, b) => {
+        if (a.distance === null) return 1;
+        if (b.distance === null) return -1;
+        return a.distance - b.distance;
+      });
+  }, [barbers, userCoords]);
+
+  const handleFinish = async () => {
+    try {
+      if (user?.isGuest) {
+        alert("Para realizar um agendamento real, por favor crie sua conta!");
+        onLogout(); 
+        return;
+      }
+      if (!bookingData.date || !bookingData.time) {
+        alert("Por favor, selecione o dia e o horário antes de confirmar.");
+        return;
+      }
+      const payload = {
+        date: bookingData.date,
+        time: bookingData.time,
+        barber_id: bookingData.barber?.id, 
+        client_id: user?.id, 
+        client_name: user?.name || "Cliente",
+        phone: user?.phone || "Sem telefone",
+        service_name: bookingData.service?.name || "Serviço",
+        price: Number(bookingData.price) || 0,
+        status: 'pending'
+      };
+      if (!payload.barber_id) {
+        alert("Erro: O profissional selecionado não foi encontrado. Tente selecioná-lo novamente.");
+        return;
       }
 
-      return {
-        ...b,
-        distance: dist,     
-        distanceLabel: label 
-      };
-    })
-    .sort((a, b) => {
-      if (a.distance === null) return 1;
-      if (b.distance === null) return -1;
-      return a.distance - b.distance;
-    });
-}, [barbers, userCoords]);
+      console.log("Enviando horário para o banco...", payload);
 
-const handleFinish = async () => {
-  try {
-    if (user?.isGuest) {
-      alert("Para realizar um agendamento real, por favor crie sua conta!");
-      onLogout(); 
-      return;
+      const { error } = await supabase
+        .from('appointments')
+        .insert([payload]);
+
+      if (error) throw error;
+      setView('success');
+
+    } catch (error) {
+      console.error("Erro real ao salvar no banco:", error);
+      alert("Falha ao agendar: " + error.message);
     }
-    if (!bookingData.date || !bookingData.time) {
-      alert("Por favor, selecione o dia e o horário antes de confirmar.");
-      return;
-    }
-    const payload = {
-      date: bookingData.date,
-      time: bookingData.time,
-      barber_id: bookingData.barber?.id, 
-      client_id: user?.id, 
-      client_name: user?.name || "Cliente",
-      phone: user?.phone || "Sem telefone",
-      service_name: bookingData.service?.name || "Serviço",
-      price: Number(bookingData.price) || 0,
-      status: 'pending'
-    };
-    if (!payload.barber_id) {
-      alert("Erro: O profissional selecionado não foi encontrado. Tente selecioná-lo novamente.");
-      return;
-    }
+  };
 
-    console.log("Enviando horário para o banco...", payload);
-
-    const { error } = await supabase
-      .from('appointments')
-      .insert([payload]);
-
-    if (error) throw error;
-    setView('success');
-
-  } catch (error) {
-    console.error("Erro real ao salvar no banco:", error);
-    alert("Falha ao agendar: " + error.message);
-  }
-};
-
-if (view === 'success') return (
-  <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white">
-    <Check size={60} className="text-green-500 mb-4" />
-    <h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2>
-    <Button onClick={() => {setView('home'); setStep(1);}}>Voltar ao Início</Button>
-  </div>
-);
-
-return (
-  <div className="min-h-screen bg-slate-50 pb-20">
-    <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
-      <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
-      <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1">
-        <LogOut size={14}/> {user?.isGuest ? 'Entrar' : 'Sair'}
-      </button>
-    </header>
-
-    <main className="p-6 max-w-md mx-auto">
-{view === 'home' && (
-  <div className="space-y-6 animate-in fade-in">
-      <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl">
-        <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setView('booking')}>Novo Agendamento</Button>
-          <Button variant="outline" className="text-white border-white/20" onClick={() => setView('history')}>Histórico</Button>
-        </div>
-      </div>
-
-      <div className="mt-2">
-        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
-        <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-          <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-            <img src={imgMp} alt="Material" className="w-full h-full object-cover" />
-          </div>
-          <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-            <img src={imgMao} alt="Mão" className="w-full h-full object-cover" />
-          </div>
-          <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-            <img src={imgTes} alt="Tesoura" className="w-full h-full object-cover" />
-          </div>
-        </div>
-      </div>
+  if (view === 'success') return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white">
+      <Check size={60} className="text-green-500 mb-4" />
+      <h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2>
+      <Button onClick={() => {setView('home'); setStep(1);}}>Voltar ao Início</Button>
     </div>
-  )}
+  );
 
-{view === 'history' && (
-  <div className="space-y-4 animate-in slide-in-from-right">
-    <button 
-      onClick={() => setView('home')} 
-      className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1 hover:text-slate-600 transition-colors"
-    >
-      <ArrowLeft size={16} /> Voltar
-    </button>
-    <h3 className="font-bold text-lg text-slate-900 mb-4">Meus Agendamentos</h3>
-    
-    {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
-      <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
-        Ainda não tem agendamentos.
-      </div>
-    ) : (
-      <div className="space-y-3">
-        {(appointments || [])
-          .filter(a => String(a.client_id) === String(user.id))
-          .sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`))
-          .map(app => {
-            const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
-            
-            return (
-              <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                <div className="flex gap-3 items-center">
-                  <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                    <User size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
-                    
-                    <p className="text-[10px] text-blue-600 font-bold uppercase">
-                      Profissional: {professional?.name || app.barber_name || "Profissional"}
-                    </p>
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
+        <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
+        <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1">
+          <LogOut size={14}/> {user?.isGuest ? 'Entrar' : 'Sair'}
+        </button>
+      </header>
 
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Clock size={10} />
-                      {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
-                    </p>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => {
-                    if(window.confirm("Deseja reagendar este serviço? O horário atual será cancelado.")) {
-                      const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
-                      setBookingData({
-                        service: serviceObj,
-                        barber: professional,
-                        price: app.price
-                      });
-                      
-                      if (typeof onUpdateStatus === 'function') {
-                        onUpdateStatus(app.id, 'rejected');
-                      }
-                      
-                      setView('booking');
-                      setStep(3);
-                    }
-                  }}
-                  className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                >
-                  <CalendarDays size={20} />
-                  <span className="text-[9px] font-bold uppercase">Reagendar</span>
-                </button>
+      <main className="p-6 max-w-md mx-auto">
+        {view === 'home' && (
+          <div className="space-y-6 animate-in fade-in">
+            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl">
+              <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
+              <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setView('booking')}>Novo Agendamento</Button>
+                <Button variant="outline" className="text-white border-white/20" onClick={() => setView('history')}>Histórico</Button>
               </div>
-            );
-          })}
-      </div>
-    )}
-  </div>
-)}
+            </div>
+
+            <div className="mt-2">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
+              <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
+                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
+                  <img src={imgMp} alt="Material" className="w-full h-full object-cover" />
+                </div>
+                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
+                  <img src={imgMao} alt="Mão" className="w-full h-full object-cover" />
+                </div>
+                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
+                  <img src={imgTes} alt="Tesoura" className="w-full h-full object-cover" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'history' && (
+          <div className="space-y-4 animate-in slide-in-from-right">
+            <button 
+              onClick={() => setView('home')} 
+              className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1 hover:text-slate-600 transition-colors"
+            >
+              <ArrowLeft size={16} /> Voltar
+            </button>
+            <h3 className="font-bold text-lg text-slate-900 mb-4">Meus Agendamentos</h3>
+            
+            {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
+              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
+                Ainda não tem agendamentos.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {(appointments || [])
+                  .filter(a => String(a.client_id) === String(user.id))
+                  .sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`))
+                  .map(app => {
+                    const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
+                    
+                    return (
+                      <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                        <div className="flex gap-3 items-center">
+                          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
+                            <User size={18} />
+                          </div>
+                          <div>
+                            <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
+                            <p className="text-[10px] text-blue-600 font-bold uppercase">
+                              Profissional: {professional?.name || app.barber_name || "Profissional"}
+                            </p>
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
+                              <Clock size={10} />
+                              {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => {
+                            if(window.confirm("Deseja reagendar este serviço? O horário atual será cancelado.")) {
+                              const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
+                              setBookingData({
+                                service: serviceObj,
+                                barber: professional,
+                                price: app.price
+                              });
+                              
+                              if (typeof onUpdateStatus === 'function') {
+                                onUpdateStatus(app.id, 'rejected');
+                              }
+                              
+                              setView('booking');
+                              setStep(3);
+                            }
+                          }}
+                          className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+                        >
+                          <CalendarDays size={20} />
+                          <span className="text-[9px] font-bold uppercase">Reagendar</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                {/* BOTÃO DE EXCLUSÃO DE CONTA (DENTRO DO HISTÓRICO) */}
+                <div className="mt-10 pt-6 border-t border-slate-100">
+                  <button 
+                    onClick={handleDeleteAccount}
+                    className="w-full p-4 text-[10px] text-red-400 font-black uppercase tracking-widest border border-red-50 rounded-2xl hover:bg-red-50 transition-all"
+                  >
+                    Excluir minha conta e dados
+                  </button>
+                  <p className="text-[9px] text-slate-400 text-center mt-2 px-4">
+                    Seus dados pessoais e histórico de agendamentos serão removidos permanentemente.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {view === 'booking' && (
           <div className="space-y-4 animate-in slide-in-from-right">
@@ -481,159 +522,159 @@ return (
                 </>
             )}
 
-{step === 2 && (
-  <>
-    <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
-    <p className="text-xs text-slate-400 mb-4">Mostrando preço para: <b>{bookingData.service?.name}</b></p>
-    
-    <div className="grid grid-cols-2 gap-3">
-      {processedBarbers
-        .filter(b => b.my_services?.some(s => s.id === bookingData.service?.id))
-        .map((b, index) => {
-          const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
-          const isSelected = bookingData.barber?.id === b.id;
-          
-          return (
-            <div 
-              key={b.id} 
-              onClick={() => setBookingData({...bookingData, barber: b, price: displayPrice})}
-              className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'
-              }`}
-            >
-              <div className="w-16 h-16 rounded-full bg-slate-200 mb-2 overflow-hidden border border-slate-100">
-                {b.avatar_url ? (
-                  <img src={b.avatar_url} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-slate-400">
-                    <User size={24} />
-                  </div>
-                )}
-              </div>
-              
-              <p className="font-bold text-sm truncate w-full text-center text-slate-900">{b.name}</p>
-              <div className="flex flex-col items-center mt-1 w-full">
-                {b.address && (
-                  <p className="text-[9px] text-slate-400 line-clamp-1 text-center px-1 mb-0.5">
-                    {b.address}
-                  </p>
-                )}
-                
-                {b.distanceLabel ? (
-                  <p className="text-[10px] text-blue-600 font-black flex items-center gap-1">
-                    <MapPin size={10}/> {b.distanceLabel}
-                  </p>
-                ) : (
-                  <p className="text-[10px] text-slate-300 italic">Distância indisponível</p>
-                )}
-              </div>
-
-              <p className="mt-3 text-green-600 font-black text-sm">R$ {displayPrice}</p>
-            </div>
-          );
-        })}
-    </div>
-    <Button className="mt-6 w-full" onClick={() => setStep(3)} disabled={!bookingData.barber}>
-      Próximo
-    </Button>
-  </>
-)}
-
-        {step === 3 && (
-          <>
-            <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
-            
-            <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Selecione um dia disponível</label>
-            
-            <div className="grid grid-cols-7 gap-2 mb-6">
-              {['D','S','T','Q','Q','S','S'].map(d => (
-                <div key={d} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
-              ))}
-
-              {Array.from({ length: 31 }, (_, i) => {
-               const dia = (i + 1).toString().padStart(2, '0');
-               const dataFormatada = `2026-03-${dia}`; 
-               const daySlots = bookingData.barber?.available_slots?.[dataFormatada] || [];
-               const isAvailable = daySlots.length > 0;
-               const isSelected = bookingData.date === dataFormatada;
-
-                return (
-                  <button
-                    key={i}
-                    disabled={!isAvailable}
-                    onClick={() => setBookingData({...bookingData, date: dataFormatada, time: null})}
-                    className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
-                      ${isSelected 
-                        ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' 
-                        : isAvailable 
-                          ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400' 
-                          : 'bg-slate-50 text-slate-200 border-transparent opacity-50 cursor-not-allowed'}`}
-                  >
-                    {i + 1}
-                    {isAvailable && !isSelected && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"></div>}
-                  </button>
-                );
-              })}
-            </div>
-            
-            {bookingData.date ? (
+            {step === 2 && (
               <>
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
-                  Horários para {bookingData.date.split('-').reverse().join('/')}
-                </label>
-                <div className="grid grid-cols-4 gap-2">
-                  {GLOBAL_TIME_SLOTS.map(t => {
-                    const isSlotAvailable = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t);
-                    
+                <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
+                <p className="text-xs text-slate-400 mb-4">Mostrando preço para: <b>{bookingData.service?.name}</b></p>
+                
+                <div className="grid grid-cols-2 gap-3">
+                  {processedBarbers
+                    .filter(b => b.my_services?.some(s => s.id === bookingData.service?.id))
+                    .map((b, index) => {
+                      const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
+                      const isSelected = bookingData.barber?.id === b.id;
+                      
+                      return (
+                        <div 
+                          key={b.id} 
+                          onClick={() => setBookingData({...bookingData, barber: b, price: displayPrice})}
+                          className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${
+                            isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'
+                          }`}
+                        >
+                          <div className="w-16 h-16 rounded-full bg-slate-200 mb-2 overflow-hidden border border-slate-100">
+                            {b.avatar_url ? (
+                              <img src={b.avatar_url} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-slate-400">
+                                <User size={24} />
+                              </div>
+                            )}
+                          </div>
+                          
+                          <p className="font-bold text-sm truncate w-full text-center text-slate-900">{b.name}</p>
+                          <div className="flex flex-col items-center mt-1 w-full">
+                            {b.address && (
+                              <p className="text-[9px] text-slate-400 line-clamp-1 text-center px-1 mb-0.5">
+                                {b.address}
+                              </p>
+                            )}
+                            
+                            {b.distanceLabel ? (
+                              <p className="text-[10px] text-blue-600 font-black flex items-center gap-1">
+                                <MapPin size={10}/> {b.distanceLabel}
+                              </p>
+                            ) : (
+                              <p className="text-[10px] text-slate-300 italic">Distância indisponível</p>
+                            )}
+                          </div>
+
+                          <p className="mt-3 text-green-600 font-black text-sm">R$ {displayPrice}</p>
+                        </div>
+                      );
+                    })}
+                </div>
+                <Button className="mt-6 w-full" onClick={() => setStep(3)} disabled={!bookingData.barber}>
+                  Próximo
+                </Button>
+              </>
+            )}
+
+            {step === 3 && (
+              <>
+                <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
+                
+                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Selecione um dia disponível</label>
+                
+                <div className="grid grid-cols-7 gap-2 mb-6">
+                  {['D','S','T','Q','Q','S','S'].map(d => (
+                    <div key={d} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
+                  ))}
+
+                  {Array.from({ length: 31 }, (_, i) => {
+                   const dia = (i + 1).toString().padStart(2, '0');
+                   const dataFormatada = `2026-03-${dia}`; 
+                   const daySlots = bookingData.barber?.available_slots?.[dataFormatada] || [];
+                   const isAvailable = daySlots.length > 0;
+                   const isSelected = bookingData.date === dataFormatada;
+
                     return (
-                      <button 
-                        key={t} 
-                        disabled={!isSlotAvailable}
-                        onClick={() => setBookingData({...bookingData, time: t})} 
-                        className={`py-2 rounded-lg font-bold text-xs transition-all ${
-                          bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' : 
-                          isSlotAvailable ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 
-                          'bg-slate-100 text-slate-300 cursor-not-allowed'
-                        }`}
+                      <button
+                        key={i}
+                        disabled={!isAvailable}
+                        onClick={() => setBookingData({...bookingData, date: dataFormatada, time: null})}
+                        className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
+                          ${isSelected 
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' 
+                            : isAvailable 
+                              ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400' 
+                              : 'bg-slate-50 text-slate-200 border-transparent opacity-50 cursor-not-allowed'}`}
                       >
-                        {t}
+                        {i + 1}
+                        {isAvailable && !isSelected && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"></div>}
                       </button>
                     );
                   })}
                 </div>
+                
+                {bookingData.date ? (
+                  <>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
+                      Horários para {bookingData.date.split('-').reverse().join('/')}
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {GLOBAL_TIME_SLOTS.map(t => {
+                        const isSlotAvailable = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t);
+                        
+                        return (
+                          <button 
+                            key={t} 
+                            disabled={!isSlotAvailable}
+                            onClick={() => setBookingData({...bookingData, time: t})} 
+                            className={`py-2 rounded-lg font-bold text-xs transition-all ${
+                              bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' : 
+                              isSlotAvailable ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 
+                              'bg-slate-100 text-slate-300 cursor-not-allowed'
+                            }`}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center">
+                    <Calendar size={24} className="mx-auto text-slate-300 mb-2" />
+                    <p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p>
+                  </div>
+                )}
+
+                {bookingData.time && bookingData.date && (
+                  <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100 animate-in fade-in zoom-in duration-300">
+                    <p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p>
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-slate-900">{bookingData.service?.name}</span>
+                      <span className="font-bold text-slate-900">R$ {bookingData.price}</span>
+                    </div>
+                    <p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p>
+                  </div>
+                )}
+
+                <Button 
+                  className="mt-6 w-full py-4 text-lg" 
+                  onClick={handleFinish} 
+                  disabled={!bookingData.time || !bookingData.date}
+                >
+                  Confirmar Agendamento
+                </Button>
               </>
-            ) : (
-              <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center">
-                <Calendar size={24} className="mx-auto text-slate-300 mb-2" />
-                <p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p>
-              </div>
             )}
-
-            {bookingData.time && bookingData.date && (
-              <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100 animate-in fade-in zoom-in duration-300">
-                <p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p>
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-slate-900">{bookingData.service?.name}</span>
-                  <span className="font-bold text-slate-900">R$ {bookingData.price}</span>
-                </div>
-                <p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p>
-              </div>
-            )}
-
-            <Button 
-              className="mt-6 w-full py-4 text-lg" 
-              onClick={handleFinish} 
-              disabled={!bookingData.time || !bookingData.date}
-            >
-              Confirmar Agendamento
-            </Button>
-          </>
+          </div>
         )}
-      </div>
-    )}
-    </main>
-  </div>
-);
+      </main>
+    </div>
+  );
 };
 
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
