@@ -282,13 +282,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
               <span className="text-xs font-bold text-slate-700">Google</span>
             </button>
             
-            <button 
-              onClick={() => handleSocialLogin('apple')}
-              className="flex items-center justify-center gap-2 p-3 bg-black text-white rounded-xl hover:opacity-90 transition-all active:scale-95"
-            >
-              <Lock size={14} className="fill-current" />
-              <span className="text-xs font-bold">Apple</span>
-            </button>
+            
           </div>
           
           <button 
@@ -364,18 +358,24 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
     }
   };
   const handleSocialLogin = async (provider) => {
-  try {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: provider, // 'google' ou 'apple'
-      options: {
-        redirectTo: window.location.origin, // Para onde o usuário volta após o login
-      }
-    });
-    if (error) throw error;
-  } catch (error) {
-    alert('Erro ao conectar: ' + error.message);
-  }
-};
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: provider,
+        options: {
+          // Garante que o redirecionamento seja para a URL base atual
+          redirectTo: `${window.location.origin}`,
+          // Garante que o Google peça a conta sempre, evitando sessões "presas"
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      });
+      if (error) throw error;
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
   useEffect(() => {
     if ("geolocation" in navigator) {
