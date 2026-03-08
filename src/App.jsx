@@ -26,14 +26,13 @@ const MASTER_SERVICES = [
   { id: 3, name: 'Combo Completo', defaultPrice: 80, duration: '1h 15min', icon: <Star size={20}/>, category: 'combo' },
   { id: 4, name: 'Luzes / Platinado', defaultPrice: 120, duration: '2h', icon: <Sparkles size={20}/>, category: 'chemical' },
   { id: 6, name: 'Design Sobrancelhas', defaultPrice: 35, duration: '30min', icon: <Eye size={20}/>, category: 'eyebrow' },
- { id: 7, name: 'Nail design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'nail' },
+  { id: 7, name: 'Nail design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'nail' },
   { id: 8, name: 'Manicure/Pedicure', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'foot' },
   { id: 9, name: 'Limpeza facial', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
   { id: 10, name: 'Massagem e drenagem', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'dren' },
   { id: 12, name: 'Lash design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'lash' },
   { id: 13, name: 'Micro Pig Sobrancelha', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
   { id: 14, name: 'Designer com Henna', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-  
 ];
 
 const GLOBAL_TIME_SLOTS = ['08:00', '8:30', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '19:30', '20:00', '21:00'];
@@ -72,6 +71,26 @@ const Card = ({ children, selected, onClick }) => (
   </div>
 );
 
+// --- COMPONENTE DE POLÍTICA DE PRIVACIDADE ---
+const PrivacyModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="relative bg-white w-full max-w-md max-h-[80vh] rounded-3xl p-8 overflow-y-auto shadow-2xl">
+        <h2 className="text-xl font-black mb-4">Política de Privacidade</h2>
+        <div className="text-xs text-slate-600 space-y-4 leading-relaxed">
+          <p><strong>1. Coleta de Dados:</strong> Coletamos seu nome, telefone e localização para facilitar o agendamento de serviços de beleza e calcular a distância até o profissional.</p>
+          <p><strong>2. Uso de Localização:</strong> Sua localização é utilizada apenas enquanto o app está em uso para mostrar os profissionais mais próximos.</p>
+          <p><strong>3. Exclusão de Conta:</strong> Conforme as normas da App Store, você pode excluir sua conta e todos os seus dados a qualquer momento na aba "Histórico" dentro do seu perfil de cliente.</p>
+          <p><strong>4. Compartilhamento:</strong> Seus dados de contato são compartilhados apenas com o profissional escolhido no momento do agendamento.</p>
+        </div>
+        <Button onClick={onClose} className="mt-8">Entendi</Button>
+      </div>
+    </div>
+  );
+};
+
 const WelcomePopup = ({ onClose }) => (
   <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}></div>
@@ -98,56 +117,71 @@ const WelcomePopup = ({ onClose }) => (
     </div>
   </div>
 );
-const WelcomeScreen = ({ onSelectMode }) => (
-  <div 
-    className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
-    style={{
-      backgroundImage: `url('/backgr.png')`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-    }}
-  >
 
-    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"></div>
-    <div className="relative z-10 flex flex-col items-center">
-      <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50">
-        <Scissors size={40} className="text-white" />
-      </div>
+const WelcomeScreen = ({ onSelectMode }) => {
+  const [showPrivacy, setShowPrivacy] = useState(false);
+
+  return (
+    <div 
+      className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
+      style={{
+        backgroundImage: `url('/backgr.png')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    >
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"></div>
       
-      <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">
-        SALÃO<span className="text-blue-500">DIGITAL</span>
-      </h1>
-      
-      <div className="w-full max-w-xs space-y-3 mt-10">
-        <Button variant="secondary" onClick={() => onSelectMode('client')}>
-          Sou Cliente
-        </Button>
-
-        <Button 
-          variant="outline" 
-          className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" 
-          onClick={() => onSelectMode('guest')}
-        >
-          Explorar como Convidado
-        </Button>
-
-        <div className="py-2 flex items-center gap-4">
-          <div className="h-[1px] bg-white/20 flex-1"></div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
-          <div className="h-[1px] bg-white/20 flex-1"></div>
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50">
+          <Scissors size={40} className="text-white" />
         </div>
+        
+        <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">
+          SALÃO<span className="text-blue-500">DIGITAL</span>
+        </h1>
+        
+        <div className="w-full max-w-xs space-y-3 mt-10">
+          <Button variant="secondary" onClick={() => onSelectMode('client')}>
+            Sou Cliente
+          </Button>
 
-        <Button 
-          variant="outline" 
-          className="text-white border-white/20 hover:bg-white/5" 
-          onClick={() => onSelectMode('barber')}
-        >
-          Sou Profissional
-        </Button>
+          <Button 
+            variant="outline" 
+            className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" 
+            onClick={() => onSelectMode('guest')}
+          >
+            Explorar como Convidado
+          </Button>
+
+          <div className="py-2 flex items-center gap-4">
+            <div className="h-[1px] bg-white/20 flex-1"></div>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
+            <div className="h-[1px] bg-white/20 flex-1"></div>
+          </div>
+
+          <Button 
+            variant="outline" 
+            className="text-white border-white/20 hover:bg-white/5" 
+            onClick={() => onSelectMode('barber')}
+          >
+            Sou Profissional
+          </Button>
+
+          {/* LINK PARA POLÍTICA DE PRIVACIDADE */}
+          <button 
+            onClick={() => setShowPrivacy(true)}
+            className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100"
+          >
+            Política de Privacidade
+          </button>
+        </div>
       </div>
+
+      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
     </div>
-  </div>
-);
+  );
+};
 
 const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
   const [mode, setMode] = useState('login');
@@ -689,6 +723,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   );
 
   const pending = myAppointments.filter(a => a.status === 'pending');
+
 
   pending.sort((a, b) => {
     const dataA = new Date(`${a.date}T${a.time}`);
