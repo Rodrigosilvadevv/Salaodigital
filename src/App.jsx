@@ -825,7 +825,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const confirmed = myAppointments.filter(a => a.status === 'confirmed');
   
-  const agendaOrdenada = [...confirmed].sort((a, b) => {
+  // Combina agendamentos confirmados com as reservas manuais do perfil
+  const manualAppointments = user.manual_appointments || [];
+  const allAppointments = [...confirmed, ...manualAppointments];
+
+  const agendaOrdenada = allAppointments.sort((a, b) => {
     return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
   });
 
@@ -888,7 +892,47 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const currentSlots = user.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
     const isAvailable = slotsForDay.includes(slot);
-    await setSlotAvailability(date, slot, !isAvailable);
+    
+    if (isAvailable) {
+      // Se estava aberto e ele clicou, vai fechar. Pergunta o nome.
+      const clientName = window.prompt("Deseja reservar este horário para alguém?\n\nDigite o nome do cliente ou deixe em branco apenas para fechar o horário:");
+      
+      if (clientName !== null) { // Só executa se não clicou em cancelar no prompt
+        await setSlotAvailability(date, slot, false);
+        
+        if (clientName.trim() !== "") {
+          const newManualApp = {
+            id: `manual-${Date.now()}`,
+            client: clientName,
+            date: date,
+            time: slot,
+            status: 'confirmed',
+            service_name: 'Reserva Manual',
+            price: 0,
+            isManual: true
+          };
+          
+          const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
+          onUpdateProfile({ ...user, manual_appointments: updatedManualApps });
+          
+          try {
+            await supabase.from('profiles').update({ manual_appointments: updatedManualApps }).eq('id', user.id);
+          } catch (err) { console.error("Erro ao salvar reserva:", err); }
+        }
+      }
+    } else {
+      // Se estava fechado e clicou para abrir
+      await setSlotAvailability(date, slot, true);
+      
+      // Se existia uma reserva manual neste horário, remove ela
+      if (user.manual_appointments) {
+         const filtered = user.manual_appointments.filter(a => !(a.date === date && a.time === slot));
+         onUpdateProfile({ ...user, manual_appointments: filtered });
+         try {
+           await supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', user.id);
+         } catch (err) { console.error(err); }
+      }
+    }
   };
 
   const handleDeleteAppointment = async (app) => {
@@ -1044,11 +1088,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
         </div>
       ) : (
-        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
+        /* FILTRO ANTI-DUPLICIDADE usando ID ao invés de client_id */
         pending
-          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+          .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
           .map(app => (
-            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+            <div key={app.id || app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
@@ -1067,13 +1111,16 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               <div className="flex gap-2">
                 <button 
                   onClick={async () => {
-                    if (!app.client_id) return alert("ID inválido.");
+                    if (!app.id && !app.client_id) return alert("ID inválido.");
                     try {
-                      await onUpdateStatus(app.client_id, 'confirmed');
+                      await onUpdateStatus(app.id || app.client_id, 'confirmed'); // AQUI ERA O BUG PRINCIPAL
                       if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
                       const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                       const fone = app.phone?.toString().replace(/\D/g, '');
-                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                      if (fone) {
+                        // Correção para não bloquear pop-up no mobile após o await:
+                        window.location.href = `https://wa.me/55${fone}?text=${mensagem}`;
+                      }
                     } catch (err) { console.error(err); }
                   }} 
                   className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
@@ -1082,7 +1129,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </button>
                 
                 <button 
-                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
+                  onClick={() => onUpdateStatus(app.id || app.client_id, 'rejected')}
                   className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
                 >
                   <XCircle size={18} />
@@ -1105,18 +1152,19 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         </div>
       ) : (
         <div className="space-y-3">
-          {/* FILTRO ANTI-DUPLICIDADE também na agenda */}
           {agendaOrdenada
-            .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+            .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
             .map(app => (
               <div 
-                key={app.client_id} 
-                className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all"
+                key={app.id || app.client_id} 
+                className={`group relative flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}
               >
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <p className="font-black text-slate-900 text-sm tracking-tight">{app.client}</p>
-                    <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Confirmado</span>
+                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${app.isManual ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                      {app.isManual ? 'Reserva Manual' : 'Confirmado'}
+                    </span>
                   </div>
                   <div className="flex flex-col gap-0.5">
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço'}</p>
@@ -1130,8 +1178,17 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 <button 
                   onClick={() => {
                     if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                      onUpdateStatus(app.client_id, 'rejected');
-                      if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                      if (app.isManual) {
+                        // Se for reserva manual, apenas exclui do perfil
+                        const filtered = (user.manual_appointments || []).filter(m => m.id !== app.id);
+                        onUpdateProfile({ ...user, manual_appointments: filtered });
+                        supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', user.id);
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                      } else {
+                        // Agendamento via app
+                        onUpdateStatus(app.id || app.client_id, 'rejected');
+                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                      }
                     }
                   }}
                   className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all border border-transparent"
