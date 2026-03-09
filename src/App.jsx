@@ -896,42 +896,6 @@ useEffect(() => {
     }
   }, [user, onUpdateProfile]);
 
-  const handleManualBlock = async () => {
-  const { date, slot } = selectedSlotData;
-  
-  // Se houver nome, criamos um agendamento "fake" direto como confirmado
-  // Se não houver, apenas removemos a disponibilidade (comportamento atual)
-  if (placeholderName.trim() !== "") {
-    try {
-      const { error } = await supabase
-        .from('appointments')
-        .insert([{
-          barber_id: user.id,
-          client_name: placeholderName,
-          service_name: "Bloqueio Manual",
-          date: date,
-          time: slot,
-          status: 'confirmed',
-          price: 0
-        }]);
-      
-      if (error) throw error;
-      
-      // Remove a disponibilidade do slot para não aparecer para clientes
-      await setSlotAvailability(date, slot, false);
-      alert(`Horário das ${slot} reservado para ${placeholderName}`);
-    } catch (err) {
-      console.error("Erro ao bloquear:", err.message);
-    }
-  } else {
-    // Se não digitou nome, apenas alterna a disponibilidade como já fazia
-    await toggleSlotForDate(date, slot);
-  }
-
-  // Limpa e fecha
-  setPlaceholderName('');
-  setShowBlockModal(false);
-};
 
   // Gerenciamento de Slots
   const setSlotAvailability = async (date, slot, makeAvailable) => {
@@ -1329,11 +1293,32 @@ useEffect(() => {
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                             <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
                             <div className="grid grid-cols-4 gap-2">
-                                {GLOBAL_TIME_SLOTS.map(slot => (
-                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                        {slot}
-                                    </button>
-                                ))}
+                                {GLOBAL_TIME_SLOTS.map(slot => {
+  const isAvailable = user.available_slots?.[selectedDateConfig]?.includes(slot);
+  
+  return (
+    <button 
+      key={slot} 
+      onClick={() => {
+        if (isAvailable) {
+          // Se o horário está VERDE (livre), vamos perguntar o nome para bloquear
+          setSelectedSlotData({ date: selectedDateConfig, slot: slot });
+          setShowBlockModal(true);
+        } else {
+          // Se o horário está BRANCO (já bloqueado), apenas libera direto
+          toggleSlotForDate(selectedDateConfig, slot);
+        }
+      }} 
+      className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${
+        isAvailable 
+          ? 'bg-green-600 text-white border-green-600' 
+          : 'bg-white border-slate-200 text-slate-600'
+      }`}
+    >
+      {slot}
+    </button>
+  );
+})}
                             </div>
                         </div>
                     </div>
