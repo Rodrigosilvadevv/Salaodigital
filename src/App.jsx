@@ -845,6 +845,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
+const [showBlockModal, setShowBlockModal] = useState(false);
+const [selectedSlotData, setSelectedSlotData] = useState({ date: '', slot: '' });
+const [placeholderName, setPlaceholderName] = useState('');
+
+
 
   
   const myAppointments = (appointments || []).filter(a => 
@@ -890,6 +895,43 @@ useEffect(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [user, onUpdateProfile]);
+
+  const handleManualBlock = async () => {
+  const { date, slot } = selectedSlotData;
+  
+  // Se houver nome, criamos um agendamento "fake" direto como confirmado
+  // Se não houver, apenas removemos a disponibilidade (comportamento atual)
+  if (placeholderName.trim() !== "") {
+    try {
+      const { error } = await supabase
+        .from('appointments')
+        .insert([{
+          barber_id: user.id,
+          client_name: placeholderName,
+          service_name: "Bloqueio Manual",
+          date: date,
+          time: slot,
+          status: 'confirmed',
+          price: 0
+        }]);
+      
+      if (error) throw error;
+      
+      // Remove a disponibilidade do slot para não aparecer para clientes
+      await setSlotAvailability(date, slot, false);
+      alert(`Horário das ${slot} reservado para ${placeholderName}`);
+    } catch (err) {
+      console.error("Erro ao bloquear:", err.message);
+    }
+  } else {
+    // Se não digitou nome, apenas alterna a disponibilidade como já fazia
+    await toggleSlotForDate(date, slot);
+  }
+
+  // Limpa e fecha
+  setPlaceholderName('');
+  setShowBlockModal(false);
+};
 
   // Gerenciamento de Slots
   const setSlotAvailability = async (date, slot, makeAvailable) => {
@@ -1318,6 +1360,40 @@ useEffect(() => {
           </div>
         )}
       </main>
+      {showBlockModal && (
+  <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
+    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
+      <h3 className="font-black text-slate-900 mb-2">Bloquear Horário</h3>
+      <p className="text-slate-500 text-xs mb-4">
+        Deseja colocar um nome para lembrar quem ocupa as {selectedSlotData.slot}? (Opcional)
+      </p>
+      
+      <input 
+        type="text" 
+        placeholder="Ex: João (WhatsApp)" 
+        value={placeholderName}
+        onChange={(e) => setPlaceholderName(e.target.value)}
+        className="w-full bg-slate-100 p-4 rounded-xl border border-slate-200 mb-4 outline-none focus:ring-2 ring-blue-500 font-bold"
+        autoFocus
+      />
+
+      <div className="flex gap-2">
+        <button 
+          onClick={handleManualBlock}
+          className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm"
+        >
+          {placeholderName ? 'Reservar' : 'Apenas Bloquear'}
+        </button>
+        <button 
+          onClick={() => setShowBlockModal(false)}
+          className="px-4 py-3 bg-slate-100 text-slate-400 rounded-xl font-bold text-sm"
+        >
+          Sair
+        </button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 };
