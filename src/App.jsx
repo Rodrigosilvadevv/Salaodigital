@@ -845,10 +845,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
-const [showBlockModal, setShowBlockModal] = useState(false);
-const [selectedSlotData, setSelectedSlotData] = useState({ date: '', slot: '' });
-const [placeholderName, setPlaceholderName] = useState('');
-
 
   
   const myAppointments = (appointments || []).filter(a => 
