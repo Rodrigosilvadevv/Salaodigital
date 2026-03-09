@@ -850,7 +850,6 @@ const [selectedSlotData, setSelectedSlotData] = useState({ date: '', slot: '' })
 const [placeholderName, setPlaceholderName] = useState('');
 
 
-
   
   const myAppointments = (appointments || []).filter(a => 
     String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
@@ -895,7 +894,6 @@ useEffect(() => {
         window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [user, onUpdateProfile]);
-
 
   // Gerenciamento de Slots
   const setSlotAvailability = async (date, slot, makeAvailable) => {
@@ -1082,62 +1080,58 @@ useEffect(() => {
         )}
       </h3>
       
-     {pending.length === 0 ? (
-  <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-    <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-  </div>
-) : (
-  /* FILTRO CORRIGIDO: Agora usamos t.id para não sumir com agendamentos manuais ou múltiplos */
-  pending
-    .filter((app, index, self) => index === self.findIndex((t) => t.id === app.id))
-    .map(app => (
-      <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <p className="font-black text-slate-900 leading-none mb-1">{app.client || app.client_name}</p>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
-            <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
-              <Clock size={12} strokeWidth={3} />
-              <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-            </div>
-          </div>
-          <div className="text-right">
-             <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
-             <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
-          </div>
+      {pending.length === 0 ? (
+        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
         </div>
-        
-        <div className="flex gap-2">
-          <button 
-            onClick={async () => {
-              // MUDANÇA CRÍTICA: Usamos app.id para garantir que o Supabase saiba quem atualizar
-              if (!app.id) return alert("Erro: ID do agendamento não encontrado.");
+      ) : (
+        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
+        pending
+          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+          .map(app => (
+            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
+                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+                    <Clock size={12} strokeWidth={3} />
+                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
+                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
+                </div>
+              </div>
               
-              try {
-                await onUpdateStatus(app.id, 'confirmed');
-                if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    if (!app.client_id) return alert("ID inválido.");
+                    try {
+                      await onUpdateStatus(app.client_id, 'confirmed');
+                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                      const fone = app.phone?.toString().replace(/\D/g, '');
+                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                    } catch (err) { console.error(err); }
+                  }} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
+                >
+                  <CheckCircle size={14} /> Aceitar Solicitação
+                </button>
                 
-                const mensagem = `Olá ${app.client || app.client_name}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                const fone = app.phone?.toString().replace(/\D/g, '');
-                if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-              } catch (err) { console.error(err); }
-            }} 
-            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
-          >
-            <CheckCircle size={14} /> Aceitar Solicitação
-          </button>
-          
-          <button 
-            // MUDANÇA AQUI TAMBÉM: app.id no lugar de client_id
-            onClick={() => onUpdateStatus(app.id, 'rejected')}
-            className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-          >
-            <XCircle size={18} />
-          </button>
-        </div>
-      </div>
-    ))
-)}
+                <button 
+                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
+                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+                >
+                  <XCircle size={18} />
+                </button>
+              </div>
+            </div>
+          ))
+      )}
     </section>
 
     {/* Section: Próximos na Agenda */}
@@ -1297,32 +1291,11 @@ useEffect(() => {
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                             <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
                             <div className="grid grid-cols-4 gap-2">
-                                {GLOBAL_TIME_SLOTS.map(slot => {
-  const isAvailable = user.available_slots?.[selectedDateConfig]?.includes(slot);
-  
-  return (
-    <button 
-      key={slot} 
-      onClick={() => {
-        if (isAvailable) {
-          // Se o horário está VERDE (livre), vamos perguntar o nome para bloquear
-          setSelectedSlotData({ date: selectedDateConfig, slot: slot });
-          setShowBlockModal(true);
-        } else {
-          // Se o horário está BRANCO (já bloqueado), apenas libera direto
-          toggleSlotForDate(selectedDateConfig, slot);
-        }
-      }} 
-      className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${
-        isAvailable 
-          ? 'bg-green-600 text-white border-green-600' 
-          : 'bg-white border-slate-200 text-slate-600'
-      }`}
-    >
-      {slot}
-    </button>
-  );
-})}
+                                {GLOBAL_TIME_SLOTS.map(slot => (
+                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
+                                        {slot}
+                                    </button>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -1349,56 +1322,6 @@ useEffect(() => {
           </div>
         )}
       </main>
-      {showBlockModal && (
-  <div className="fixed inset-0 z-[999] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
-    <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-      <h3 className="font-black text-slate-900 mb-2">Bloquear Horário</h3>
-      <p className="text-slate-500 text-xs mb-4">Deseja identificar quem está neste horário?</p>
-      
-      <input 
-        type="text" 
-        placeholder="Nome do cliente (ex: João Whats)" 
-        value={placeholderName}
-        onChange={(e) => setPlaceholderName(e.target.value)}
-        className="w-full bg-slate-100 p-4 rounded-xl border border-slate-200 mb-4 outline-none font-bold"
-      />
-
-      <div className="flex gap-2">
-        <button 
-  onClick={async () => {
-    if (placeholderName.trim()) {
-      // 1. Primeiro salva no banco
-      const { data, error } = await supabase.from('appointments').insert([{
-        barber_id: user.id,
-        client_name: placeholderName,
-        service_name: "Bloqueio Manual",
-        date: selectedSlotData.date,
-        time: selectedSlotData.slot,
-        status: 'confirmed',
-        price: 0
-      }]).select(); // O .select() traz o ID gerado na hora
-
-      if (error) return console.error("Erro ao bloquear:", error);
-    }
-    
-    // 2. Tira a disponibilidade (Isso vai atualizar o perfil)
-    await toggleSlotForDate(selectedSlotData.date, selectedSlotData.slot);
-    
-    // 3. Limpa tudo
-    setPlaceholderName('');
-    setShowBlockModal(false);
-    
-    // Dica: Recarregue a página ou chame uma função de refresh se os dados não aparecerem
-    // window.location.reload(); 
-  }}
-  className="..."
->
-  Confirmar
-</button>
-      </div>
-    </div>
-  </div>
-)}
     </div>
   );
 };
