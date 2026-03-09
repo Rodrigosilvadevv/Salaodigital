@@ -1361,33 +1361,44 @@ useEffect(() => {
         )}
       </main>
       {showBlockModal && (
-  <div className="fixed inset-0 z-[110] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
+  <div className="fixed inset-0 z-[999] bg-slate-900/80 backdrop-blur-sm flex items-center justify-center p-6">
     <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl">
       <h3 className="font-black text-slate-900 mb-2">Bloquear Horário</h3>
-      <p className="text-slate-500 text-xs mb-4">
-        Deseja colocar um nome para lembrar quem ocupa as {selectedSlotData.slot}? (Opcional)
-      </p>
+      <p className="text-slate-500 text-xs mb-4">Deseja identificar quem está neste horário?</p>
       
       <input 
         type="text" 
-        placeholder="Ex: João (WhatsApp)" 
+        placeholder="Nome do cliente (ex: João Whats)" 
         value={placeholderName}
         onChange={(e) => setPlaceholderName(e.target.value)}
-        className="w-full bg-slate-100 p-4 rounded-xl border border-slate-200 mb-4 outline-none focus:ring-2 ring-blue-500 font-bold"
-        autoFocus
+        className="w-full bg-slate-100 p-4 rounded-xl border border-slate-200 mb-4 outline-none font-bold"
       />
 
       <div className="flex gap-2">
         <button 
-          onClick={handleManualBlock}
+          onClick={async () => {
+            if (placeholderName.trim()) {
+              // Salva no banco como um agendamento manual
+              await supabase.from('appointments').insert([{
+                barber_id: user.id,
+                client_name: placeholderName,
+                service_name: "Bloqueio Manual",
+                date: selectedSlotData.date,
+                time: selectedSlotData.slot,
+                status: 'confirmed',
+                price: 0
+              }]);
+            }
+            // Tira a disponibilidade e fecha
+            await toggleSlotForDate(selectedSlotData.date, selectedSlotData.slot);
+            setPlaceholderName('');
+            setShowBlockModal(false);
+          }}
           className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm"
         >
-          {placeholderName ? 'Reservar' : 'Apenas Bloquear'}
+          Confirmar
         </button>
-        <button 
-          onClick={() => setShowBlockModal(false)}
-          className="px-4 py-3 bg-slate-100 text-slate-400 rounded-xl font-bold text-sm"
-        >
+        <button onClick={() => setShowBlockModal(false)} className="px-4 py-3 text-slate-400 font-bold text-sm">
           Sair
         </button>
       </div>
