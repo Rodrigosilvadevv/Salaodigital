@@ -840,681 +840,681 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 };
 
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
-  const [activeTab, setActiveTab] = useState('home');
-  const [isPaying, setIsPaying] = useState(false);
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(true);
-  const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
+  const [activeTab, setActiveTab] = useState('home');
+  const [isPaying, setIsPaying] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(true);
+  const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
 
-  
-  const myAppointments = (appointments || []).filter(a => 
-    String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
-  );
+  
+  const myAppointments = (appointments || []).filter(a => 
+    String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
+  );
 
-  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => {
-    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
-  });
+  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => {
+    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
+  });
 
-  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
-  
-  const agendaOrdenada = [...confirmed].sort((a, b) => {
-    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
-  });
+  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
+  
+  const agendaOrdenada = [...confirmed].sort((a, b) => {
+    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
+  });
 
-  const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+  const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
 useEffect(() => {
-  if (user && user.type === 'barber') {
-    registerPushNotifications(user.id);
-  }
+  if (user && user.type === 'barber') {
+    registerPushNotifications(user.id);
+  }
 }, [user]);
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log("Sincronizando dados...");
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  useEffect(() => {
+    const interval = setInterval(() => {
+      console.log("Sincronizando dados...");
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  useEffect(() => {
-    const queryParams = new URLSearchParams(window.location.search);
-    const status = queryParams.get('status');
-    if (status === 'approved' && !user.plano_ativo) {
-        alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
-        onUpdateProfile({ 
-          ...user, 
-          plano_ativo: true, 
-          is_visible: true,
-          plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() 
-        });
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [user, onUpdateProfile]);
+  useEffect(() => {
+    const queryParams = new URLSearchParams(window.location.search);
+    const status = queryParams.get('status');
+    if (status === 'approved' && !user.plano_ativo) {
+        alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
+        onUpdateProfile({ 
+          ...user, 
+          plano_ativo: true, 
+          is_visible: true,
+          plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() 
+        });
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, [user, onUpdateProfile]);
 
-  // Gerenciamento de Slots
-  const setSlotAvailability = async (date, slot, makeAvailable) => {
-    const currentSlots = user.available_slots || {};
-    const slotsForDay = currentSlots[date] || [];
+  // Gerenciamento de Slots
+  const setSlotAvailability = async (date, slot, makeAvailable) => {
+    const currentSlots = user.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
 
-    let newSlots;
-    if (makeAvailable) {
-      if (!slotsForDay.includes(slot)) {
-        newSlots = [...slotsForDay, slot].sort();
-      } else return;
-    } else {
-      if (slotsForDay.includes(slot)) {
-        newSlots = slotsForDay.filter(s => s !== slot);
-      } else return;
-    }
+    let newSlots;
+    if (makeAvailable) {
+      if (!slotsForDay.includes(slot)) {
+        newSlots = [...slotsForDay, slot].sort();
+      } else return;
+    } else {
+      if (slotsForDay.includes(slot)) {
+        newSlots = slotsForDay.filter(s => s !== slot);
+      } else return;
+    }
 
-    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
-    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
+    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
+    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
 
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ available_slots: updatedAvailableSlots })
-        .eq('id', user.id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao salvar no Supabase:", err.message);
-    }
-  };
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ available_slots: updatedAvailableSlots })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error("Erro ao salvar no Supabase:", err.message);
+    }
+  };
 
-  const toggleSlotForDate = async (date, slot) => {
-    const currentSlots = user.available_slots || {};
-    const slotsForDay = currentSlots[date] || [];
-    const isAvailable = slotsForDay.includes(slot);
-    await setSlotAvailability(date, slot, !isAvailable);
-  };
+  const toggleSlotForDate = async (date, slot) => {
+    const currentSlots = user.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
+    const isAvailable = slotsForDay.includes(slot);
+    await setSlotAvailability(date, slot, !isAvailable);
+  };
 
-  const handleDeleteAppointment = async (app) => {
-    if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
-        onUpdateStatus(app.id, 'rejected');
-        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-    }
-  };
+  const handleDeleteAppointment = async (app) => {
+    if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
+        onUpdateStatus(app.id, 'rejected');
+        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+    }
+  };
 
-  const handlePayment = async () => {
-    setIsPaying(true);
-    try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
-      const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
-      });
-      const data = await response.json();
-      if (data.init_point) window.location.href = data.init_point;
-      else alert("Erro ao gerar link.");
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao conectar ao pagamento.");
-    } finally {
-      setIsPaying(false);
-    }
-  };
+  const handlePayment = async () => {
+    setIsPaying(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
+      const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
+      });
+      const data = await response.json();
+      if (data.init_point) window.location.href = data.init_point;
+      else alert("Erro ao gerar link.");
+    } catch (error) {
+      console.error(error);
+      alert("Erro ao conectar ao pagamento.");
+    } finally {
+      setIsPaying(false);
+    }
+  };
 
-  const toggleService = (serviceId, defaultPrice) => {
-    const currentServices = user.my_services || [];
-    const exists = currentServices.find(s => s.id === serviceId);
-    
-    if (!exists && !user.plano_ativo && currentServices.length >= 3) {
-        setShowPayModal(true); 
-        return; 
-    }
+  const toggleService = (serviceId, defaultPrice) => {
+    const currentServices = user.my_services || [];
+    const exists = currentServices.find(s => s.id === serviceId);
+    
+    if (!exists && !user.plano_ativo && currentServices.length >= 3) {
+        setShowPayModal(true); 
+        return; 
+    }
 
-    let newServices = exists 
-      ? currentServices.filter(s => s.id !== serviceId) 
-      : [...currentServices, { id: serviceId, price: defaultPrice }];
-    onUpdateProfile({ ...user, my_services: newServices });
-  };
+    let newServices = exists 
+      ? currentServices.filter(s => s.id !== serviceId) 
+      : [...currentServices, { id: serviceId, price: defaultPrice }];
+    onUpdateProfile({ ...user, my_services: newServices });
+  };
 
-  const updateServicePrice = (serviceId, newPrice) => {
-    const newServices = (user.my_services || []).map(s => 
-      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
-    );
-    onUpdateProfile({ ...user, my_services: newServices });
-  };
+  const updateServicePrice = (serviceId, newPrice) => {
+    const newServices = (user.my_services || []).map(s => 
+      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
+    );
+    onUpdateProfile({ ...user, my_services: newServices });
+  };
 
-  const handleUploadPhoto = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('barber-photos')
-        .upload(fileName, file);
+  const handleUploadPhoto = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await supabase.storage
+        .from('barber-photos')
+        .upload(fileName, file);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) throw uploadError;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('barber-photos')
-        .getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage
+        .from('barber-photos')
+        .getPublicUrl(fileName);
 
-      onUpdateProfile({ ...user, avatar_url: publicUrl });
-      alert('Foto atualizada!');
-    } catch (error) {
-      alert('Erro ao carregar foto.');
-    }
-  };
+      onUpdateProfile({ ...user, avatar_url: publicUrl });
+      alert('Foto atualizada!');
+    } catch (error) {
+      alert('Erro ao carregar foto.');
+    }
+  };
 
-  return (
-    <div className="min-h-screen bg-slate-50 pb-24 font-sans">
-      
-      {showPayModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock size={32} />
-            </div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
-            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
-            <div className="space-y-3">
-              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
-                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
-              </button>
-              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
-            </div>
-          </div>
-        </div>
-      )}
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24 font-sans">
+      
+      {showPayModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock size={32} />
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
+            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
+            <div className="space-y-3">
+              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
+                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
+              </button>
+              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
-                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
-              </div>
-            </div>
-          </div>
-          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
-            <LogOut size={18}/>
-          </button>
-        </div>
-      </header>
+      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
+                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
+            </div>
+            <div>
+              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
+              </div>
+            </div>
+          </div>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+            <LogOut size={18}/>
+          </button>
+        </div>
+      </header>
 
-      <nav className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
-        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Início</button>
-        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Serviços</button>
-        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Perfil & Agenda</button>
-      </nav>
+      <nav className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
+        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Início</button>
+        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Serviços</button>
+        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Perfil & Agenda</button>
+      </nav>
 
-      <main className="p-6 max-w-md mx-auto">
-        {activeTab === 'home' && (
-  <div className="space-y-6">
-    {/* Status Cards */}
-    <div className="grid grid-cols-2 gap-4">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
-        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
-        <p className="text-2xl font-black">R$ {revenue}</p>
-      </div>
-      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
-        <div className="flex gap-2 items-baseline">
-          <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
-          <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
-        </div>
-      </div>
-    </div>
+      <main className="p-6 max-w-md mx-auto">
+        {activeTab === 'home' && (
+  <div className="space-y-6">
+    {/* Status Cards */}
+    <div className="grid grid-cols-2 gap-4">
+      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
+        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
+        <p className="text-2xl font-black">R$ {revenue}</p>
+      </div>
+      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
+        <div className="flex gap-2 items-baseline">
+          <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
+          <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
+        </div>
+      </div>
+    </div>
 
-    {/* Section: Novas Solicitações */}
-    <section>
-      <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
-        Novas Solicitações
-        {pending.length > 0 && (
-          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-            {pending.length}
-          </span>
-        )}
-      </h3>
-      
-      {pending.length === 0 ? (
-        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-        </div>
-      ) : (
-        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
-        pending
-          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
-          .map(app => (
-            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
-                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
-                    <Clock size={12} strokeWidth={3} />
-                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
-                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
-                </div>
-              </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={async () => {
-                    if (!app.client_id) return alert("ID inválido.");
-                    try {
-                      await onUpdateStatus(app.client_id, 'confirmed');
-                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
-                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                      const fone = app.phone?.toString().replace(/\D/g, '');
-                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-                    } catch (err) { console.error(err); }
-                  }} 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
-                >
-                  <CheckCircle size={14} /> Aceitar Solicitação
-                </button>
-                
-                <button 
-                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
-                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-                >
-                  <XCircle size={18} />
-                </button>
-              </div>
-            </div>
-          ))
-      )}
-    </section>
+    {/* Section: Novas Solicitações */}
+    <section>
+      <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
+        Novas Solicitações
+        {pending.length > 0 && (
+          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+            {pending.length}
+          </span>
+        )}
+      </h3>
+      
+      {pending.length === 0 ? (
+        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+        </div>
+      ) : (
+        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
+        pending
+          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+          .map(app => (
+            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
+                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+                    <Clock size={12} strokeWidth={3} />
+                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                  </div>
+                </div>
+                <div className="text-right">
+                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
+                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
+                </div>
+              </div>
+              
+              <div className="flex gap-2">
+                <button 
+                  onClick={async () => {
+                    if (!app.client_id) return alert("ID inválido.");
+                    try {
+                      await onUpdateStatus(app.client_id, 'confirmed');
+                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                      const fone = app.phone?.toString().replace(/\D/g, '');
+                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+                    } catch (err) { console.error(err); }
+                  }} 
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
+                >
+                  <CheckCircle size={14} /> Aceitar Solicitação
+                </button>
+                
+                <button 
+                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
+                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+                >
+                  <XCircle size={18} />
+                </button>
+              </div>
+            </div>
+          ))
+      )}
+    </section>
 
-    {/* Section: Próximos na Agenda */}
-    <section className="mt-8">
-      <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-        <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
-      </h3>
-      
-      {agendaOrdenada.length === 0 ? (
-        <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-          <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {/* FILTRO ANTI-DUPLICIDADE também na agenda */}
-          {agendaOrdenada
-            .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
-            .map(app => (
-              <div 
-                key={app.client_id} 
-                className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all"
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-black text-slate-900 text-sm tracking-tight">{app.client}</p>
-                    <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Confirmado</span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço'}</p>
-                    <div className="flex items-center gap-1.5 text-blue-600 font-bold">
-                      <Clock size={12} strokeWidth={3} />
-                      <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                    </div>
-                  </div>
-                </div>
+    {/* Section: Próximos na Agenda */}
+    <section className="mt-8">
+      <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+        <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
+      </h3>
+      
+      {agendaOrdenada.length === 0 ? (
+        <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+          <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* FILTRO ANTI-DUPLICIDADE também na agenda */}
+          {agendaOrdenada
+            .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
+            .map(app => (
+              <div 
+                key={app.client_id} 
+                className="group relative flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all"
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="font-black text-slate-900 text-sm tracking-tight">{app.client}</p>
+                    <span className="text-[9px] bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">Confirmado</span>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço'}</p>
+                    <div className="flex items-center gap-1.5 text-blue-600 font-bold">
+                      <Clock size={12} strokeWidth={3} />
+                      <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                    </div>
+                  </div>
+                </div>
 
-                <button 
-                  onClick={() => {
-                    if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                      onUpdateStatus(app.client_id, 'rejected');
-                      if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all border border-transparent"
-                >
-                  <XCircle size={20} />
-                  <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
-                </button>
-              </div>
-            ))}
-        </div>
-      )}
-    </section>
-  </div>
+                <button 
+                  onClick={() => {
+                    if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
+                      onUpdateStatus(app.client_id, 'rejected');
+                      if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all border border-transparent"
+                >
+                  <XCircle size={20} />
+                  <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+    </section>
+  </div>
 )}
 
-        {activeTab === 'services' && (
-          <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-2xl mb-4">
-                <p className="text-xs text-blue-700 font-medium">
-                  <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
-                </p>
-            </div>
-            {MASTER_SERVICES.map(service => {
-              const userServiceData = user.my_services?.find(s => s.id === service.id);
-              const isActive = !!userServiceData;
-              return (
-                <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
-                  <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>{service.icon}</div>
-                      <div>
-                        <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
-                        <p className="text-[10px] text-slate-400">{service.duration}</p>
-                      </div>
-                    </div>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
-                        {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
-                    </div>
-                  </div>
-                  {isActive && (
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
-                      <input type="number" value={userServiceData.price || ''} onChange={(e) => updateServicePrice(service.id, e.target.value)} className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {activeTab === 'services' && (
+          <div className="space-y-4">
+            <div className="p-4 bg-blue-50 rounded-2xl mb-4">
+                <p className="text-xs text-blue-700 font-medium">
+                  <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
+                </p>
+            </div>
+            {MASTER_SERVICES.map(service => {
+              const userServiceData = user.my_services?.find(s => s.id === service.id);
+              const isActive = !!userServiceData;
+              return (
+                <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>{service.icon}</div>
+                      <div>
+                        <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
+                        <p className="text-[10px] text-slate-400">{service.duration}</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
+                        {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
+                      <input type="number" value={userServiceData.price || ''} onChange={(e) => updateServicePrice(service.id, e.target.value)} className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
-        {activeTab === 'config' && (
-          <div className="space-y-6">
-            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
-                <div className="flex flex-col items-center mb-6">
-                    <div className="relative">
-                        <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
-                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
-                        </div>
-                        <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
-                            <Camera size={16} />
-                        </label>
-                        <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} />
-                    </div>
-                </div>
+        {activeTab === 'config' && (
+          <div className="space-y-6">
+            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
+                <div className="flex flex-col items-center mb-6">
+                    <div className="relative">
+                        <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
+                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
+                        </div>
+                        <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
+                            <Camera size={16} />
+                        </label>
+                        <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} />
+                    </div>
+                </div>
 
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
-                        <input type="text" value={user.address || ''} onChange={(e) => onUpdateProfile({ ...user, address: e.target.value })} className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium"/>
-                    </div>
-                    <button onClick={() => {
-                        if ("geolocation" in navigator) {
-                            navigator.geolocation.getCurrentPosition((pos) => {
-                                onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-                                alert("Localização capturada!");
-                            });
-                        }
-                    }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                        <MapPin size={14} /> Atualizar Localização GPS
-                    </button>
-                </div>
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
+                        <input type="text" value={user.address || ''} onChange={(e) => onUpdateProfile({ ...user, address: e.target.value })} className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium"/>
+                    </div>
+                    <button onClick={() => {
+                        if ("geolocation" in navigator) {
+                            navigator.geolocation.getCurrentPosition((pos) => {
+                                onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                                alert("Localização capturada!");
+                            });
+                        }
+                    }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                        <MapPin size={14} /> Atualizar Localização GPS
+                    </button>
+                </div>
 
-                <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
-                    <div onClick={() => onUpdateProfile({ ...user, is_visible: !user.is_visible })} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
-                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
-                    </div>
-                </div>
-            </section>
+                <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                    <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
+                    <div onClick={() => onUpdateProfile({ ...user, is_visible: !user.is_visible })} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
+                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
+                    </div>
+                </div>
+            </section>
 
-            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
-                <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
-                    <div className="flex items-center gap-3">
-                        <CalendarDays size={20} />
-                        <h3 className="font-bold text-sm">Horários Disponíveis</h3>
-                    </div>
-                    <ChevronRight size={18} className={showCalendar ? 'rotate-90' : ''} />
-                </div>
-                {showCalendar && (
-                    <div className="p-5">
-                        <div className="grid grid-cols-7 gap-2 mb-6">
-                            {Array.from({ length: 31 }, (_, i) => {
-                                const day = String(i + 1).padStart(2, '0');
-                                const fullDate = `2026-03-${day}`; 
-                                const isSelected = selectedDateConfig === fullDate;
-                                const isAvailable = user.available_slots?.[fullDate]?.length > 0;
-                                return (
-                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
-                                        {i + 1}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {GLOBAL_TIME_SLOTS.map(slot => (
-                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                        {slot}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </section>
+            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+                <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
+                    <div className="flex items-center gap-3">
+                        <CalendarDays size={20} />
+                        <h3 className="font-bold text-sm">Horários Disponíveis</h3>
+                    </div>
+                    <ChevronRight size={18} className={showCalendar ? 'rotate-90' : ''} />
+                </div>
+                {showCalendar && (
+                    <div className="p-5">
+                        <div className="grid grid-cols-7 gap-2 mb-6">
+                            {Array.from({ length: 31 }, (_, i) => {
+                                const day = String(i + 1).padStart(2, '0');
+                                const fullDate = `2026-03-${day}`; 
+                                const isSelected = selectedDateConfig === fullDate;
+                                const isAvailable = user.available_slots?.[fullDate]?.length > 0;
+                                return (
+                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
+                                        {i + 1}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                            <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
+                            <div className="grid grid-cols-4 gap-2">
+                                {GLOBAL_TIME_SLOTS.map(slot => (
+                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
+                                        {slot}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </section>
 
-            <div className="pt-4 text-center">
-               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
-                  <p className="text-sm font-black text-slate-900 mt-1">
-                    {user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
-                  </p>
-                  {user.plano_ativo && user.plano_expiracao && (
-                    <p className="text-[11px] text-slate-500 mt-2">
-                       Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span>
-                    </p>
-                  )}
-                  {!user.plano_ativo && (
-                    <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
-                  )}
-               </div>
-               <p className="text-[9px] text-slate-400 mt-6 uppercase font-bold tracking-tighter">Salão Digital © 2026 - Todos os direitos reservados</p>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
-  );
+            <div className="pt-4 text-center">
+               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
+                  <p className="text-sm font-black text-slate-900 mt-1">
+                    {user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
+                  </p>
+                  {user.plano_ativo && user.plano_expiracao && (
+                    <p className="text-[11px] text-slate-500 mt-2">
+                       Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span>
+                    </p>
+                  )}
+                  {!user.plano_ativo && (
+                    <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
+                  )}
+               </div>
+               <p className="text-[9px] text-slate-400 mt-6 uppercase font-bold tracking-tighter">Salão Digital © 2026 - Todos os direitos reservados</p>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
 };
 export default function App() {
-  // 1. Inicialização inteligente: já nasce lendo o "disco"
-  const [user, setUser] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem('salao_digital_user');
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch (e) {
-      console.error("Erro ao recuperar usuário", e);
-      return null;
-    }
-  });
+  // 1. Inicialização inteligente: já nasce lendo o "disco"
+  const [user, setUser] = useState(() => {
+    try {
+      const savedUser = localStorage.getItem('salao_digital_user');
+      return savedUser ? JSON.parse(savedUser) : null;
+    } catch (e) {
+      console.error("Erro ao recuperar usuário", e);
+      return null;
+    }
+  });
 
-  const [currentMode, setCurrentMode] = useState(() => {
-    return localStorage.getItem('salao_digital_mode') || null;
-  });
+  const [currentMode, setCurrentMode] = useState(() => {
+    return localStorage.getItem('salao_digital_mode') || null;
+  });
 
-  const [barbers, setBarbers] = useState([]);
-  const [appointments, setAppointments] = useState([]);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [barbers, setBarbers] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [showWelcome, setShowWelcome] = useState(true);
 
-  // 2. Busca de dados (Barbeiros e Agendamentos)
-  useEffect(() => {
-    const fetchData = async () => {
-      const { data: bData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'barber')
-        .eq('is_visible', true);
-        
-      if (bData) setBarbers(bData);
+  // 2. Busca de dados (Barbeiros e Agendamentos)
+  useEffect(() => {
+    const fetchData = async () => {
+      const { data: bData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'barber')
+        .eq('is_visible', true);
+        
+      if (bData) setBarbers(bData);
 
-      if (!user || user.id === 'guest') return;
+      if (!user || user.id === 'guest') return;
 
-      const { data: aData } = await supabase
-        .from('appointments')
-        .select('*')
-        .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
-      
-      if (aData) {
-        const formatted = aData.map(a => ({
-          ...a,
-          client: a.client_name,
-          service: a.service_name,
-          time: a.time, 
-          date: a.date, 
-          barberId: a.barber_id
-        }));
-        setAppointments(formatted);
-      }
-    };
-    fetchData();
-  }, [user]);
+      const { data: aData } = await supabase
+        .from('appointments')
+        .select('*')
+        .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
+      
+      if (aData) {
+        const formatted = aData.map(a => ({
+          ...a,
+          client: a.client_name,
+          service: a.service_name,
+          time: a.time, 
+          date: a.date, 
+          barberId: a.barber_id
+        }));
+        setAppointments(formatted);
+      }
+    };
+    fetchData();
+  }, [user]);
 
-  // --- FUNÇÕES DE NAVEGAÇÃO E AUTH ---
+  // --- FUNÇÕES DE NAVEGAÇÃO E AUTH ---
 
-  const handleSelectMode = (mode) => {
-    if (mode === 'guest') {
-      const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
-      setUser(guestUser);
-      setCurrentMode('client');
-    } else {
-      setCurrentMode(mode);
-    }
-  };
+  const handleSelectMode = (mode) => {
+    if (mode === 'guest') {
+      const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
+      setUser(guestUser);
+      setCurrentMode('client');
+    } else {
+      setCurrentMode(mode);
+    }
+  };
 
-  const handleLogin = async (phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', phone)
-      .eq('password', password)
-      .eq('role', currentMode)
-      .single();
+  const handleLogin = async (phone, password) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('phone', phone)
+      .eq('password', password)
+      .eq('role', currentMode)
+      .single();
 
-    if (error || !data) throw new Error('Telefone ou senha incorretos.');
-    
-    localStorage.setItem('salao_digital_user', JSON.stringify(data));
-    localStorage.setItem('salao_digital_mode', currentMode);
-    setUser(data);
-  };
+    if (error || !data) throw new Error('Telefone ou senha incorretos.');
+    
+    localStorage.setItem('salao_digital_user', JSON.stringify(data));
+    localStorage.setItem('salao_digital_mode', currentMode);
+    setUser(data);
+  };
 
-  const handleRegister = async (name, phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert([{ 
-        name, phone, password, 
-        role: currentMode, 
-        is_visible: false,
-        my_services: [],
-        available_slots: GLOBAL_TIME_SLOTS,
-        available_dates: [], 
-        avatar_url: '',
-      }])
-      .select().single();
+  const handleRegister = async (name, phone, password) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert([{ 
+        name, phone, password, 
+        role: currentMode, 
+        is_visible: false,
+        my_services: [],
+        available_slots: GLOBAL_TIME_SLOTS,
+        available_dates: [], 
+        avatar_url: '',
+      }])
+      .select().single();
 
-    if (error) throw new Error(error.message);
+    if (error) throw new Error(error.message);
 
-    localStorage.setItem('salao_digital_user', JSON.stringify(data));
-    localStorage.setItem('salao_digital_mode', currentMode);
-    setUser(data);
-  };
+    localStorage.setItem('salao_digital_user', JSON.stringify(data));
+    localStorage.setItem('salao_digital_mode', currentMode);
+    setUser(data);
+  };
 
-  const handleLogout = () => {
-    localStorage.removeItem('salao_digital_user');
-    localStorage.removeItem('salao_digital_mode');
-    setUser(null);
-    setCurrentMode(null);
-  };
+  const handleLogout = () => {
+    localStorage.removeItem('salao_digital_user');
+    localStorage.removeItem('salao_digital_mode');
+    setUser(null);
+    setCurrentMode(null);
+  };
 
-  // --- FUNÇÕES DE NEGÓCIO (AS QUE ESTAVAM FALTANDO) ---
+  // --- FUNÇÕES DE NEGÓCIO (AS QUE ESTAVAM FALTANDO) ---
 
-  const handleUpdateStatus = async (appointmentId, status) => {
-    if (user?.isGuest) return;
+  const handleUpdateStatus = async (appointmentId, status) => {
+    if (user?.isGuest) return;
 
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('id', appointmentId);
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status })
+      .eq('id', appointmentId);
 
-    if (!error) {
-      setAppointments(prev => 
-        status === 'rejected' 
-          ? prev.filter(a => a.id !== appointmentId)
-          : prev.map(a => a.id === appointmentId ? { ...a, status } : a)
-      );
-    }
-  };
+    if (!error) {
+      setAppointments(prev => 
+        status === 'rejected' 
+          ? prev.filter(a => a.id !== appointmentId)
+          : prev.map(a => a.id === appointmentId ? { ...a, status } : a)
+      );
+    }
+  };
 
-  const handleUpdateProfile = async (updatedUser) => {
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({
-          address: updatedUser.address,
-          avatar_url: updatedUser.avatar_url,
-          is_visible: updatedUser.is_visible,
-          my_services: updatedUser.my_services,
-          available_dates: updatedUser.available_dates,
-          available_slots: updatedUser.available_slots 
-        })
-        .eq('id', updatedUser.id);
+  const handleUpdateProfile = async (updatedUser) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          address: updatedUser.address,
+          avatar_url: updatedUser.avatar_url,
+          is_visible: updatedUser.is_visible,
+          my_services: updatedUser.my_services,
+          available_dates: updatedUser.available_dates,
+          available_slots: updatedUser.available_slots 
+        })
+        .eq('id', updatedUser.id);
 
-      if (error) throw error;
-      
-      setUser(updatedUser);
-      localStorage.setItem('salao_digital_user', JSON.stringify(updatedUser));
-      alert("Perfil salvo com sucesso!");
-    } catch (e) {
-      alert("Erro ao salvar perfil: " + e.message);
-    }
-  };
+      if (error) throw error;
+      
+      setUser(updatedUser);
+      localStorage.setItem('salao_digital_user', JSON.stringify(updatedUser));
+      alert("Perfil salvo com sucesso!");
+    } catch (e) {
+      alert("Erro ao salvar perfil: " + e.message);
+    }
+  };
 
-  const handleBookingSubmit = async (bookingData) => {
-    // Sua lógica de handleBookingSubmit aqui...
-    // (Apenas certifique-se de que ela existe se você a passa no ClientApp)
-  };
+  const handleBookingSubmit = async (bookingData) => {
+    // Sua lógica de handleBookingSubmit aqui...
+    // (Apenas certifique-se de que ela existe se você a passa no ClientApp)
+  };
 
-  // --- RENDERIZAÇÃO ---
+  // --- RENDERIZAÇÃO ---
 
-  return (
-    <>
-      {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
+  return (
+    <>
+      {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
 
-      {(!currentMode && !user) ? (
-        <WelcomeScreen onSelectMode={handleSelectMode} />
-      ) : !user ? (
-        <AuthScreen 
-          userType={currentMode} 
-          onBack={() => setCurrentMode(null)} 
-          onLogin={handleLogin} 
-          onRegister={handleRegister} 
-        />
-      ) : currentMode === 'barber' ? (
-        <BarberDashboard 
-          user={user} 
-          appointments={appointments} 
-          onLogout={handleLogout} 
-          onUpdateStatus={handleUpdateStatus} 
-          onUpdateProfile={handleUpdateProfile}
-          MASTER_SERVICES={MASTER_SERVICES} 
-          GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
-          supabase={supabase} 
-        />
-      ) : (
-        <ClientApp 
-          user={user} 
-          barbers={barbers} 
-          appointments={appointments} 
-          onLogout={handleLogout}
-          onBookingSubmit={handleBookingSubmit}
-          onUpdateStatus={handleUpdateStatus}
-          MASTER_SERVICES={MASTER_SERVICES}
-        />
-      )}
-    </>
-  );
+      {(!currentMode && !user) ? (
+        <WelcomeScreen onSelectMode={handleSelectMode} />
+      ) : !user ? (
+        <AuthScreen 
+          userType={currentMode} 
+          onBack={() => setCurrentMode(null)} 
+          onLogin={handleLogin} 
+          onRegister={handleRegister} 
+        />
+      ) : currentMode === 'barber' ? (
+        <BarberDashboard 
+          user={user} 
+          appointments={appointments} 
+          onLogout={handleLogout} 
+          onUpdateStatus={handleUpdateStatus} 
+          onUpdateProfile={handleUpdateProfile}
+          MASTER_SERVICES={MASTER_SERVICES} 
+          GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
+          supabase={supabase} 
+        />
+      ) : (
+        <ClientApp 
+          user={user} 
+          barbers={barbers} 
+          appointments={appointments} 
+          onLogout={handleLogout}
+          onBookingSubmit={handleBookingSubmit}
+          onUpdateStatus={handleUpdateStatus}
+          MASTER_SERVICES={MASTER_SERVICES}
+        />
+      )}
+    </>
+  );
 }
