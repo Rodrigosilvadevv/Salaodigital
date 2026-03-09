@@ -98,9 +98,8 @@ const WelcomePopup = ({ onClose }) => (
   <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}></div>
     
-    <div className="relative bg-white w-full max-w-[360px] h-[75vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+    <div className="relative bg-white w-full max-w-[360px] h-[70vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
       
-      {/* Imagem de Destaque */}
       <div className="flex-1 w-full overflow-hidden">
         <img 
           src={imgPopup} 
@@ -109,31 +108,14 @@ const WelcomePopup = ({ onClose }) => (
         />
       </div>
 
-      {/* Área de Ações */}
-      <div className="p-6 bg-white w-full flex flex-col items-center gap-3">
-        
-        {/* Botão Principal */}
+      <div className="p-6 bg-white w-full flex items-center justify-center">
         <Button 
           variant="secondary" 
           onClick={onClose} 
-          className="w-full py-6 text-lg shadow-xl shadow-blue-600/20 rounded-2xl"
+          className="w-full py-4 text-lg shadow-xl shadow-blue-600/20"
         >
           Começar Agora
         </Button>
-
-        {/* Novo Botão para Download */}
-        <a 
-          href="https://ubiquitous-centaur-c018b0.netlify.app/" // Altere para a rota correta da sua página de download
-          className="flex items-center justify-center gap-2 w-full py-3 text-sm font-medium text-slate-500 hover:text-blue-600 transition-colors border border-slate-100 rounded-xl"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Baixar Aplicativo
-        </a>
-
       </div>
     </div>
   </div>
