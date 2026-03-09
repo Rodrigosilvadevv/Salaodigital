@@ -9,9 +9,11 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
     "@capacitor/cli": "^8.2.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/ios": "^8.2.0",
+    "@capacitor/push-notifications": "^8.0.2",
     "@supabase/supabase-js": "^2.91.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-
+import { PushNotifications } from '@capacitor/push-notifications';
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
@@ -39,6 +39,38 @@ const GLOBAL_TIME_SLOTS = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
   '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
   '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', 
   '20:00', '20:30', '21:00', '21:30', '22:00'];
+
+
+const registerPushNotifications = async (userId) => {
+  try {
+
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'prompt') {
+      perm = await PushNotifications.requestPermissions();
+    }
+    if (perm.receive !== 'granted') return;
+
+    await PushNotifications.register();
+
+    PushNotifications.addListener('registration', async (token) => {
+      console.log('Token do celular:', token.value);
+      
+      const { error } = await supabase
+        .from('profiles')
+        .update({ push_token: token.value })
+        .eq('id', userId);
+        
+      if (error) console.error("Erro ao salvar token:", error.message);
+    });
+
+    PushNotifications.addListener('pushNotificationReceived', (notification) => {
+      alert(`${notification.title}: ${notification.body}`);
+    });
+
+  } catch (error) {
+    console.error("Erro ao configurar Push:", error);
+  }
+};
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
@@ -814,7 +846,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showCalendar, setShowCalendar] = useState(true);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
 
-  // Filtros de agendamentos
+  
   const myAppointments = (appointments || []).filter(a => 
     String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
   );
@@ -831,7 +863,12 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
-  // Sincronização e Verificação de Pagamento
+useEffect(() => {
+  if (user && user.type === 'barber') {
+    registerPushNotifications(user.id);
+  }
+}, [user]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       console.log("Sincronizando dados...");
