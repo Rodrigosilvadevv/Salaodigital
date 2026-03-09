@@ -807,7 +807,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   );
 };
 
-const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase, GLOBAL_TIME_SLOTS, MASTER_SERVICES }) => {
+const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -888,70 +888,12 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const currentSlots = user.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
     const isAvailable = slotsForDay.includes(slot);
-    
-    if (isAvailable) {
-      // Se o horário está livre, o barbeiro está clicando para FECHAR
-      const nomeCliente = window.prompt(`Deseja bloquear este horário para alguém? \nDigite o nome do cliente ou deixe em branco apenas para fechar o horário:`);
-      
-      if (nomeCliente !== null) { // null significa que ele clicou em "Cancelar" no aviso
-        await setSlotAvailability(date, slot, false);
-        
-        if (nomeCliente.trim() !== '') {
-          // Cria um agendamento manual no banco para aparecer na Agenda
-          try {
-            const { error } = await supabase.from('appointments').insert([{
-              client_id: `manual-${Date.now()}`, // ID único gerado na hora, preserva sua lógica
-              client_name: nomeCliente,
-              barber_id: user.id,
-              barber_name: user?.name || 'Barbeiro',
-              service_name: 'Bloqueio Manual',
-              price: 0,
-              status: 'confirmed',
-              date: date,
-              time: slot
-            }]);
-            
-            if (error) throw error;
-            // Atualiza a página para puxar esse novo bloqueio para a lista da agenda
-            window.location.reload();
-          } catch (err) {
-            console.error("Erro ao salvar bloqueio manual com nome:", err);
-            alert("Horário fechado, mas houve um erro ao registrar o nome na agenda.");
-          }
-        }
-      }
-    } else {
-      // Se o horário estava fechado, o barbeiro está clicando para ABRIR
-      await setSlotAvailability(date, slot, true);
-    }
-  };
-
-  const handleMarcarTodos = async () => {
-    if (typeof GLOBAL_TIME_SLOTS === 'undefined') return;
-    const currentSlots = user.available_slots || {};
-    const updatedAvailableSlots = { ...currentSlots, [selectedDateConfig]: [...GLOBAL_TIME_SLOTS] };
-    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
-    try {
-      await supabase.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', user.id);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleDesmarcarTodos = async () => {
-    const currentSlots = user.available_slots || {};
-    const updatedAvailableSlots = { ...currentSlots, [selectedDateConfig]: [] };
-    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
-    try {
-      await supabase.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', user.id);
-    } catch (err) {
-      console.error(err);
-    }
+    await setSlotAvailability(date, slot, !isAvailable);
   };
 
   const handleDeleteAppointment = async (app) => {
     if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
-        onUpdateStatus(app.client_id, 'rejected');
+        onUpdateStatus(app.id, 'rejected');
         if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
     }
   };
@@ -1212,7 +1154,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
                 </p>
             </div>
-            {MASTER_SERVICES?.map(service => {
+            {MASTER_SERVICES.map(service => {
               const userServiceData = user.my_services?.find(s => s.id === service.id);
               const isActive = !!userServiceData;
               return (
@@ -1306,18 +1248,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                             })}
                         </div>
                         <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            
-                            {/* CABEÇALHO COM OS BOTÕES DE MARCAR E DESMARCAR TODOS */}
-                            <div className="flex justify-between items-center mb-4">
-                              <h4 className="font-bold text-xs">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
-                              <div className="flex gap-2">
-                                <button onClick={handleMarcarTodos} className="text-[10px] bg-green-100 text-green-700 px-2 py-1 rounded-lg font-bold uppercase hover:bg-green-200 transition-colors">Marcar Todos</button>
-                                <button onClick={handleDesmarcarTodos} className="text-[10px] bg-red-100 text-red-700 px-2 py-1 rounded-lg font-bold uppercase hover:bg-red-200 transition-colors">Desmarcar Todos</button>
-                              </div>
-                            </div>
-
+                            <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
                             <div className="grid grid-cols-4 gap-2">
-                                {GLOBAL_TIME_SLOTS?.map(slot => (
+                                {GLOBAL_TIME_SLOTS.map(slot => (
                                     <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
                                         {slot}
                                     </button>
@@ -1351,7 +1284,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   );
 };
-
 export default function App() {
   const [currentMode, setCurrentMode] = useState(null); 
   const [user, setUser] = useState(null);
@@ -1398,7 +1330,6 @@ export default function App() {
       setCurrentMode(mode);
     }
   };
-
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -1423,7 +1354,7 @@ export default function App() {
         is_visible: false,
         has_access: false,
         my_services: [],
-        available_slots: typeof GLOBAL_TIME_SLOTS !== 'undefined' ? GLOBAL_TIME_SLOTS : [],
+        available_slots: GLOBAL_TIME_SLOTS,
         available_dates: [], 
         avatar_url: '',
       }])
@@ -1483,25 +1414,24 @@ export default function App() {
     }
   };
 
-  const handleUpdateStatus = async (clientId, status) => { 
-    if (user?.isGuest) return; 
+  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
+  if (user?.isGuest) return; 
 
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('client_id', clientId); 
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status })
+    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
 
-    if (!error) {
-      if (status === 'rejected') {
-        setAppointments(prev => prev.filter(a => a.client_id !== clientId));
-      } else {
-        setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
-      }
+  if (!error) {
+    if (status === 'rejected') {
+      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
     } else {
-      console.error("Erro 400 resolvido:", error);
+      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
     }
-  };
-
+  } else {
+    console.error("Erro 400 resolvido:", error);
+  }
+};
   const handleUpdateProfile = async (updatedUser) => {
     try {
       const dataToSave = {
@@ -1528,7 +1458,6 @@ export default function App() {
       alert("Erro ao salvar: " + error.message);
     }
   };
-
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
@@ -1549,8 +1478,8 @@ export default function App() {
           onLogout={() => { setUser(null); setCurrentMode(null); }} 
           onUpdateStatus={handleUpdateStatus} 
           onUpdateProfile={handleUpdateProfile}
-          MASTER_SERVICES={typeof MASTER_SERVICES !== 'undefined' ? MASTER_SERVICES : []} 
-          GLOBAL_TIME_SLOTS={typeof GLOBAL_TIME_SLOTS !== 'undefined' ? GLOBAL_TIME_SLOTS : []} 
+          MASTER_SERVICES={MASTER_SERVICES} 
+          GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
           supabase={supabase} 
         />
       ) : (
@@ -1561,7 +1490,7 @@ export default function App() {
           onLogout={() => { setUser(null); setCurrentMode(null); }}
           onBookingSubmit={handleBookingSubmit}
           onUpdateStatus={handleUpdateStatus}
-          MASTER_SERVICES={typeof MASTER_SERVICES !== 'undefined' ? MASTER_SERVICES : []}
+          MASTER_SERVICES={MASTER_SERVICES}
         />
       )}
     </>
