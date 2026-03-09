@@ -1285,7 +1285,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   );
 };
 export default function App() {
-  // 1. Inicialização inteligente: tenta ler do disco antes de definir como null
+  // 1. Inicialização inteligente: já nasce lendo o "disco"
   const [user, setUser] = useState(() => {
     try {
       const savedUser = localStorage.getItem('salao_digital_user');
@@ -1304,12 +1304,9 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
 
-  // Removido o primeiro useEffect que tinha o salvamento/recuperação, 
-  // pois agora fazemos isso no início ou nas funções de Login/Logout.
-
+  // 2. Busca de dados (Barbeiros e Agendamentos)
   useEffect(() => {
     const fetchData = async () => {
-      // Busca barbeiros (sempre público)
       const { data: bData } = await supabase
         .from('profiles')
         .select('*')
@@ -1318,7 +1315,6 @@ export default function App() {
         
       if (bData) setBarbers(bData);
 
-      // Bloqueio de segurança: não busca dados privados se não houver user real
       if (!user || user.id === 'guest') return;
 
       const { data: aData } = await supabase
@@ -1341,6 +1337,8 @@ export default function App() {
     fetchData();
   }, [user]);
 
+  // --- FUNÇÕES DE NAVEGAÇÃO E AUTH ---
+
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
       const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
@@ -1362,10 +1360,8 @@ export default function App() {
 
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
     
-    // PERSISTÊNCIA NO DISCO
     localStorage.setItem('salao_digital_user', JSON.stringify(data));
     localStorage.setItem('salao_digital_mode', currentMode);
-    
     setUser(data);
   };
 
@@ -1373,28 +1369,20 @@ export default function App() {
     const { data, error } = await supabase
       .from('profiles')
       .insert([{ 
-        name, 
-        phone, 
-        password, 
+        name, phone, password, 
         role: currentMode, 
         is_visible: false,
-        has_access: false,
         my_services: [],
         available_slots: GLOBAL_TIME_SLOTS,
         available_dates: [], 
         avatar_url: '',
       }])
-      .select()
-      .single();
+      .select().single();
 
-    if (error) {
-      if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     localStorage.setItem('salao_digital_user', JSON.stringify(data));
     localStorage.setItem('salao_digital_mode', currentMode);
-    
     setUser(data);
   };
 
@@ -1405,7 +1393,55 @@ export default function App() {
     setCurrentMode(null);
   };
 
-  // ... resto das suas funções (handleBookingSubmit, handleUpdateStatus, etc)
+  // --- FUNÇÕES DE NEGÓCIO (AS QUE ESTAVAM FALTANDO) ---
+
+  const handleUpdateStatus = async (appointmentId, status) => {
+    if (user?.isGuest) return;
+
+    const { error } = await supabase
+      .from('appointments')
+      .update({ status })
+      .eq('id', appointmentId);
+
+    if (!error) {
+      setAppointments(prev => 
+        status === 'rejected' 
+          ? prev.filter(a => a.id !== appointmentId)
+          : prev.map(a => a.id === appointmentId ? { ...a, status } : a)
+      );
+    }
+  };
+
+  const handleUpdateProfile = async (updatedUser) => {
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          address: updatedUser.address,
+          avatar_url: updatedUser.avatar_url,
+          is_visible: updatedUser.is_visible,
+          my_services: updatedUser.my_services,
+          available_dates: updatedUser.available_dates,
+          available_slots: updatedUser.available_slots 
+        })
+        .eq('id', updatedUser.id);
+
+      if (error) throw error;
+      
+      setUser(updatedUser);
+      localStorage.setItem('salao_digital_user', JSON.stringify(updatedUser));
+      alert("Perfil salvo com sucesso!");
+    } catch (e) {
+      alert("Erro ao salvar perfil: " + e.message);
+    }
+  };
+
+  const handleBookingSubmit = async (bookingData) => {
+    // Sua lógica de handleBookingSubmit aqui...
+    // (Apenas certifique-se de que ela existe se você a passa no ClientApp)
+  };
+
+  // --- RENDERIZAÇÃO ---
 
   return (
     <>
