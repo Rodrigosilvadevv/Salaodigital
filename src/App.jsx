@@ -889,58 +889,69 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   };
 
   const toggleSlotForDate = async (date, slot) => {
-    const currentSlots = user.available_slots || {};
-    const slotsForDay = currentSlots[date] || [];
-    const isAvailable = slotsForDay.includes(slot);
+  const currentSlots = user.available_slots || {};
+  const slotsForDay = currentSlots[date] || [];
+  const isAvailable = slotsForDay.includes(slot);
+  
+  // 1. Lógica de Fechar Horário (e criar reserva manual)
+  if (isAvailable) {
+    const clientName = window.prompt("Deseja reservar este horário para alguém?\n\nDigite o nome do cliente ou deixe em branco apenas para fechar o horário:");
     
-    if (isAvailable) {
-      // Se estava aberto e ele clicou, vai fechar. Pergunta o nome.
-      const clientName = window.prompt("Deseja reservar este horário para alguém?\n\nDigite o nome do cliente ou deixe em branco apenas para fechar o horário:");
+    if (clientName !== null) {
+      // Primeiro atualizamos a disponibilidade (Fechar o horário)
+      await setSlotAvailability(date, slot, false);
       
-      if (clientName !== null) { // Só executa se não clicou em cancelar no prompt
-        await setSlotAvailability(date, slot, false);
+      if (clientName.trim() !== "") {
+        const newManualApp = {
+          id: `manual-${Date.now()}`,
+          client: clientName,
+          date: date,
+          time: slot,
+          status: 'confirmed',
+          service_name: 'Reserva Manual',
+          price: 0,
+          isManual: true
+        };
         
-        if (clientName.trim() !== "") {
-          const newManualApp = {
-            id: `manual-${Date.now()}`,
-            client: clientName,
-            date: date,
-            time: slot,
-            status: 'confirmed',
-            service_name: 'Reserva Manual',
-            price: 0,
-            isManual: true
-          };
-          
-          const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
-          onUpdateProfile({ ...user, manual_appointments: updatedManualApps });
-          
-          try {
-            await supabase.from('profiles').update({ manual_appointments: updatedManualApps }).eq('id', user.id);
-          } catch (err) { console.error("Erro ao salvar reserva:", err); }
+        const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
+        
+        // ATUALIZAÇÃO LOCAL IMEDIATA
+        onUpdateProfile({ ...user, manual_appointments: updatedManualApps });
+        
+        // TENTA SALVAR NO BANCO (com tratamento de erro para não travar a UI)
+        try {
+          const { error } = await supabase
+            .from('profiles')
+            .update({ manual_appointments: updatedManualApps })
+            .eq('id', user.id);
+          if (error) throw error;
+        } catch (err) { 
+          console.error("Erro ao salvar reserva no Supabase:", err.message);
         }
       }
-    } else {
-      // Se estava fechado e clicou para abrir
-      await setSlotAvailability(date, slot, true);
-      
-      // Se existia uma reserva manual neste horário, remove ela
-      if (user.manual_appointments) {
-         const filtered = user.manual_appointments.filter(a => !(a.date === date && a.time === slot));
-         onUpdateProfile({ ...user, manual_appointments: filtered });
-         try {
-           await supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', user.id);
-         } catch (err) { console.error(err); }
-      }
     }
-  };
-
-  const handleDeleteAppointment = async (app) => {
-    if(confirm("Deseja realmente excluir este agendamento permanentemente?")) {
-        onUpdateStatus(app.id, 'rejected');
-        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+  } 
+  // 2. Lógica de Abrir Horário (e remover reserva manual se houver)
+  else {
+    await setSlotAvailability(date, slot, true);
+    
+    const currentManualApps = user.manual_appointments || [];
+    const filtered = currentManualApps.filter(a => !(a.date === date && a.time === slot));
+    
+    // ATUALIZAÇÃO LOCAL IMEDIATA
+    onUpdateProfile({ ...user, manual_appointments: filtered });
+    
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ manual_appointments: filtered })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) { 
+      console.error("Erro ao remover reserva no Supabase:", err.message);
     }
-  };
+  }
+};
 
   const handlePayment = async () => {
     setIsPaying(true);
