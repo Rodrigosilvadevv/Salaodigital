@@ -1082,58 +1082,62 @@ useEffect(() => {
         )}
       </h3>
       
-      {pending.length === 0 ? (
-        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-        </div>
-      ) : (
-        /* FILTRO ANTI-DUPLICIDADE: Filtramos por client_id único */
-        pending
-          .filter((app, index, self) => index === self.findIndex((t) => t.client_id === app.client_id))
-          .map(app => (
-            <div key={app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
-                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
-                    <Clock size={12} strokeWidth={3} />
-                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
-                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
-                </div>
-              </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={async () => {
-                    if (!app.client_id) return alert("ID inválido.");
-                    try {
-                      await onUpdateStatus(app.id, 'confirmed');
-                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
-                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                      const fone = app.phone?.toString().replace(/\D/g, '');
-                      if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
-                    } catch (err) { console.error(err); }
-                  }} 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
-                >
-                  <CheckCircle size={14} /> Aceitar Solicitação
-                </button>
-                
-                <button 
-                  onClick={() => onUpdateStatus(app.id, 'rejected')}
-                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-                >
-                  <XCircle size={18} />
-                </button>
-              </div>
+     {pending.length === 0 ? (
+  <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+    <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+  </div>
+) : (
+  /* FILTRO CORRIGIDO: Agora usamos t.id para não sumir com agendamentos manuais ou múltiplos */
+  pending
+    .filter((app, index, self) => index === self.findIndex((t) => t.id === app.id))
+    .map(app => (
+      <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <p className="font-black text-slate-900 leading-none mb-1">{app.client || app.client_name}</p>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
+            <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+              <Clock size={12} strokeWidth={3} />
+              <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
             </div>
-          ))
-      )}
+          </div>
+          <div className="text-right">
+             <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
+             <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
+          </div>
+        </div>
+        
+        <div className="flex gap-2">
+          <button 
+            onClick={async () => {
+              // MUDANÇA CRÍTICA: Usamos app.id para garantir que o Supabase saiba quem atualizar
+              if (!app.id) return alert("Erro: ID do agendamento não encontrado.");
+              
+              try {
+                await onUpdateStatus(app.id, 'confirmed');
+                if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                
+                const mensagem = `Olá ${app.client || app.client_name}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                const fone = app.phone?.toString().replace(/\D/g, '');
+                if (fone) window.open(`https://api.whatsapp.com/send?phone=55${fone}&text=${mensagem}`, '_blank');
+              } catch (err) { console.error(err); }
+            }} 
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
+          >
+            <CheckCircle size={14} /> Aceitar Solicitação
+          </button>
+          
+          <button 
+            // MUDANÇA AQUI TAMBÉM: app.id no lugar de client_id
+            onClick={() => onUpdateStatus(app.id, 'rejected')}
+            className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+          >
+            <XCircle size={18} />
+          </button>
+        </div>
+      </div>
+    ))
+)}
     </section>
 
     {/* Section: Próximos na Agenda */}
@@ -1361,31 +1365,36 @@ useEffect(() => {
 
       <div className="flex gap-2">
         <button 
-          onClick={async () => {
-            if (placeholderName.trim()) {
-              // Salva no banco como um agendamento manual
-              await supabase.from('appointments').insert([{
-                barber_id: user.id,
-                client_name: placeholderName,
-                service_name: "Bloqueio Manual",
-                date: selectedSlotData.date,
-                time: selectedSlotData.slot,
-                status: 'confirmed',
-                price: 0
-              }]);
-            }
-            // Tira a disponibilidade e fecha
-            await toggleSlotForDate(selectedSlotData.date, selectedSlotData.slot);
-            setPlaceholderName('');
-            setShowBlockModal(false);
-          }}
-          className="flex-1 py-3 bg-slate-900 text-white rounded-xl font-bold text-sm"
-        >
-          Confirmar
-        </button>
-        <button onClick={() => setShowBlockModal(false)} className="px-4 py-3 text-slate-400 font-bold text-sm">
-          Sair
-        </button>
+  onClick={async () => {
+    if (placeholderName.trim()) {
+      // 1. Primeiro salva no banco
+      const { data, error } = await supabase.from('appointments').insert([{
+        barber_id: user.id,
+        client_name: placeholderName,
+        service_name: "Bloqueio Manual",
+        date: selectedSlotData.date,
+        time: selectedSlotData.slot,
+        status: 'confirmed',
+        price: 0
+      }]).select(); // O .select() traz o ID gerado na hora
+
+      if (error) return console.error("Erro ao bloquear:", error);
+    }
+    
+    // 2. Tira a disponibilidade (Isso vai atualizar o perfil)
+    await toggleSlotForDate(selectedSlotData.date, selectedSlotData.slot);
+    
+    // 3. Limpa tudo
+    setPlaceholderName('');
+    setShowBlockModal(false);
+    
+    // Dica: Recarregue a página ou chame uma função de refresh se os dados não aparecerem
+    // window.location.reload(); 
+  }}
+  className="..."
+>
+  Confirmar
+</button>
       </div>
     </div>
   </div>
