@@ -20,6 +20,7 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
   
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+
 const MASTER_SERVICES = [
   { id: 1, name: 'Corte Degradê', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'hair' },
   { id: 2, name: 'Barba Terapia', defaultPrice: 40, duration: '30min', icon: <User size={20}/>, category: 'beard' },
@@ -293,29 +294,46 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   const [step, setStep] = useState(1);
   const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
   const [userCoords, setUserCoords] = useState(null);
-  useEffect(() => {
-  // 1. Verificar se existe usuário salvo localmente ao abrir o app
-  const savedUser = localStorage.getItem('salao_user');
-  if (savedUser) {
-    const userData = JSON.parse(savedUser);
-    setUser(userData);
-    setUserMode(userData.type); // 'client' ou 'barber'
-  }
 
-  // 2. Ouvir mudanças de autenticação do Supabase
-  const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (event === 'SIGNED_IN' && session) {
-      // Aqui você buscaria os dados do perfil no seu banco e salvaria no localStorage
-      // localStorage.setItem('salao_user', JSON.stringify(perfil));
+
+
+  useEffect(() => {
+  const restaurarSessao = async () => {
+    // 1. O Supabase checa sozinho se o token ainda vale no celular
+    const { data: { session } } = await supabase.auth.getSession();
+
+    if (session) {
+      // 2. Se achou o token, busca o perfil (Barbeiro ou Cliente) no seu banco
+      const { data: perfil } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', session.user.id)
+        .single();
+
+      if (perfil) {
+        setUser(perfil); // Aqui o app "lembra" quem é o usuário
+        setUserMode(perfil.type); 
+      }
     }
+    // 3. Importante: crie um estado [carregando, setCarregando] e mude para false aqui
+    // Isso evita que a tela de login apareça enquanto ele busca os dados
+    setLoading(false); 
+  };
+
+  restaurarSessao();
+
+  // 4. Se o usuário deslogar, o Supabase avisa e você limpa o estado
+  const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
     if (event === 'SIGNED_OUT') {
-      localStorage.removeItem('salao_user');
       setUser(null);
     }
   });
 
   return () => authListener.subscription.unsubscribe();
 }, []);
+
+
+
 
   // --- NOVA FUNÇÃO PARA EXCLUSÃO DE CONTA (REQUISITO APPLE) ---
   const handleDeleteAccount = async () => {
