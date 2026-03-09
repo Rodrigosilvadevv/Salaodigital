@@ -1112,7 +1112,7 @@ useEffect(() => {
                   onClick={async () => {
                     if (!app.client_id) return alert("ID inválido.");
                     try {
-                      await onUpdateStatus(app.client_id, 'confirmed');
+                      await onUpdateStatus(app.id, 'confirmed');
                       if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
                       const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                       const fone = app.phone?.toString().replace(/\D/g, '');
@@ -1125,7 +1125,7 @@ useEffect(() => {
                 </button>
                 
                 <button 
-                  onClick={() => onUpdateStatus(app.client_id, 'rejected')}
+                  onClick={() => onUpdateStatus(app.id, 'rejected')}
                   className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
                 >
                   <XCircle size={18} />
