@@ -325,7 +325,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 
     if (confirmacao) {
       try {
-        // Deleta agendamentos do clienfte
+        // Deleta agendamentos do cliente
         const { error: errorApp } = await supabase
           .from('appointments')
           .delete()
@@ -1285,31 +1285,14 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   );
 };
 export default function App() {
-  // 1. Inicialização inteligente: tenta ler do disco antes de definir como null
-  const [user, setUser] = useState(() => {
-    try {
-      const savedUser = localStorage.getItem('salao_digital_user');
-      return savedUser ? JSON.parse(savedUser) : null;
-    } catch (e) {
-      console.error("Erro ao recuperar usuário", e);
-      return null;
-    }
-  });
-
-  const [currentMode, setCurrentMode] = useState(() => {
-    return localStorage.getItem('salao_digital_mode') || null;
-  });
-
+  const [currentMode, setCurrentMode] = useState(null); 
+  const [user, setUser] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
 
-  // Removido o primeiro useEffect que tinha o salvamento/recuperação, 
-  // pois agora fazemos isso no início ou nas funções de Login/Logout.
-
   useEffect(() => {
     const fetchData = async () => {
-      // Busca barbeiros (sempre público)
       const { data: bData } = await supabase
         .from('profiles')
         .select('*')
@@ -1318,9 +1301,7 @@ export default function App() {
         
       if (bData) setBarbers(bData);
 
-      // Bloqueio de segurança: não busca dados privados se não houver user real
-      if (!user || user.id === 'guest') return;
-
+      if (!user || user.isGuest) return;
       const { data: aData } = await supabase
         .from('appointments')
         .select('*')
@@ -1343,14 +1324,12 @@ export default function App() {
 
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
-      const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
-      setUser(guestUser);
+      setUser({ id: 'guest', name: 'Visitante', isGuest: true });
       setCurrentMode('client');
     } else {
       setCurrentMode(mode);
     }
   };
-
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -1361,11 +1340,6 @@ export default function App() {
       .single();
 
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
-    
-    // PERSISTÊNCIA NO DISCO
-    localStorage.setItem('salao_digital_user', JSON.stringify(data));
-    localStorage.setItem('salao_digital_mode', currentMode);
-    
     setUser(data);
   };
 
@@ -1392,21 +1366,98 @@ export default function App() {
       throw new Error(error.message);
     }
 
-    localStorage.setItem('salao_digital_user', JSON.stringify(data));
-    localStorage.setItem('salao_digital_mode', currentMode);
-    
     setUser(data);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('salao_digital_user');
-    localStorage.removeItem('salao_digital_mode');
-    setUser(null);
-    setCurrentMode(null);
+  const handleBookingSubmit = async (data) => {
+    if (user?.isGuest) {
+      alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta.");
+      setUser(null);
+      setCurrentMode(null);
+      return;
+    }
+
+    const newBooking = {
+      client_id: user.id,
+      client_name: user.name,
+      barber_id: data.barber.id,
+      barber_name: data.barber.name,
+      service_name: data.service.name,
+      price: data.price,
+      status: 'pending',
+      date: data.date,
+      phone: data.phone,
+      time: data.time
+    };
+
+    const { data: saved, error } = await supabase
+      .from('appointments')
+      .insert([newBooking])
+      .select()
+      .single();
+
+    if (!error && saved) {
+      setAppointments(prev => [...prev, {
+        ...saved,
+        client: saved.client_name,
+        service: saved.service_name,
+        barberId: saved.barber_id,
+        barber_name: saved.barber_name,
+        time: saved.time,
+        date: saved.date,
+        phone: saved.phone
+      }]);
+      alert("Agendamento realizado!");
+    } else {
+      console.error("Erro detalhado:", error);
+      alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
+    }
   };
 
-  // ... resto das suas funções (handleBookingSubmit, handleUpdateStatus, etc)
+  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
+  if (user?.isGuest) return; 
 
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status })
+    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
+
+  if (!error) {
+    if (status === 'rejected') {
+      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
+    } else {
+      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
+    }
+  } else {
+    console.error("Erro 400 resolvido:", error);
+  }
+};
+  const handleUpdateProfile = async (updatedUser) => {
+    try {
+      const dataToSave = {
+        address: updatedUser.address,
+        latitude: updatedUser.latitude,   
+        longitude: updatedUser.longitude, 
+        avatar_url: updatedUser.avatar_url,
+        is_visible: updatedUser.is_visible,
+        plano_ativo: updatedUser.plano_ativo,
+        my_services: updatedUser.my_services,
+        available_dates: updatedUser.available_dates,
+        available_slots: updatedUser.available_slots 
+      };
+
+      const { error } = await supabase
+        .from('profiles')
+        .update(dataToSave)
+        .eq('id', updatedUser.id);
+
+      if (error) throw error;
+      setUser(updatedUser);
+    } catch (error) {
+      console.error("Erro completo:", error);
+      alert("Erro ao salvar: " + error.message);
+    }
+  };
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
@@ -1424,7 +1475,7 @@ export default function App() {
         <BarberDashboard 
           user={user} 
           appointments={appointments} 
-          onLogout={handleLogout} 
+          onLogout={() => { setUser(null); setCurrentMode(null); }} 
           onUpdateStatus={handleUpdateStatus} 
           onUpdateProfile={handleUpdateProfile}
           MASTER_SERVICES={MASTER_SERVICES} 
@@ -1436,7 +1487,7 @@ export default function App() {
           user={user} 
           barbers={barbers} 
           appointments={appointments} 
-          onLogout={handleLogout}
+          onLogout={() => { setUser(null); setCurrentMode(null); }}
           onBookingSubmit={handleBookingSubmit}
           onUpdateStatus={handleUpdateStatus}
           MASTER_SERVICES={MASTER_SERVICES}
