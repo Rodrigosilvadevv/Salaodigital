@@ -889,68 +889,59 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   };
 
   const toggleSlotForDate = async (date, slot) => {
-  const currentSlots = user.available_slots || {};
-  const slotsForDay = currentSlots[date] || [];
+  const currentSlots = { ...(user.available_slots || {}) };
+  const slotsForDay = [...(currentSlots[date] || [])];
   const isAvailable = slotsForDay.includes(slot);
   
-  // 1. Lógica de Fechar Horário (e criar reserva manual)
+  let updatedDaySlots;
+  
   if (isAvailable) {
-    const clientName = window.prompt("Deseja reservar este horário para alguém?\n\nDigite o nome do cliente ou deixe em branco apenas para fechar o horário:");
+    // Tenta fechar o horário
+    const clientName = window.prompt("Reservar este horário?\n\nDigite o nome ou deixe em branco para apenas fechar:");
+    if (clientName === null) return; // Cancelou o prompt
     
-    if (clientName !== null) {
-      // Primeiro atualizamos a disponibilidade (Fechar o horário)
-      await setSlotAvailability(date, slot, false);
+    updatedDaySlots = slotsForDay.filter(s => s !== slot);
+    
+    if (clientName.trim() !== "") {
+      const newManualApp = {
+        id: `manual-${Date.now()}`,
+        client: clientName,
+        date,
+        time: slot,
+        status: 'confirmed',
+        isManual: true
+      };
+      const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
+      // Atualiza localmente as reservas
+      onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
       
-      if (clientName.trim() !== "") {
-        const newManualApp = {
-          id: `manual-${Date.now()}`,
-          client: clientName,
-          date: date,
-          time: slot,
-          status: 'confirmed',
-          service_name: 'Reserva Manual',
-          price: 0,
-          isManual: true
-        };
-        
-        const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
-        
-        // ATUALIZAÇÃO LOCAL IMEDIATA
-        onUpdateProfile({ ...user, manual_appointments: updatedManualApps });
-        
-        // TENTA SALVAR NO BANCO (com tratamento de erro para não travar a UI)
-        try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({ manual_appointments: updatedManualApps })
-            .eq('id', user.id);
-          if (error) throw error;
-        } catch (err) { 
-          console.error("Erro ao salvar reserva no Supabase:", err.message);
-        }
-      }
+      // Salva no banco (Ambas as colunas)
+      await supabase.from('profiles').update({ 
+        available_slots: { ...currentSlots, [date]: updatedDaySlots },
+        manual_appointments: updatedManualApps 
+      }).eq('id', user.id);
+      return;
     }
-  } 
-  // 2. Lógica de Abrir Horário (e remover reserva manual se houver)
-  else {
-    await setSlotAvailability(date, slot, true);
+  } else {
+    // Abre o horário
+    updatedDaySlots = [...slotsForDay, slot];
     
-    const currentManualApps = user.manual_appointments || [];
-    const filtered = currentManualApps.filter(a => !(a.date === date && a.time === slot));
+    // Remove reserva manual se existir
+    const filteredManual = (user.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
     
-    // ATUALIZAÇÃO LOCAL IMEDIATA
-    onUpdateProfile({ ...user, manual_appointments: filtered });
+    onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
     
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ manual_appointments: filtered })
-        .eq('id', user.id);
-      if (error) throw error;
-    } catch (err) { 
-      console.error("Erro ao remover reserva no Supabase:", err.message);
-    }
+    await supabase.from('profiles').update({ 
+      available_slots: { ...currentSlots, [date]: updatedDaySlots },
+      manual_appointments: filteredManual
+    }).eq('id', user.id);
+    return;
   }
+
+  // Fallback para apenas abrir/fechar sem nome de cliente
+  const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
+  onUpdateProfile({ ...user, available_slots: finalSlots });
+  await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
 };
 
   const handlePayment = async () => {
