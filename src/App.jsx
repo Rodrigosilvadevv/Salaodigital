@@ -717,7 +717,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                             )}
                           </div>
 
-                          <p className="mt-3 text-green-600 font-black text-sm">R$ {displayPrice}</p>
+                          <p className="mt-3 text-green-600 font-black text-sm">$ {displayPrice}</p>
                         </div>
                       );
                     })}
