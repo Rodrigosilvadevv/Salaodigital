@@ -1374,49 +1374,31 @@ useEffect(() => {
     const restoreSession = async () => {
       try {
         const saved = localStorage.getItem('salao_user_data');
-        
-        // Se não tem nada salvo, para o loading e sai
-        if (!saved) {
-          setLoading(false);
-          return;
-        }
+        if (!saved) return;
 
         const parsedUser = JSON.parse(saved);
+        if (!parsedUser?.id) return;
 
-        // Validação extra: Se o objeto estiver corrompido, limpa e sai
-        if (!parsedUser || !parsedUser.id) {
-          localStorage.removeItem('salao_user_data');
-          setLoading(false);
-          return;
-        }
-
-        // Busca dados frescos do Supabase
-        const { data: freshData, error } = await supabase
+        const { data: freshData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', parsedUser.id)
           .maybeSingle();
 
-        // No celular, a rede pode falhar. Se falhar, usamos o que temos no cache
-        if (freshData && !error) {
+        if (freshData) {
           setUser(freshData);
           setCurrentMode(freshData.role);
           localStorage.setItem('salao_user_data', JSON.stringify(freshData));
-        } else {
-          // Fallback: Se o banco falhar mas temos o cache, usamos o cache para não deslogar o usuário no 4G
-          setUser(parsedUser);
-          setCurrentMode(parsedUser.role);
         }
       } catch (err) {
-        console.error("Erro na persistência mobile:", err);
+        console.error("Erro no mobile:", err);
       } finally {
-        // O finally garante que o loading SEMPRE pare, evitando a tela branca no celular
-        setLoading(false);
+        setLoading(false); // <--- Isso destrava o app
       }
     };
     restoreSession();
   }, []);
-
+  
   useEffect(() => {
     const fetchData = async () => {
       const { data: bData } = await supabase
