@@ -1367,6 +1367,7 @@ export default function App() {
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
