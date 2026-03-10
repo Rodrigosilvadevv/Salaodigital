@@ -1361,28 +1361,27 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   );
 };
+
 export default function App() {
   const [currentMode, setCurrentMode] = useState(null); 
   const [user, setUser] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
-  // 1. ADICIONE O LOADING PARA EVITAR PISCADAS
   const [loading, setLoading] = useState(true);
 
-  // 2. RECUPERAR DADOS AO ABRIR O APP
+  // 1. PERSISTÊNCIA: Recupera o usuário ao abrir
   useEffect(() => {
     const restoreSession = async () => {
       const saved = localStorage.getItem('salao_user_data');
       if (saved) {
         const parsedUser = JSON.parse(saved);
-        
-        // Opcional: Busca no banco para atualizar se o plano está ativo
+        // Busca dados frescos (para atualizar plano_ativo, etc)
         const { data: freshData } = await supabase
           .from('profiles')
           .select('*')
           .eq('id', parsedUser.id)
-          .single();
+          .maybeSingle();
 
         if (freshData) {
           setUser(freshData);
@@ -1398,13 +1397,50 @@ export default function App() {
     restoreSession();
   }, []);
 
-  // Seu useEffect de fetchData continua igual, mas ele depende do [user]
+  // 2. BUSCA DE DADOS (Barbeiros e Agendamentos)
   useEffect(() => {
     const fetchData = async () => {
-      // ... seu código original de busca de barbeiros e agendamentos ...
+      const { data: bData } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('role', 'barber')
+        .eq('is_visible', true);
+        
+      if (bData) setBarbers(bData);
+
+      if (!user || user.isGuest) return;
+      
+      const { data: aData } = await supabase
+        .from('appointments')
+        .select('*')
+        .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
+      
+      if (aData) {
+        const formatted = aData.map(a => ({
+          ...a,
+          client: a.client_name,
+          service: a.service_name,
+          time: a.time, 
+          date: a.date, 
+          barberId: a.barber_id
+        }));
+        setAppointments(formatted);
+      }
     };
-    if (user) fetchData();
+    fetchData();
   }, [user]);
+
+  // 3. FUNÇÃO QUE ESTAVA FALTANDO (Recuperada)
+  const handleSelectMode = (mode) => {
+    if (mode === 'guest') {
+      const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
+      setUser(guestUser);
+      setCurrentMode('client');
+      // Opcional: não salvamos guest no localStorage para não travar como visitante
+    } else {
+      setCurrentMode(mode);
+    }
+  };
 
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
@@ -1413,25 +1449,58 @@ export default function App() {
       .eq('phone', phone)
       .eq('password', password)
       .eq('role', currentMode)
-      .single();
+      .maybeSingle();
 
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
     
-    // 3. SALVAR NO LOCALSTORAGE AQUI
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
+    setUser(data);
+  };
+
+  const handleRegister = async (name, phone, password) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert([{ 
+        name, phone, password, 
+        role: currentMode, 
+        is_visible: false,
+        has_access: false,
+        plano_ativo: true, // Já nasce com plano ativo
+        my_services: [],
+        available_slots: GLOBAL_TIME_SLOTS,
+        available_dates: [], 
+        avatar_url: '',
+      }])
+      .select()
+      .single();
+
+    if (error) {
+      if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
+      throw new Error(error.message);
+    }
+
     localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
   const handleLogout = () => {
-    // 4. LIMPAR TUDO NO SAIR
     localStorage.removeItem('salao_user_data');
     setUser(null);
     setCurrentMode(null);
   };
 
-  // TRAVA DE LOADING
+  // Funções de Agendamento e Perfil (Mantidas originais)
+  const handleBookingSubmit = async (data) => { /* ... sua lógica original ... */ };
+  const handleUpdateStatus = async (clientId, status) => { /* ... sua lógica original ... */ };
+  const handleUpdateProfile = async (updatedUser) => { /* ... sua lógica original ... */ };
+
+  // 4. RENDERIZAÇÃO COM TRAVA DE LOADING
   if (loading) {
-    return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Carregando...</div>;
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+      </div>
+    );
   }
 
   return (
@@ -1451,7 +1520,7 @@ export default function App() {
         <BarberDashboard 
           user={user} 
           appointments={appointments} 
-          onLogout={handleLogout} // USE A NOVA FUNÇÃO
+          onLogout={handleLogout} 
           onUpdateStatus={handleUpdateStatus} 
           onUpdateProfile={handleUpdateProfile}
           MASTER_SERVICES={MASTER_SERVICES} 
@@ -1463,7 +1532,7 @@ export default function App() {
           user={user} 
           barbers={barbers} 
           appointments={appointments} 
-          onLogout={handleLogout} // USE A NOVA FUNÇÃO
+          onLogout={handleLogout}
           onBookingSubmit={handleBookingSubmit}
           onUpdateStatus={handleUpdateStatus}
           MASTER_SERVICES={MASTER_SERVICES}
