@@ -164,12 +164,13 @@ const WelcomeScreen = ({ onSelectMode }) => {
             <div className="h-[1px] bg-white/20 flex-1"></div>
           </div>
 
-         <Button 
-             className="bg-blue-600 hover:bg-blue-700 text-white border-none" 
-               onClick={() => onSelectMode('barber')}
->
-  Sou Profissional
-</Button>
+          <Button 
+            variant="outline" 
+            className="text-white border-white/20 hover:bg-white/5" 
+            onClick={() => onSelectMode('barber')}
+          >
+            Sou Profissional
+          </Button>
 
           <button 
             onClick={() => setShowPrivacy(true)}
@@ -1463,7 +1464,7 @@ export default function App() {
         name, phone, password, 
         role: currentMode, 
         is_visible: false,
-        has_access: true,
+        has_access: false,
         plano_ativo: true, // Já nasce com plano ativo
         my_services: [],
         available_slots: GLOBAL_TIME_SLOTS,
