@@ -1361,43 +1361,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     </div>
   );
 };
-
 export default function App() {
   const [currentMode, setCurrentMode] = useState(null); 
   const [user, setUser] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
-  const [loading, setLoading] = useState(true);
 
-  // 1. PERSISTÊNCIA: Recupera o usuário ao abrir
-  useEffect(() => {
-    const restoreSession = async () => {
-      const saved = localStorage.getItem('salao_user_data');
-      if (saved) {
-        const parsedUser = JSON.parse(saved);
-        // Busca dados frescos (para atualizar plano_ativo, etc)
-        const { data: freshData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', parsedUser.id)
-          .maybeSingle();
-
-        if (freshData) {
-          setUser(freshData);
-          setCurrentMode(freshData.role);
-          localStorage.setItem('salao_user_data', JSON.stringify(freshData));
-        } else {
-          setUser(parsedUser);
-          setCurrentMode(parsedUser.role);
-        }
-      }
-      setLoading(false);
-    };
-    restoreSession();
-  }, []);
-
-  // 2. BUSCA DE DADOS (Barbeiros e Agendamentos)
   useEffect(() => {
     const fetchData = async () => {
       const { data: bData } = await supabase
@@ -1409,7 +1379,6 @@ export default function App() {
       if (bData) setBarbers(bData);
 
       if (!user || user.isGuest) return;
-      
       const { data: aData } = await supabase
         .from('appointments')
         .select('*')
@@ -1430,18 +1399,14 @@ export default function App() {
     fetchData();
   }, [user]);
 
-  // 3. FUNÇÃO QUE ESTAVA FALTANDO (Recuperada)
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
-      const guestUser = { id: 'guest', name: 'Visitante', isGuest: true };
-      setUser(guestUser);
+      setUser({ id: 'guest', name: 'Visitante', isGuest: true });
       setCurrentMode('client');
-      // Opcional: não salvamos guest no localStorage para não travar como visitante
     } else {
       setCurrentMode(mode);
     }
   };
-
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -1449,11 +1414,9 @@ export default function App() {
       .eq('phone', phone)
       .eq('password', password)
       .eq('role', currentMode)
-      .maybeSingle();
+      .single();
 
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
-    
-    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
@@ -1461,11 +1424,13 @@ export default function App() {
     const { data, error } = await supabase
       .from('profiles')
       .insert([{ 
-        name, phone, password, 
+        name, 
+        phone, 
+        password, 
         role: currentMode, 
         is_visible: false,
         has_access: false,
-        plano_ativo: true, // Já nasce com plano ativo
+        plano_ativo: true,
         my_services: [],
         available_slots: GLOBAL_TIME_SLOTS,
         available_dates: [], 
@@ -1479,30 +1444,98 @@ export default function App() {
       throw new Error(error.message);
     }
 
-    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('salao_user_data');
-    setUser(null);
-    setCurrentMode(null);
+  const handleBookingSubmit = async (data) => {
+    if (user?.isGuest) {
+      alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta.");
+      setUser(null);
+      setCurrentMode(null);
+      return;
+    }
+
+    const newBooking = {
+      client_id: user.id,
+      client_name: user.name,
+      barber_id: data.barber.id,
+      barber_name: data.barber.name,
+      service_name: data.service.name,
+      price: data.price,
+      status: 'pending',
+      date: data.date,
+      phone: data.phone,
+      time: data.time
+    };
+
+    const { data: saved, error } = await supabase
+      .from('appointments')
+      .insert([newBooking])
+      .select()
+      .single();
+
+    if (!error && saved) {
+      setAppointments(prev => [...prev, {
+        ...saved,
+        client: saved.client_name,
+        service: saved.service_name,
+        barberId: saved.barber_id,
+        barber_name: saved.barber_name,
+        time: saved.time,
+        date: saved.date,
+        phone: saved.phone
+      }]);
+      alert("Agendamento realizado!");
+    } else {
+      console.error("Erro detalhado:", error);
+      alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
+    }
   };
 
-  // Funções de Agendamento e Perfil (Mantidas originais)
-  const handleBookingSubmit = async (data) => { /* ... sua lógica original ... */ };
-  const handleUpdateStatus = async (clientId, status) => { /* ... sua lógica original ... */ };
-  const handleUpdateProfile = async (updatedUser) => { /* ... sua lógica original ... */ };
+  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
+  if (user?.isGuest) return; 
 
-  // 4. RENDERIZAÇÃO COM TRAVA DE LOADING
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
+  const { error } = await supabase
+    .from('appointments')
+    .update({ status })
+    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
+
+  if (!error) {
+    if (status === 'rejected') {
+      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
+    } else {
+      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
+    }
+  } else {
+    console.error("Erro 400 resolvido:", error);
   }
+};
+  const handleUpdateProfile = async (updatedUser) => {
+    try {
+      const dataToSave = {
+        address: updatedUser.address,
+        latitude: updatedUser.latitude,   
+        longitude: updatedUser.longitude, 
+        avatar_url: updatedUser.avatar_url,
+        is_visible: updatedUser.is_visible,
+        plano_ativo: updatedUser.plano_ativo,
+        my_services: updatedUser.my_services,
+        available_dates: updatedUser.available_dates,
+        available_slots: updatedUser.available_slots 
+      };
 
+      const { error } = await supabase
+        .from('profiles')
+        .update(dataToSave)
+        .eq('id', updatedUser.id);
+
+      if (error) throw error;
+      setUser(updatedUser);
+    } catch (error) {
+      console.error("Erro completo:", error);
+      alert("Erro ao salvar: " + error.message);
+    }
+  };
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
@@ -1520,7 +1553,7 @@ export default function App() {
         <BarberDashboard 
           user={user} 
           appointments={appointments} 
-          onLogout={handleLogout} 
+          onLogout={() => { setUser(null); setCurrentMode(null); }} 
           onUpdateStatus={handleUpdateStatus} 
           onUpdateProfile={handleUpdateProfile}
           MASTER_SERVICES={MASTER_SERVICES} 
@@ -1532,7 +1565,7 @@ export default function App() {
           user={user} 
           barbers={barbers} 
           appointments={appointments} 
-          onLogout={handleLogout}
+          onLogout={() => { setUser(null); setCurrentMode(null); }}
           onBookingSubmit={handleBookingSubmit}
           onUpdateStatus={handleUpdateStatus}
           MASTER_SERVICES={MASTER_SERVICES}
