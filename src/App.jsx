@@ -1369,6 +1369,30 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
 
+  // 1. EFEITO DE PERSISTÊNCIA (Resolve o loading e mantém o login)
+  useEffect(() => {
+    const restoreSession = async () => {
+      const saved = localStorage.getItem('salao_user_data');
+      if (saved) {
+        const parsedUser = JSON.parse(saved);
+        // Busca dados atualizados (importante para GPS e Plano Ativo)
+        const { data: freshData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', parsedUser.id)
+          .maybeSingle();
+
+        if (freshData) {
+          setUser(freshData);
+          setCurrentMode(freshData.role);
+          localStorage.setItem('salao_user_data', JSON.stringify(freshData));
+        }
+      }
+      setLoading(false); // <--- AQUI o loading vira false e libera o app
+    };
+    restoreSession();
+  }, []);
+  
   useEffect(() => {
     const fetchData = async () => {
       const { data: bData } = await supabase
