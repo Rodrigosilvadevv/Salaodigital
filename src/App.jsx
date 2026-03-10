@@ -1567,40 +1567,67 @@ useEffect(() => {
       alert("Erro ao salvar: " + error.message);
     }
   };
+if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-blue-500 mb-4"></div>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sincronizando...</p>
+      </div>
+    );
+  }
+
+  // 2. RENDERIZAÇÃO BLINDADA (Substitui os ternários aninhados)
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
 
-      {(!currentMode && !user) ? (
+      {/* TELA INICIAL: Só aparece se não tem modo selecionado E não tem usuário */}
+      {!currentMode && !user && (
         <WelcomeScreen onSelectMode={handleSelectMode} />
-      ) : !user ? (
+      )}
+
+      {/* TELA DE AUTENTICAÇÃO: Tem modo selecionado, mas o usuário ainda não logou */}
+      {currentMode && !user && (
         <AuthScreen 
           userType={currentMode} 
           onBack={() => setCurrentMode(null)} 
           onLogin={handleLogin} 
           onRegister={handleRegister} 
         />
-      ) : currentMode === 'barber' ? (
-        <BarberDashboard 
-          user={user} 
-          appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }} 
-          onUpdateStatus={handleUpdateStatus} 
-          onUpdateProfile={handleUpdateProfile}
-          MASTER_SERVICES={MASTER_SERVICES} 
-          GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
-          supabase={supabase} 
-        />
-      ) : (
-        <ClientApp 
-          user={user} 
-          barbers={barbers} 
-          appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }}
-          onBookingSubmit={handleBookingSubmit}
-          onUpdateStatus={handleUpdateStatus}
-          MASTER_SERVICES={MASTER_SERVICES}
-        />
+      )}
+
+      {/* DASHBOARDS: O escudo protetor. Só entra aqui se 'user' for 100% verdadeiro */}
+      {user && (
+        currentMode === 'barber' ? (
+          <BarberDashboard 
+            user={user} 
+            appointments={appointments} 
+            onLogout={() => { 
+              localStorage.removeItem('salao_user_data'); // Corrigido para limpar o celular no logout
+              setUser(null); 
+              setCurrentMode(null); 
+            }} 
+            onUpdateStatus={handleUpdateStatus} 
+            onUpdateProfile={handleUpdateProfile}
+            MASTER_SERVICES={MASTER_SERVICES} 
+            GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
+            supabase={supabase} 
+          />
+        ) : (
+          <ClientApp 
+            user={user} 
+            barbers={barbers} 
+            appointments={appointments} 
+            onLogout={() => { 
+              localStorage.removeItem('salao_user_data'); // Corrigido para limpar o celular no logout
+              setUser(null); 
+              setCurrentMode(null); 
+            }}
+            onBookingSubmit={handleBookingSubmit}
+            onUpdateStatus={handleUpdateStatus}
+            MASTER_SERVICES={MASTER_SERVICES}
+          />
+        )
       )}
     </>
   );
