@@ -1429,7 +1429,7 @@ export default function App() {
         password, 
         role: currentMode, 
         is_visible: false,
-        has_access: false,
+        has_access: true,
         my_services: [],
         available_slots: GLOBAL_TIME_SLOTS,
         available_dates: [], 
