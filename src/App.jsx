@@ -1367,46 +1367,45 @@ export default function App() {
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
+  // 1. ADICIONE O LOADING PARA EVITAR PISCADAS
+  const [loading, setLoading] = useState(true);
 
+  // 2. RECUPERAR DADOS AO ABRIR O APP
+  useEffect(() => {
+    const restoreSession = async () => {
+      const saved = localStorage.getItem('salao_user_data');
+      if (saved) {
+        const parsedUser = JSON.parse(saved);
+        
+        // Opcional: Busca no banco para atualizar se o plano está ativo
+        const { data: freshData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', parsedUser.id)
+          .single();
+
+        if (freshData) {
+          setUser(freshData);
+          setCurrentMode(freshData.role);
+          localStorage.setItem('salao_user_data', JSON.stringify(freshData));
+        } else {
+          setUser(parsedUser);
+          setCurrentMode(parsedUser.role);
+        }
+      }
+      setLoading(false);
+    };
+    restoreSession();
+  }, []);
+
+  // Seu useEffect de fetchData continua igual, mas ele depende do [user]
   useEffect(() => {
     const fetchData = async () => {
-      const { data: bData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'barber')
-        .eq('is_visible', true);
-        
-      if (bData) setBarbers(bData);
-
-      if (!user || user.isGuest) return;
-      const { data: aData } = await supabase
-        .from('appointments')
-        .select('*')
-        .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
-      
-      if (aData) {
-        const formatted = aData.map(a => ({
-          ...a,
-          client: a.client_name,
-          service: a.service_name,
-          time: a.time, 
-          date: a.date, 
-          barberId: a.barber_id
-        }));
-        setAppointments(formatted);
-      }
+      // ... seu código original de busca de barbeiros e agendamentos ...
     };
-    fetchData();
+    if (user) fetchData();
   }, [user]);
 
-  const handleSelectMode = (mode) => {
-    if (mode === 'guest') {
-      setUser({ id: 'guest', name: 'Visitante', isGuest: true });
-      setCurrentMode('client');
-    } else {
-      setCurrentMode(mode);
-    }
-  };
   const handleLogin = async (phone, password) => {
     const { data, error } = await supabase
       .from('profiles')
@@ -1417,125 +1416,24 @@ export default function App() {
       .single();
 
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
+    
+    // 3. SALVAR NO LOCALSTORAGE AQUI
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
-  const handleRegister = async (name, phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert([{ 
-        name, 
-        phone, 
-        password, 
-        role: currentMode, 
-        is_visible: false,
-        has_access: false,
-        plano_ativo: true,
-        my_services: [],
-        available_slots: GLOBAL_TIME_SLOTS,
-        available_dates: [], 
-        avatar_url: '',
-      }])
-      .select()
-      .single();
-
-    if (error) {
-      if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
-      throw new Error(error.message);
-    }
-
-    setUser(data);
+  const handleLogout = () => {
+    // 4. LIMPAR TUDO NO SAIR
+    localStorage.removeItem('salao_user_data');
+    setUser(null);
+    setCurrentMode(null);
   };
 
-  const handleBookingSubmit = async (data) => {
-    if (user?.isGuest) {
-      alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta.");
-      setUser(null);
-      setCurrentMode(null);
-      return;
-    }
-
-    const newBooking = {
-      client_id: user.id,
-      client_name: user.name,
-      barber_id: data.barber.id,
-      barber_name: data.barber.name,
-      service_name: data.service.name,
-      price: data.price,
-      status: 'pending',
-      date: data.date,
-      phone: data.phone,
-      time: data.time
-    };
-
-    const { data: saved, error } = await supabase
-      .from('appointments')
-      .insert([newBooking])
-      .select()
-      .single();
-
-    if (!error && saved) {
-      setAppointments(prev => [...prev, {
-        ...saved,
-        client: saved.client_name,
-        service: saved.service_name,
-        barberId: saved.barber_id,
-        barber_name: saved.barber_name,
-        time: saved.time,
-        date: saved.date,
-        phone: saved.phone
-      }]);
-      alert("Agendamento realizado!");
-    } else {
-      console.error("Erro detalhado:", error);
-      alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
-    }
-  };
-
-  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
-  if (user?.isGuest) return; 
-
-  const { error } = await supabase
-    .from('appointments')
-    .update({ status })
-    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
-
-  if (!error) {
-    if (status === 'rejected') {
-      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
-    } else {
-      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
-    }
-  } else {
-    console.error("Erro 400 resolvido:", error);
+  // TRAVA DE LOADING
+  if (loading) {
+    return <div className="min-h-screen bg-slate-900 flex items-center justify-center text-white">Carregando...</div>;
   }
-};
-  const handleUpdateProfile = async (updatedUser) => {
-    try {
-      const dataToSave = {
-        address: updatedUser.address,
-        latitude: updatedUser.latitude,   
-        longitude: updatedUser.longitude, 
-        avatar_url: updatedUser.avatar_url,
-        is_visible: updatedUser.is_visible,
-        plano_ativo: updatedUser.plano_ativo,
-        my_services: updatedUser.my_services,
-        available_dates: updatedUser.available_dates,
-        available_slots: updatedUser.available_slots 
-      };
 
-      const { error } = await supabase
-        .from('profiles')
-        .update(dataToSave)
-        .eq('id', updatedUser.id);
-
-      if (error) throw error;
-      setUser(updatedUser);
-    } catch (error) {
-      console.error("Erro completo:", error);
-      alert("Erro ao salvar: " + error.message);
-    }
-  };
   return (
     <>
       {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
@@ -1553,7 +1451,7 @@ export default function App() {
         <BarberDashboard 
           user={user} 
           appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }} 
+          onLogout={handleLogout} // USE A NOVA FUNÇÃO
           onUpdateStatus={handleUpdateStatus} 
           onUpdateProfile={handleUpdateProfile}
           MASTER_SERVICES={MASTER_SERVICES} 
@@ -1565,7 +1463,7 @@ export default function App() {
           user={user} 
           barbers={barbers} 
           appointments={appointments} 
-          onLogout={() => { setUser(null); setCurrentMode(null); }}
+          onLogout={handleLogout} // USE A NOVA FUNÇÃO
           onBookingSubmit={handleBookingSubmit}
           onUpdateStatus={handleUpdateStatus}
           MASTER_SERVICES={MASTER_SERVICES}
