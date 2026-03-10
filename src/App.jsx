@@ -166,10 +166,10 @@ const WelcomeScreen = ({ onSelectMode }) => {
 
          <Button 
              className="bg-blue-600 hover:bg-blue-700 text-white border-none" 
-                 onClick={() => onSelectMode('barber')}
+               onClick={() => onSelectMode('barber')}
 >
-                 Sou Profissional
-          </Button>
+  Sou Profissional
+</Button>
 
           <button 
             onClick={() => setShowPrivacy(true)}
