@@ -12,14 +12,13 @@ import {
   CreditCard, Lock, Clock, CalendarDays, Sparkles, Palette, Briefcase, Edit3, 
   MessageCircle, Phone, XCircle, History, Loader2,
   Home, Plus, Camera,
-  CheckCircle, ArrowLeft, Send, HeadphonesIcon
+  CheckCircle, ArrowLeft, Send, Headphones
 } from 'lucide-react';
 
 const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
   
 export const supabase = createClient(supabaseUrl, supabaseKey);
-
 
 const MASTER_SERVICES = [
   { id: 1, name: 'Corte Degradê', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'hair' },
@@ -46,10 +45,8 @@ const MONTH_NAMES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
-// Retorna quantos dias tem o mês
 const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 
-// Formata data como YYYY-MM-DD
 const formatDate = (year, month, day) => {
   const mm = String(month + 1).padStart(2, '0');
   const dd = String(day).padStart(2, '0');
@@ -58,14 +55,14 @@ const formatDate = (year, month, day) => {
 
 const calculateDistance = (lat1, lon1, lat2, lon2) => {
   if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-  const R = 6371; 
+  const R = 6371;
   const dLat = (lat2 - lat1) * (Math.PI / 180);
   const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
+  const a =
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return parseFloat((R * c).toFixed(1)); 
+  return parseFloat((R * c).toFixed(1));
 };
 
 const Button = ({ children, onClick, variant = 'primary', className = '', disabled, loading }) => {
@@ -89,17 +86,15 @@ const Card = ({ children, selected, onClick }) => (
   </div>
 );
 
-// ─── CALENDÁRIO REUTILIZÁVEL COM NAVEGAÇÃO DE MÊS ───────────────────────────
+// ─── CALENDÁRIO REUTILIZÁVEL COM NAVEGAÇÃO DE MÊS ────────────────────────────
 const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChange }) => {
   const today = new Date();
   const [calYear, setCalYear] = useState(today.getFullYear());
   const [calMonth, setCalMonth] = useState(today.getMonth());
-
   const daysInMonth = getDaysInMonth(calYear, calMonth);
 
   const goPrev = () => {
     const d = new Date(calYear, calMonth - 1, 1);
-    // Não permite ir para meses anteriores ao atual
     if (d >= new Date(today.getFullYear(), today.getMonth(), 1)) {
       setCalYear(d.getFullYear());
       setCalMonth(d.getMonth());
@@ -118,34 +113,20 @@ const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChan
 
   return (
     <div>
-      {/* Navegação de mês */}
       <div className="flex items-center justify-between mb-4">
-        <button
-          onClick={goPrev}
-          disabled={isPrevDisabled}
-          className={`p-2 rounded-full transition-all ${isPrevDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}
-        >
+        <button onClick={goPrev} disabled={isPrevDisabled} className={`p-2 rounded-full transition-all ${isPrevDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
           <ChevronLeft size={18} />
         </button>
-        <span className="font-black text-sm text-slate-900 tracking-tight">
-          {MONTH_NAMES[calMonth]} {calYear}
-        </span>
-        <button
-          onClick={goNext}
-          className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all"
-        >
+        <span className="font-black text-sm text-slate-900 tracking-tight">{MONTH_NAMES[calMonth]} {calYear}</span>
+        <button onClick={goNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
           <ChevronRight size={18} />
         </button>
       </div>
-
-      {/* Cabeçalho dias da semana */}
       <div className="grid grid-cols-7 gap-1 mb-1">
         {['D','S','T','Q','Q','S','S'].map((d, i) => (
           <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
         ))}
       </div>
-
-      {/* Grade de dias */}
       <div className="grid grid-cols-7 gap-1">
         {Array.from({ length: daysInMonth }, (_, i) => {
           const day = i + 1;
@@ -154,23 +135,18 @@ const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChan
           const isAvailable = daySlots.length > 0;
           const isSelected = selectedDate === dateStr;
           const isPast = new Date(dateStr) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
           return (
             <button
               key={i}
               disabled={!isAvailable || isPast}
               onClick={() => onSelectDate(dateStr)}
               className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
-                ${isSelected
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105'
-                  : isAvailable && !isPast
-                    ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
-                    : 'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}
+                ${isSelected ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105'
+                  : isAvailable && !isPast ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+                  : 'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}
             >
               {day}
-              {isAvailable && !isSelected && !isPast && (
-                <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"></div>
-              )}
+              {isAvailable && !isSelected && !isPast && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"></div>}
             </button>
           );
         })}
@@ -179,7 +155,7 @@ const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChan
   );
 };
 
-// ─── CHAT DE SUPORTE ─────────────────────────────────────────────────────────
+// ─── CHAT DE SUPORTE ──────────────────────────────────────────────────────────
 const SupportChat = ({ user }) => {
   const [messages, setMessages] = useState([
     {
@@ -193,13 +169,14 @@ const SupportChat = ({ user }) => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = React.useRef(null);
 
-useEffect(() => {
-  if (messages.length > 1) {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }
-}, [messages]);
+  // CORREÇÃO: só rola quando há mensagem nova (length > 1), nunca na abertura da aba
+  useEffect(() => {
+    if (messages.length > 1) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages]);
 
-  const SUPPORT_WHATSAPP = '5541992931394'; 
+  const SUPPORT_WHATSAPP = '5541992931394';
 
   const handleSend = async () => {
     if (!input.trim()) return;
@@ -214,7 +191,6 @@ useEffect(() => {
     setInput('');
     setSending(true);
 
-    // Salva mensagem no Supabase (tabela support_messages - opcional)
     try {
       await supabase.from('support_messages').insert([{
         barber_id: user?.id,
@@ -224,7 +200,6 @@ useEffect(() => {
       }]);
     } catch (_) {}
 
-    // Resposta automática + link WhatsApp
     setTimeout(() => {
       const autoReply = {
         id: Date.now() + 1,
@@ -240,10 +215,9 @@ useEffect(() => {
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-      {/* Header do chat */}
       <div className="p-4 bg-slate-900 flex items-center gap-3">
         <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-          <HeadphonesIcon size={18} className="text-white" />
+          <Headphones size={18} className="text-white" />
         </div>
         <div>
           <p className="font-bold text-white text-sm">Suporte Salão Digital</p>
@@ -253,8 +227,6 @@ useEffect(() => {
           </div>
         </div>
       </div>
-
-      {/* Mensagens */}
       <div className="h-56 overflow-y-auto p-4 space-y-3 bg-slate-50">
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -267,12 +239,8 @@ useEffect(() => {
                 {msg.text}
               </div>
               {msg.whatsapp && (
-                <a
-                  href={msg.whatsapp}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl mt-1"
-                >
+                <a href={msg.whatsapp} target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl mt-1">
                   <Phone size={11} /> Abrir WhatsApp do Suporte
                 </a>
               )}
@@ -293,8 +261,6 @@ useEffect(() => {
         )}
         <div ref={messagesEndRef} />
       </div>
-
-      {/* Input */}
       <div className="p-3 border-t border-slate-100 bg-white flex gap-2">
         <input
           type="text"
@@ -354,7 +320,6 @@ const WelcomePopup = ({ onClose }) => (
 
 const WelcomeScreen = ({ onSelectMode }) => {
   const [showPrivacy, setShowPrivacy] = useState(false);
-
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
@@ -370,11 +335,7 @@ const WelcomeScreen = ({ onSelectMode }) => {
         </h1>
         <div className="w-full max-w-xs space-y-3 mt-10">
           <Button variant="secondary" onClick={() => onSelectMode('client')}>Sou Cliente</Button>
-          <Button
-            variant="outline"
-            className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md"
-            onClick={() => onSelectMode('guest')}
-          >
+          <Button variant="outline" className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" onClick={() => onSelectMode('guest')}>
             Explorar como Convidado
           </Button>
           <div className="py-2 flex items-center gap-4">
@@ -385,10 +346,7 @@ const WelcomeScreen = ({ onSelectMode }) => {
           <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none" onClick={() => onSelectMode('barber')}>
             Sou Profissional
           </Button>
-          <button
-            onClick={() => setShowPrivacy(true)}
-            className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100"
-          >
+          <button onClick={() => setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">
             Política de Privacidade
           </button>
         </div>
@@ -449,10 +407,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span>
             <div className="h-[1px] bg-slate-200 flex-1"></div>
           </div>
-          <button
-            onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            className="w-full text-blue-600 font-bold text-sm mt-2"
-          >
+          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }} className="w-full text-blue-600 font-bold text-sm mt-2">
             {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
           </button>
         </div>
@@ -468,12 +423,8 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
   const [userCoords, setUserCoords] = useState(null);
 
-  // REMOVIDO: useEffect com restaurarSessao que causava erro (setUser/setUserMode/setLoading não existem aqui)
-
   const handleDeleteAccount = async () => {
-    const confirmacao = window.confirm(
-      "Deseja realmente excluir sua conta? Todos os seus dados e agendamentos serão apagados permanentemente conforme as diretrizes da App Store."
-    );
+    const confirmacao = window.confirm("Deseja realmente excluir sua conta? Todos os seus dados e agendamentos serão apagados permanentemente conforme as diretrizes da App Store.");
     if (confirmacao) {
       try {
         const { error: errorApp } = await supabase.from('appointments').delete().eq('client_id', user.id);
@@ -505,9 +456,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
       .map(b => {
         const dist = calculateDistance(userCoords?.lat, userCoords?.lng, b.latitude, b.longitude);
         let label = null;
-        if (dist !== null) {
-          label = dist < 1 ? `${Math.floor(dist * 1000)} m` : `${dist.toFixed(1)} km`;
-        }
+        if (dist !== null) label = dist < 1 ? `${Math.floor(dist * 1000)} m` : `${dist.toFixed(1)} km`;
         return { ...b, distance: dist, distanceLabel: label };
       })
       .sort((a, b) => {
@@ -519,30 +468,14 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 
   const handleFinish = async () => {
     try {
-      if (user?.isGuest) {
-        alert("Para realizar um agendamento real, por favor crie sua conta!");
-        onLogout();
-        return;
-      }
-      if (!bookingData.date || !bookingData.time) {
-        alert("Por favor, selecione o dia e o horário antes de confirmar.");
-        return;
-      }
+      if (user?.isGuest) { alert("Para realizar um agendamento real, por favor crie sua conta!"); onLogout(); return; }
+      if (!bookingData.date || !bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
       const payload = {
-        date: bookingData.date,
-        time: bookingData.time,
-        barber_id: bookingData.barber?.id,
-        client_id: user?.id,
-        client_name: user?.name || "Cliente",
-        phone: user?.phone || "Sem telefone",
-        service_name: bookingData.service?.name || "Serviço",
-        price: Number(bookingData.price) || 0,
-        status: 'pending'
+        date: bookingData.date, time: bookingData.time, barber_id: bookingData.barber?.id,
+        client_id: user?.id, client_name: user?.name || "Cliente", phone: user?.phone || "Sem telefone",
+        service_name: bookingData.service?.name || "Serviço", price: Number(bookingData.price) || 0, status: 'pending'
       };
-      if (!payload.barber_id) {
-        alert("Erro: O profissional selecionado não foi encontrado. Tente selecioná-lo novamente.");
-        return;
-      }
+      if (!payload.barber_id) { alert("Erro: O profissional selecionado não foi encontrado."); return; }
       const { error } = await supabase.from('appointments').insert([payload]);
       if (error) throw error;
       setView('success');
@@ -568,7 +501,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
           <LogOut size={14}/> {user?.isGuest ? 'Entrar' : 'Sair'}
         </button>
       </header>
-
       <main className="p-6 max-w-md mx-auto">
         {view === 'home' && (
           <div className="space-y-6 animate-in fade-in">
@@ -604,9 +536,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
               </button>
             </div>
             {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
-              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
-                Ainda não tem agendamentos.
-              </div>
+              <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">Ainda não tem agendamentos.</div>
             ) : (
               <div className="space-y-3">
                 {(appointments || [])
@@ -617,14 +547,10 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                     return (
                       <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
                         <div className="flex gap-3 items-center">
-                          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                            <User size={18} />
-                          </div>
+                          <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"><User size={18} /></div>
                           <div>
                             <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
-                            <p className="text-[10px] text-blue-600 font-bold uppercase">
-                              Profissional: {professional?.name || app.barber_name || "Profissional"}
-                            </p>
+                            <p className="text-[10px] text-blue-600 font-bold uppercase">Profissional: {professional?.name || app.barber_name || "Profissional"}</p>
                             <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
                               <Clock size={10} />
                               {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
@@ -637,8 +563,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                               const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
                               setBookingData({ service: serviceObj, barber: professional, price: app.price });
                               if (typeof onUpdateStatus === 'function') onUpdateStatus(app.id, 'rejected');
-                              setView('booking');
-                              setStep(3);
+                              setView('booking'); setStep(3);
                             }
                           }}
                           className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
@@ -667,9 +592,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                       <Card key={s.id} selected={bookingData.service?.id === s.id} onClick={() => setBookingData({ ...bookingData, service: s })}>
                         <div className="flex items-center justify-between w-full">
                           <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id === s.id ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>
-                              {s.icon}
-                            </div>
+                            <div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id === s.id ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>{s.icon}</div>
                             <div>
                               <p className="font-bold text-slate-900">{s.name}</p>
                               <p className="text-xs text-slate-400 font-medium">{s.duration}</p>
@@ -685,8 +608,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                   <div className="max-w-md mx-auto">
                     <Button
                       className={`w-full py-4 rounded-2xl font-bold text-sm transition-all duration-300 shadow-lg ${!bookingData.service ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-blue-600 text-white shadow-blue-200 active:scale-95'}`}
-                      onClick={() => setStep(2)}
-                      disabled={!bookingData.service}
+                      onClick={() => setStep(2)} disabled={!bookingData.service}
                     >
                       {bookingData.service ? `Próximo: Agendar ${bookingData.service.name}` : 'Selecione um serviço'}
                     </Button>
@@ -706,23 +628,15 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                       const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
                       const isSelected = bookingData.barber?.id === b.id;
                       return (
-                        <div
-                          key={b.id}
-                          onClick={() => setBookingData({ ...bookingData, barber: b, price: displayPrice })}
-                          className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'}`}
-                        >
+                        <div key={b.id} onClick={() => setBookingData({ ...bookingData, barber: b, price: displayPrice })}
+                          className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'}`}>
                           <div className="w-16 h-16 rounded-full bg-slate-200 mb-2 overflow-hidden border border-slate-100">
-                            {b.avatar_url ? <img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar" /> : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={24} /></div>
-                            )}
+                            {b.avatar_url ? <img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar" /> : <div className="w-full h-full flex items-center justify-center text-slate-400"><User size={24} /></div>}
                           </div>
                           <p className="font-bold text-sm truncate w-full text-center text-slate-900">{b.name}</p>
                           <div className="flex flex-col items-center mt-1 w-full">
                             {b.address && <p className="text-[9px] text-slate-400 line-clamp-1 text-center px-1 mb-0.5">{b.address}</p>}
-                            {b.distanceLabel
-                              ? <p className="text-[10px] text-blue-600 font-black flex items-center gap-1"><MapPin size={10}/> {b.distanceLabel}</p>
-                              : <p className="text-[10px] text-slate-300 italic">Distância indisponível</p>
-                            }
+                            {b.distanceLabel ? <p className="text-[10px] text-blue-600 font-black flex items-center gap-1"><MapPin size={10}/> {b.distanceLabel}</p> : <p className="text-[10px] text-slate-300 italic">Distância indisponível</p>}
                           </div>
                           <p className="mt-3 text-green-600 font-black text-sm">R$ {displayPrice}</p>
                         </div>
@@ -737,34 +651,21 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
               <>
                 <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
                 <label className="text-xs font-bold text-slate-500 uppercase mb-3 block">Selecione um dia disponível</label>
-
-                {/* CALENDÁRIO COM NAVEGAÇÃO DE MÊS */}
                 <MonthCalendar
                   availableSlots={bookingData.barber?.available_slots}
                   selectedDate={bookingData.date}
                   onSelectDate={(dateStr) => setBookingData({ ...bookingData, date: dateStr, time: null })}
                 />
-
                 <div className="mt-6">
                   {bookingData.date ? (
                     <>
-                      <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
-                        Horários para {bookingData.date.split('-').reverse().join('/')}
-                      </label>
+                      <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Horários para {bookingData.date.split('-').reverse().join('/')}</label>
                       <div className="grid grid-cols-4 gap-2">
                         {GLOBAL_TIME_SLOTS.map(t => {
                           const isSlotAvailable = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t);
                           return (
-                            <button
-                              key={t}
-                              disabled={!isSlotAvailable}
-                              onClick={() => setBookingData({ ...bookingData, time: t })}
-                              className={`py-2 rounded-lg font-bold text-xs transition-all ${
-                                bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' :
-                                isSlotAvailable ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' :
-                                'bg-slate-100 text-slate-300 cursor-not-allowed'
-                              }`}
-                            >
+                            <button key={t} disabled={!isSlotAvailable} onClick={() => setBookingData({ ...bookingData, time: t })}
+                              className={`py-2 rounded-lg font-bold text-xs transition-all ${bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' : isSlotAvailable ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
                               {t}
                             </button>
                           );
@@ -778,7 +679,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                     </div>
                   )}
                 </div>
-
                 {bookingData.time && bookingData.date && (
                   <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100 animate-in fade-in zoom-in duration-300">
                     <p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p>
@@ -789,7 +689,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                     <p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p>
                   </div>
                 )}
-
                 <Button className="mt-6 w-full py-4 text-lg" onClick={handleFinish} disabled={!bookingData.time || !bookingData.date}>
                   Confirmar Agendamento
                 </Button>
@@ -807,9 +706,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(true);
+  // CORREÇÃO: false para não rolar a tela ao abrir a aba
+  const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
-  // Mês do calendário de configuração
   const today = new Date();
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
@@ -823,9 +722,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const confirmed = myAppointments.filter(a => a.status === 'confirmed');
   const manualAppointments = user.manual_appointments || [];
   const allAppointments = [...confirmed, ...manualAppointments];
-  const agendaOrdenada = allAppointments.sort((a, b) =>
-    new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`)
-  );
+  const agendaOrdenada = allAppointments.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
 
   useEffect(() => {
@@ -833,12 +730,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const status = queryParams.get('status');
     if (status === 'approved' && !user.plano_ativo) {
       alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
-      onUpdateProfile({
-        ...user,
-        plano_ativo: true,
-        is_visible: true,
-        plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString()
-      });
+      onUpdateProfile({ ...user, plano_ativo: true, is_visible: true, plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, [user, onUpdateProfile]);
@@ -848,20 +740,16 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const slotsForDay = currentSlots[date] || [];
     let newSlots;
     if (makeAvailable) {
-      if (!slotsForDay.includes(slot)) newSlots = [...slotsForDay, slot].sort();
-      else return;
+      if (!slotsForDay.includes(slot)) newSlots = [...slotsForDay, slot].sort(); else return;
     } else {
-      if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot);
-      else return;
+      if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot); else return;
     }
     const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
     onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
     try {
       const { error } = await supabase.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', user.id);
       if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao salvar no Supabase:", err.message);
-    }
+    } catch (err) { console.error("Erro ao salvar no Supabase:", err.message); }
   };
 
   const toggleSlotForDate = async (date, slot) => {
@@ -869,7 +757,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const slotsForDay = [...(currentSlots[date] || [])];
     const isAvailable = slotsForDay.includes(slot);
     let updatedDaySlots;
-
     if (isAvailable) {
       const clientName = window.prompt("Reservar este horário?\n\nDigite o nome ou deixe em branco para apenas fechar:");
       if (clientName === null) return;
@@ -888,7 +775,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', user.id);
       return;
     }
-
     const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
     onUpdateProfile({ ...user, available_slots: finalSlots });
     await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
@@ -899,38 +785,26 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
       const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
       });
       const data = await response.json();
       if (data.init_point) window.location.href = data.init_point;
       else alert("Erro ao gerar link.");
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao conectar ao pagamento.");
-    } finally {
-      setIsPaying(false);
-    }
+    } catch (error) { console.error(error); alert("Erro ao conectar ao pagamento."); }
+    finally { setIsPaying(false); }
   };
 
   const toggleService = (serviceId, defaultPrice) => {
     const currentServices = user.my_services || [];
     const exists = currentServices.find(s => s.id === serviceId);
-    if (!exists && !user.plano_ativo && currentServices.length >= 3) {
-      setShowPayModal(true);
-      return;
-    }
-    const newServices = exists
-      ? currentServices.filter(s => s.id !== serviceId)
-      : [...currentServices, { id: serviceId, price: defaultPrice }];
+    if (!exists && !user.plano_ativo && currentServices.length >= 3) { setShowPayModal(true); return; }
+    const newServices = exists ? currentServices.filter(s => s.id !== serviceId) : [...currentServices, { id: serviceId, price: defaultPrice }];
     onUpdateProfile({ ...user, my_services: newServices });
   };
 
   const updateServicePrice = (serviceId, newPrice) => {
-    const newServices = (user.my_services || []).map(s =>
-      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
-    );
+    const newServices = (user.my_services || []).map(s => s.id === serviceId ? { ...s, price: Number(newPrice) } : s);
     onUpdateProfile({ ...user, my_services: newServices });
   };
 
@@ -945,38 +819,20 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       const { data: { publicUrl } } = supabase.storage.from('barber-photos').getPublicUrl(fileName);
       onUpdateProfile({ ...user, avatar_url: publicUrl });
       alert('Foto atualizada!');
-    } catch (error) {
-      alert('Erro ao carregar foto.');
-    }
+    } catch (error) { alert('Erro ao carregar foto.'); }
   };
 
-  // Calendário de configuração com mês dinâmico
   const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
   const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
-
-  const goConfigPrev = () => {
-    if (!isPrevConfigDisabled) {
-      const d = new Date(configCalYear, configCalMonth - 1, 1);
-      setConfigCalYear(d.getFullYear());
-      setConfigCalMonth(d.getMonth());
-    }
-  };
-
-  const goConfigNext = () => {
-    const d = new Date(configCalYear, configCalMonth + 1, 1);
-    setConfigCalYear(d.getFullYear());
-    setConfigCalMonth(d.getMonth());
-  };
+  const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
+  const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
-
       {showPayModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock size={32} />
-            </div>
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32} /></div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
             <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
             <div className="space-y-3">
@@ -1003,9 +859,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
           </div>
-          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
-            <LogOut size={18} />
-          </button>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500"><LogOut size={18} /></button>
         </div>
       </header>
 
@@ -1018,7 +872,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       </nav>
 
       <main className="p-6 max-w-md mx-auto">
-
         {activeTab === 'home' && (
           <div className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
@@ -1038,9 +891,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             <section>
               <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
                 Novas Solicitações
-                {pending.length > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">{pending.length}</span>
-                )}
+                {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">{pending.length}</span>}
               </h3>
               {pending.length === 0 ? (
                 <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
@@ -1048,9 +899,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               ) : (
                 pending
-                  .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
+                  .filter((app, index, self) => index === self.findIndex((t) => t.id === app.id))
                   .map(app => (
-                    <div key={app.id || app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
+                    <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
                       <div className="flex justify-between items-start mb-4">
                         <div>
                           <p className="font-black text-slate-900 leading-none mb-1">{app.client_name || app.client}</p>
@@ -1068,6 +919,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <div className="flex gap-2">
                         <button
                           onClick={async () => {
+                            // CORREÇÃO: valida e usa somente app.id
                             if (!app.id) return alert("ID inválido.");
                             try {
                               await onUpdateStatus(app.id, 'confirmed');
@@ -1081,10 +933,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         >
                           <CheckCircle size={14} /> Aceitar Solicitação
                         </button>
-                        <button
-                          onClick={() => onUpdateStatus(app.id, 'rejected')}
-                          className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-                        >
+                        {/* CORREÇÃO: usa somente app.id */}
+                        <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
                           <XCircle size={18} />
                         </button>
                       </div>
@@ -1104,12 +954,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               ) : (
                 <div className="space-y-3">
                   {agendaOrdenada
-                    .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
+                    .filter((app, index, self) => index === self.findIndex((t) => t.id === app.id))
                     .map(app => (
-                      <div
-                        key={app.id || app.client_id}
-                        className={`group relative flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}
-                      >
+                      <div key={app.id} className={`group relative flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <p className="font-black text-slate-900 text-sm tracking-tight">{app.client_name || app.client}</p>
@@ -1190,7 +1037,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
         {activeTab === 'config' && (
           <div className="space-y-6">
-            {/* Perfil */}
             <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
               <div className="flex flex-col items-center mb-6">
@@ -1211,14 +1057,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium" />
                 </div>
                 <button
-                  onClick={() => {
-                    if ("geolocation" in navigator) {
-                      navigator.geolocation.getCurrentPosition((pos) => {
-                        onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-                        alert("Localização capturada!");
-                      });
-                    }
-                  }}
+                  onClick={() => { if ("geolocation" in navigator) { navigator.geolocation.getCurrentPosition((pos) => { onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude }); alert("Localização capturada!"); }); } }}
                   className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"
                 >
                   <MapPin size={14} /> Atualizar Localização GPS
@@ -1232,7 +1071,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </section>
 
-            {/* Calendário de disponibilidade com navegação de mês */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
               <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -1243,58 +1081,39 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
               {showCalendar && (
                 <div className="p-5">
-                  {/* Navegação de mês para config */}
                   <div className="flex items-center justify-between mb-4">
-                    <button
-                      onClick={goConfigPrev}
-                      disabled={isPrevConfigDisabled}
-                      className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
+                    <button onClick={goConfigPrev} disabled={isPrevConfigDisabled} className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
                       <ChevronLeft size={18} />
                     </button>
-                    <span className="font-black text-sm text-slate-900">
-                      {MONTH_NAMES[configCalMonth]} {configCalYear}
-                    </span>
+                    <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
                     <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
                       <ChevronRight size={18} />
                     </button>
                   </div>
-
                   <div className="grid grid-cols-7 gap-1 mb-1">
                     {['D','S','T','Q','Q','S','S'].map((d, i) => (
                       <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
                     ))}
                   </div>
-
                   <div className="grid grid-cols-7 gap-1 mb-6">
                     {Array.from({ length: daysInConfigMonth }, (_, i) => {
-                      const day = String(i + 1).padStart(2, '0');
                       const fullDate = formatDate(configCalYear, configCalMonth, i + 1);
                       const isSelected = selectedDateConfig === fullDate;
                       const isAvailable = user.available_slots?.[fullDate]?.length > 0;
                       return (
-                        <button
-                          key={i}
-                          onClick={() => setSelectedDateConfig(fullDate)}
-                          className={`aspect-square rounded-xl text-xs font-bold border transition-all
-                            ${isSelected ? 'ring-2 ring-blue-500' : ''}
-                            ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}
-                        >
+                        <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
+                          className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
                           {i + 1}
                         </button>
                       );
                     })}
                   </div>
-
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                     <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
                     <div className="grid grid-cols-4 gap-2">
                       {GLOBAL_TIME_SLOTS.map(slot => (
-                        <button
-                          key={slot}
-                          onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
-                          className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}
-                        >
+                        <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                          className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
                           {slot}
                         </button>
                       ))}
@@ -1304,17 +1123,12 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               )}
             </section>
 
-            {/* Status do Plano */}
             <div className="pt-2 text-center">
               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
-                <p className="text-sm font-black text-slate-900 mt-1">
-                  {user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
-                </p>
+                <p className="text-sm font-black text-slate-900 mt-1">{user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}</p>
                 {user.plano_ativo && user.plano_expiracao && (
-                  <p className="text-[11px] text-slate-500 mt-2">
-                    Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span>
-                  </p>
+                  <p className="text-[11px] text-slate-500 mt-2">Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span></p>
                 )}
                 {!user.plano_ativo && (
                   <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
@@ -1322,10 +1136,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-            {/* ── SUPORTE ── */}
             <section>
               <div className="flex items-center gap-2 mb-3">
-                <HeadphonesIcon size={16} className="text-slate-500" />
+                <Headphones size={16} className="text-slate-500" />
                 <h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3>
               </div>
               <SupportChat user={user} />
@@ -1350,7 +1163,6 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
 
-  // ── CORREÇÃO 1: Persistência de sessão (lê localStorage e busca perfil atualizado) ──
   useEffect(() => {
     const restoreSession = async () => {
       try {
@@ -1358,13 +1170,7 @@ export default function App() {
         if (!saved) return;
         const parsedUser = JSON.parse(saved);
         if (!parsedUser?.id || parsedUser?.isGuest) return;
-
-        const { data: freshData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', parsedUser.id)
-          .maybeSingle();
-
+        const { data: freshData } = await supabase.from('profiles').select('*').eq('id', parsedUser.id).maybeSingle();
         if (freshData) {
           setUser(freshData);
           setCurrentMode(freshData.role);
@@ -1379,30 +1185,14 @@ export default function App() {
     restoreSession();
   }, []);
 
-  // ── Busca barbeiros e agendamentos sempre que o usuário mudar ──
   useEffect(() => {
     const fetchData = async () => {
-      const { data: bData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'barber')
-        .eq('is_visible', true);
+      const { data: bData } = await supabase.from('profiles').select('*').eq('role', 'barber').eq('is_visible', true);
       if (bData) setBarbers(bData);
-
       if (!user || user.isGuest) return;
-      const { data: aData } = await supabase
-        .from('appointments')
-        .select('*')
-        .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
+      const { data: aData } = await supabase.from('appointments').select('*').or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
       if (aData) {
-        const formatted = aData.map(a => ({
-          ...a,
-          client: a.client_name,
-          service: a.service_name,
-          time: a.time,
-          date: a.date,
-          barberId: a.barber_id
-        }));
+        const formatted = aData.map(a => ({ ...a, client: a.client_name, service: a.service_name, time: a.time, date: a.date, barberId: a.barber_id }));
         setAppointments(formatted);
       }
     };
@@ -1410,107 +1200,49 @@ export default function App() {
   }, [user]);
 
   const handleSelectMode = (mode) => {
-    if (mode === 'guest') {
-      setUser({ id: 'guest', name: 'Visitante', isGuest: true });
-      setCurrentMode('client');
-    } else {
-      setCurrentMode(mode);
-    }
+    if (mode === 'guest') { setUser({ id: 'guest', name: 'Visitante', isGuest: true }); setCurrentMode('client'); }
+    else setCurrentMode(mode);
   };
 
-  // ── CORREÇÃO 2: handleLogin salva no localStorage ──
   const handleLogin = async (phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', phone)
-      .eq('password', password)
-      .eq('role', currentMode)
-      .single();
-
+    const { data, error } = await supabase.from('profiles').select('*').eq('phone', phone).eq('password', password).eq('role', currentMode).single();
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
-
-    localStorage.setItem('salao_user_data', JSON.stringify(data)); // ✅ PERSISTÊNCIA
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
-  // ── CORREÇÃO 3: handleRegister salva no localStorage ──
   const handleRegister = async (name, phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert([{
-        name,
-        phone,
-        password,
-        role: currentMode,
-        is_visible: false,
-        has_access: false,
-        plano_ativo: true,
-        my_services: [],
-        available_slots: {},
-        available_dates: [],
-        avatar_url: '',
-      }])
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('profiles').insert([{
+      name, phone, password, role: currentMode, is_visible: false, has_access: false,
+      plano_ativo: true, my_services: [], available_slots: {}, available_dates: [], avatar_url: '',
+    }]).select().single();
     if (error) {
       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
       throw new Error(error.message);
     }
-
-    localStorage.setItem('salao_user_data', JSON.stringify(data)); // ✅ PERSISTÊNCIA
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
   };
 
   const handleBookingSubmit = async (data) => {
-    if (user?.isGuest) {
-      alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta.");
-      setUser(null);
-      setCurrentMode(null);
-      return;
-    }
-    const newBooking = {
-      client_id: user.id,
-      client_name: user.name,
-      barber_id: data.barber.id,
-      barber_name: data.barber.name,
-      service_name: data.service.name,
-      price: data.price,
-      status: 'pending',
-      date: data.date,
-      phone: data.phone,
-      time: data.time
-    };
+    if (user?.isGuest) { alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta."); setUser(null); setCurrentMode(null); return; }
+    const newBooking = { client_id: user.id, client_name: user.name, barber_id: data.barber.id, barber_name: data.barber.name, service_name: data.service.name, price: data.price, status: 'pending', date: data.date, phone: data.phone, time: data.time };
     const { data: saved, error } = await supabase.from('appointments').insert([newBooking]).select().single();
     if (!error && saved) {
-      setAppointments(prev => [...prev, {
-        ...saved,
-        client: saved.client_name,
-        service: saved.service_name,
-        barberId: saved.barber_id,
-      }]);
+      setAppointments(prev => [...prev, { ...saved, client: saved.client_name, service: saved.service_name, barberId: saved.barber_id }]);
       alert("Agendamento realizado!");
     } else {
       alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
     }
   };
 
-  // ── CORREÇÃO 4: handleUpdateStatus filtra por 'id' (não client_id) ──
+  // CORREÇÃO: filtra por 'id' do agendamento, não client_id
   const handleUpdateStatus = async (appointmentId, status) => {
     if (user?.isGuest) return;
-
-    const { error } = await supabase
-      .from('appointments')
-      .update({ status })
-      .eq('id', appointmentId); // ✅ usa 'id', não 'client_id'
-
+    const { error } = await supabase.from('appointments').update({ status }).eq('id', appointmentId);
     if (!error) {
-      if (status === 'rejected') {
-        setAppointments(prev => prev.filter(a => a.id !== appointmentId));
-      } else {
-        setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status } : a));
-      }
+      if (status === 'rejected') setAppointments(prev => prev.filter(a => a.id !== appointmentId));
+      else setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status } : a));
     } else {
       console.error("Erro ao atualizar status:", error);
     }
@@ -1519,21 +1251,14 @@ export default function App() {
   const handleUpdateProfile = async (updatedUser) => {
     try {
       const dataToSave = {
-        address: updatedUser.address,
-        latitude: updatedUser.latitude,
-        longitude: updatedUser.longitude,
-        avatar_url: updatedUser.avatar_url,
-        is_visible: updatedUser.is_visible,
-        plano_ativo: updatedUser.plano_ativo,
-        my_services: updatedUser.my_services,
-        available_dates: updatedUser.available_dates,
-        available_slots: updatedUser.available_slots,
-        manual_appointments: updatedUser.manual_appointments,
+        address: updatedUser.address, latitude: updatedUser.latitude, longitude: updatedUser.longitude,
+        avatar_url: updatedUser.avatar_url, is_visible: updatedUser.is_visible, plano_ativo: updatedUser.plano_ativo,
+        my_services: updatedUser.my_services, available_dates: updatedUser.available_dates,
+        available_slots: updatedUser.available_slots, manual_appointments: updatedUser.manual_appointments,
       };
       const { error } = await supabase.from('profiles').update(dataToSave).eq('id', updatedUser.id);
       if (error) throw error;
       setUser(updatedUser);
-      // Atualiza localStorage com dados novos do perfil
       localStorage.setItem('salao_user_data', JSON.stringify(updatedUser));
     } catch (error) {
       console.error("Erro completo:", error);
@@ -1559,40 +1284,15 @@ export default function App() {
   return (
     <>
       {showWelcome && !user && <WelcomePopup onClose={() => setShowWelcome(false)} />}
-
       {!currentMode && !user && <WelcomeScreen onSelectMode={handleSelectMode} />}
-
       {currentMode && !user && (
-        <AuthScreen
-          userType={currentMode}
-          onBack={() => setCurrentMode(null)}
-          onLogin={handleLogin}
-          onRegister={handleRegister}
-        />
+        <AuthScreen userType={currentMode} onBack={() => setCurrentMode(null)} onLogin={handleLogin} onRegister={handleRegister} />
       )}
-
       {user && (
         currentMode === 'barber' ? (
-          <BarberDashboard
-            user={user}
-            appointments={appointments}
-            onLogout={handleLogout}
-            onUpdateStatus={handleUpdateStatus}
-            onUpdateProfile={handleUpdateProfile}
-            MASTER_SERVICES={MASTER_SERVICES}
-            GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS}
-            supabase={supabase}
-          />
+          <BarberDashboard user={user} appointments={appointments} onLogout={handleLogout} onUpdateStatus={handleUpdateStatus} onUpdateProfile={handleUpdateProfile} MASTER_SERVICES={MASTER_SERVICES} GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} supabase={supabase} />
         ) : (
-          <ClientApp
-            user={user}
-            barbers={barbers}
-            appointments={appointments}
-            onLogout={handleLogout}
-            onBookingSubmit={handleBookingSubmit}
-            onUpdateStatus={handleUpdateStatus}
-            MASTER_SERVICES={MASTER_SERVICES}
-          />
+          <ClientApp user={user} barbers={barbers} appointments={appointments} onLogout={handleLogout} onBookingSubmit={handleBookingSubmit} onUpdateStatus={handleUpdateStatus} MASTER_SERVICES={MASTER_SERVICES} />
         )
       )}
     </>
