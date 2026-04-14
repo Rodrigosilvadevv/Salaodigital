@@ -197,7 +197,7 @@ const SupportChat = ({ user }) => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const SUPPORT_WHATSAPP = '5511999999999'; // ← Troque pelo número real do suporte
+  const SUPPORT_WHATSAPP = '5541992931394'; 
 
   const handleSend = async () => {
     if (!input.trim()) return;
