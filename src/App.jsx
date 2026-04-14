@@ -919,7 +919,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <div className="flex gap-2">
                         <button
                          onClick={async () => {
-                          console.log("DEBUG - Dados do agendamento clicado:", app); // Verifique o console F12 com isso
+                          console.log("DEBUG - Dados do agendamento clicado:", app.id); // Verifique o console F12 com isso
                             if (!app.id) {
                               return alert(`Erro: O objeto não tem ID. Campos disponíveis: ${Object.keys(app).join(', ')}`);
                                 }
