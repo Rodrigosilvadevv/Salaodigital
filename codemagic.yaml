@@ -1,0 +1,31 @@
+workflows:
+  ios-workflow:
+    name: iOS Build
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: latest
+      xcode: latest
+    scripts:
+      - name: Install dependencies
+        script: | 
+          npm install
+      - name: Build Web Project
+        script: | 
+          npm run build
+      - name: Capacitor Sync
+        script: | 
+          npx cap sync ios
+      - name: Build iOS with Xcode
+        script: | 
+          # Este comando procura o arquivo workspace automaticamente
+          WORKSPACE_PATH=$(find . -name "*.xcworkspace" | head -n 1)
+          xcodebuild -workspace "$WORKSPACE_PATH" \
+                     -scheme App \
+                     -configuration Release \
+                     archive \
+                     -archivePath ios/App/App.xcarchive \
+                     CODE_SIGNING_ALLOWED=NO
+    artifacts:
+      - ios/App/App.xcarchive
+      - /tmp/xcodebuild_logs/*.log
