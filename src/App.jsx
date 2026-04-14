@@ -193,9 +193,11 @@ const SupportChat = ({ user }) => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = React.useRef(null);
 
-  useEffect(() => {
+useEffect(() => {
+  if (messages.length > 1) {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+  }
+}, [messages]);
 
   const SUPPORT_WHATSAPP = '5541992931394'; 
 
