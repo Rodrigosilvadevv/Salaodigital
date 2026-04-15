@@ -15,6 +15,8 @@ import {
   CheckCircle, ArrowLeft, Send, Headphones
 } from 'lucide-react';
 
+const APP_VERSION = 'v1.2.0';
+
 const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
   
@@ -86,7 +88,6 @@ const Card = ({ children, selected, onClick }) => (
   </div>
 );
 
-// ─── CALENDÁRIO REUTILIZÁVEL COM NAVEGAÇÃO DE MÊS ────────────────────────────
 const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChange }) => {
   const today = new Date();
   const [calYear, setCalYear] = useState(today.getFullYear());
@@ -169,7 +170,6 @@ const SupportChat = ({ user }) => {
   const [sending, setSending] = useState(false);
   const messagesEndRef = React.useRef(null);
 
-  // CORREÇÃO: só rola quando há mensagem nova (length > 1), nunca na abertura da aba
   useEffect(() => {
     if (messages.length > 1) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -706,12 +706,24 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
-  // CORREÇÃO: false para não rolar a tela ao abrir a aba
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
   const today = new Date();
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+
+  // ─── NOVOS ESTADOS ────────────────────────────────────────────────────────
+  const [showAllPending, setShowAllPending] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualSlotTarget, setManualSlotTarget] = useState(null);
+  const [manualName, setManualName] = useState('');
+  const [manualValue, setManualValue] = useState('');
+
+  // ─── DURAÇÃO DO ATENDIMENTO ───────────────────────────────────────────────
+  const appointmentDuration = user.appointment_duration || '30min';
+  const filteredTimeSlots = appointmentDuration === '1h'
+    ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00'))
+    : GLOBAL_TIME_SLOTS;
 
   const myAppointments = (appointments || []).filter(a =>
     String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
@@ -724,6 +736,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const allAppointments = [...confirmed, ...manualAppointments];
   const agendaOrdenada = allAppointments.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+
+  const dedupedPending = pending.filter((app, index, self) => index === self.findIndex((t) => t.id === app.id));
+  const pendingToShow = showAllPending ? dedupedPending : dedupedPending.slice(0, 3);
 
   useEffect(() => {
     const queryParams = new URLSearchParams(window.location.search);
@@ -752,32 +767,93 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     } catch (err) { console.error("Erro ao salvar no Supabase:", err.message); }
   };
 
+  // ─── TOGGLE SLOT — abre modal em vez de window.prompt ────────────────────
   const toggleSlotForDate = async (date, slot) => {
     const currentSlots = { ...(user.available_slots || {}) };
     const slotsForDay = [...(currentSlots[date] || [])];
     const isAvailable = slotsForDay.includes(slot);
-    let updatedDaySlots;
+
     if (isAvailable) {
-      const clientName = window.prompt("Reservar este horário?\n\nDigite o nome ou deixe em branco para apenas fechar:");
-      if (clientName === null) return;
-      updatedDaySlots = slotsForDay.filter(s => s !== slot);
-      if (clientName.trim() !== "") {
-        const newManualApp = { id: `manual-${Date.now()}`, client: clientName, date, time: slot, status: 'confirmed', isManual: true };
-        const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
-        onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
-        await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', user.id);
-        return;
-      }
+      // Abre modal para nome + valor
+      setManualSlotTarget({ date, slot });
+      setManualName('');
+      setManualValue('');
+      setShowManualModal(true);
     } else {
-      updatedDaySlots = [...slotsForDay, slot];
+      // Apenas abre o horário
+      const updatedDaySlots = [...slotsForDay, slot];
       const filteredManual = (user.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
       onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
       await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', user.id);
-      return;
     }
-    const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
-    onUpdateProfile({ ...user, available_slots: finalSlots });
-    await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
+  };
+
+  // ─── CONFIRMAR RESERVA MANUAL ─────────────────────────────────────────────
+  const handleManualBookingConfirm = async (saveWithClient) => {
+    if (!manualSlotTarget) return;
+    const { date, slot } = manualSlotTarget;
+    const currentSlots = { ...(user.available_slots || {}) };
+    const slotsForDay = [...(currentSlots[date] || [])];
+    const updatedDaySlots = slotsForDay.filter(s => s !== slot);
+
+    if (saveWithClient && manualName.trim() !== '') {
+      const newManualApp = {
+        id: `manual-${Date.now()}`,
+        client: manualName.trim(),
+        date,
+        time: slot,
+        price: Number(manualValue) || 0,
+        status: 'confirmed',
+        isManual: true
+      };
+      const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
+      onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
+      await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', user.id);
+    } else {
+      const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
+      onUpdateProfile({ ...user, available_slots: finalSlots });
+      await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
+    }
+    setShowManualModal(false);
+    setManualSlotTarget(null);
+    setManualName('');
+    setManualValue('');
+  };
+
+  // ─── SELECIONAR / DESMARCAR TODOS OS SLOTS DO DIA ────────────────────────
+  const selectAllSlotsForDay = async (date) => {
+    const currentSlots = { ...(user.available_slots || {}) };
+    const updatedSlots = { ...currentSlots, [date]: [...filteredTimeSlots] };
+    onUpdateProfile({ ...user, available_slots: updatedSlots });
+    await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', user.id);
+  };
+
+  const deselectAllSlotsForDay = async (date) => {
+    const currentSlots = { ...(user.available_slots || {}) };
+    const updatedSlots = { ...currentSlots, [date]: [] };
+    onUpdateProfile({ ...user, available_slots: updatedSlots });
+    await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', user.id);
+  };
+
+  // ─── MARCAR / DESMARCAR TODOS OS DIAS DO MÊS ─────────────────────────────
+  const markAllDaysInMonth = async () => {
+    const currentSlots = { ...(user.available_slots || {}) };
+    for (let i = 1; i <= daysInConfigMonth; i++) {
+      const date = formatDate(configCalYear, configCalMonth, i);
+      currentSlots[date] = [...filteredTimeSlots];
+    }
+    onUpdateProfile({ ...user, available_slots: { ...currentSlots } });
+    await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', user.id);
+  };
+
+  const unmarkAllDaysInMonth = async () => {
+    const currentSlots = { ...(user.available_slots || {}) };
+    for (let i = 1; i <= daysInConfigMonth; i++) {
+      const date = formatDate(configCalYear, configCalMonth, i);
+      currentSlots[date] = [];
+    }
+    onUpdateProfile({ ...user, available_slots: { ...currentSlots } });
+    await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', user.id);
   };
 
   const handlePayment = async () => {
@@ -827,8 +903,66 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
   const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
 
+  const slotsForSelectedDay = user.available_slots?.[selectedDateConfig] || [];
+
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
+
+      {/* ─── MODAL RESERVA MANUAL (nome + valor) ─────────────────────────── */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowManualModal(false)}></div>
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h3 className="font-black text-slate-900 text-lg mb-1">Reservar Horário</h3>
+            <p className="text-xs text-slate-400 mb-5">
+              {manualSlotTarget?.slot} • {manualSlotTarget?.date?.split('-').reverse().join('/')}
+            </p>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nome do Cliente</label>
+                <input
+                  type="text"
+                  value={manualName}
+                  onChange={e => setManualName(e.target.value)}
+                  placeholder="Ex: Maria Silva"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Valor cobrado (R$) — opcional</label>
+                <input
+                  type="number"
+                  value={manualValue}
+                  onChange={e => setManualValue(e.target.value)}
+                  placeholder="0,00"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 transition-colors"
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={() => handleManualBookingConfirm(true)}
+                className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all"
+              >
+                {manualName.trim() ? '✓ Reservar com Cliente' : '✓ Apenas Fechar Horário'}
+              </button>
+              <button
+                onClick={() => handleManualBookingConfirm(false)}
+                className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm active:scale-95 transition-all"
+              >
+                Fechar Horário sem Cliente
+              </button>
+              <button
+                onClick={() => setShowManualModal(false)}
+                className="w-full py-2 text-slate-400 font-bold text-xs"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPayModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
@@ -888,19 +1022,33 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
+            {/* ─── SOLICITAÇÕES PENDENTES ──────────────────────────────────── */}
             <section>
-              <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
-                Novas Solicitações
-                {pending.length > 0 && <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">{pending.length}</span>}
-              </h3>
-              {pending.length === 0 ? (
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                  Novas Solicitações
+                  {dedupedPending.length > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                      {dedupedPending.length}
+                    </span>
+                  )}
+                </h3>
+                {dedupedPending.length > 3 && (
+                  <button
+                    onClick={() => setShowAllPending(!showAllPending)}
+                    className="text-[10px] font-black text-blue-600 uppercase tracking-tight border-b border-blue-200 pb-0.5"
+                  >
+                    {showAllPending ? 'Ver menos' : `Ver todos (${dedupedPending.length})`}
+                  </button>
+                )}
+              </div>
+              {dedupedPending.length === 0 ? (
                 <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
                   <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
                 </div>
               ) : (
-                pending
-                  .filter((app, index, self) => index === self.findIndex((t) => t.id === app.id))
-                  .map(app => (
+                <>
+                  {pendingToShow.map(app => (
                     <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
                       <div className="flex justify-between items-start mb-4">
                         <div>
@@ -918,11 +1066,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       </div>
                       <div className="flex gap-2">
                         <button
-                         onClick={async () => {
-                          console.log("DEBUG - Dados do agendamento clicado:", app); // Verifique o console F12 com isso
+                          onClick={async () => {
+                            console.log("DEBUG - Dados do agendamento clicado:", app);
                             if (!app.id) {
                               return alert(`Erro: O objeto não tem ID. Campos disponíveis: ${Object.keys(app).join(', ')}`);
-                                }
+                            }
                             try {
                               await onUpdateStatus(app.id, 'confirmed');
                               if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
@@ -935,13 +1083,21 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         >
                           <CheckCircle size={14} /> Aceitar Solicitação
                         </button>
-                        {/* CORREÇÃO: usa somente app.id */}
                         <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
                           <XCircle size={18} />
                         </button>
                       </div>
                     </div>
-                  ))
+                  ))}
+                  {!showAllPending && dedupedPending.length > 3 && (
+                    <button
+                      onClick={() => setShowAllPending(true)}
+                      className="w-full py-3 border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-xs font-bold hover:border-blue-300 hover:text-blue-500 transition-all"
+                    >
+                      + {dedupedPending.length - 3} pendentes a mais — Ver todas
+                    </button>
+                  )}
+                </>
               )}
             </section>
 
@@ -1062,7 +1218,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   onClick={() => { if ("geolocation" in navigator) { navigator.geolocation.getCurrentPosition((pos) => { onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude }); alert("Localização capturada!"); }); } }}
                   className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"
                 >
-                  <MapPin size={14} /> Atualizar Localização GPS
+                  <MapPin size={14} /> Click aqui 
                 </button>
               </div>
               <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
@@ -1071,8 +1227,32 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`} />
                 </div>
               </div>
+
+              {/* ─── DURAÇÃO DO ATENDIMENTO ──────────────────────────────── */}
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <p className="font-bold text-slate-900 text-sm mb-1">Duração do Atendimento</p>
+                <p className="text-[10px] text-slate-400 mb-3">
+                  Controla os horários exibidos na agenda. <b>30min</b> mostra intervalos de meia hora. <b>1h</b> mostra apenas horas cheias.
+                </p>
+                <div className="flex gap-2">
+                  {['30min', '1h'].map(dur => (
+                    <button
+                      key={dur}
+                      onClick={async () => {
+                        const updated = { ...user, appointment_duration: dur };
+                        onUpdateProfile(updated);
+                        await supabase.from('profiles').update({ appointment_duration: dur }).eq('id', user.id);
+                      }}
+                      className={`flex-1 py-3 rounded-xl font-black text-sm border-2 transition-all active:scale-95 ${appointmentDuration === dur ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
+                    >
+                      {dur === '30min' ? '⏱ 30 min' : '🕐 1 hora'}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </section>
 
+            {/* ─── HORÁRIOS DISPONÍVEIS ─────────────────────────────────── */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
               <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -1083,7 +1263,43 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
               {showCalendar && (
                 <div className="p-5">
-                  <div className="flex items-center justify-between mb-4">
+
+                  {/* ─── LEGENDA DE CORES ────────────────────────────────── */}
+                  <div className="mb-5 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Legenda de Cores</p>
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-500 mb-1">Calendário (dias):</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2 mb-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-slate-900 border border-slate-700 flex-shrink-0"></div>
+                          <span className="text-[10px] font-bold text-slate-600">Com horários abertos</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex-shrink-0"></div>
+                          <span className="text-[10px] font-bold text-slate-600">Sem horários</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-white border-2 border-blue-500 ring-2 ring-blue-300 flex-shrink-0"></div>
+                          <span className="text-[10px] font-bold text-slate-600">Dia selecionado</span>
+                        </div>
+                      </div>
+                      <div className="h-[1px] bg-slate-100 my-2"></div>
+                      <p className="text-[10px] font-bold text-slate-500 mb-1">Horários (slots):</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-green-600 border border-green-600 flex-shrink-0"></div>
+                          <span className="text-[10px] font-bold text-slate-600">Aberto para clientes</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-white border border-slate-200 flex-shrink-0"></div>
+                          <span className="text-[10px] font-bold text-slate-600">Fechado / indisponível</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ─── NAVEGAÇÃO DO MÊS ────────────────────────────────── */}
+                  <div className="flex items-center justify-between mb-3">
                     <button onClick={goConfigPrev} disabled={isPrevConfigDisabled} className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
                       <ChevronLeft size={18} />
                     </button>
@@ -1092,6 +1308,23 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <ChevronRight size={18} />
                     </button>
                   </div>
+
+                  {/* ─── MARCAR / DESMARCAR TODOS OS DIAS DO MÊS ────────── */}
+                  <div className="flex gap-2 mb-4">
+                    <button
+                      onClick={markAllDaysInMonth}
+                      className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight transition-all active:scale-95"
+                    >
+                      ✓ Marcar Mês Todo
+                    </button>
+                    <button
+                      onClick={unmarkAllDaysInMonth}
+                      className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all active:scale-95 hover:bg-red-50 hover:text-red-500"
+                    >
+                      ✕ Limpar Mês Todo
+                    </button>
+                  </div>
+
                   <div className="grid grid-cols-7 gap-1 mb-1">
                     {['D','S','T','Q','Q','S','S'].map((d, i) => (
                       <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
@@ -1110,15 +1343,44 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       );
                     })}
                   </div>
+
+                  {/* ─── SLOTS DO DIA SELECIONADO ────────────────────────── */}
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                    <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
-                    <div className="grid grid-cols-4 gap-2">
-                      {GLOBAL_TIME_SLOTS.map(slot => (
-                        <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
-                          className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
-                          {slot}
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">
+                          Horários — {selectedDateConfig.split('-').reverse().join('/')}
+                        </h4>
+                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">
+                          {slotsForSelectedDay.length} de {filteredTimeSlots.length} abertos
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => selectAllSlotsForDay(selectedDateConfig)}
+                          className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase transition-all active:scale-95"
+                        >
+                          + Todos
                         </button>
-                      ))}
+                        <button
+                          onClick={() => deselectAllSlotsForDay(selectedDateConfig)}
+                          className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 hover:bg-red-100 hover:text-red-600"
+                        >
+                          − Todos
+                        </button>
+                      </div>
+                    </div>
+                    <div className="h-[1px] bg-slate-200 mb-3"></div>
+                    <div className="grid grid-cols-4 gap-2">
+                      {filteredTimeSlots.map(slot => {
+                        const isOpen = user.available_slots?.[selectedDateConfig]?.includes(slot);
+                        return (
+                          <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                            className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95 ${isOpen ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+                            {slot}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -1146,8 +1408,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               <SupportChat user={user} />
             </section>
 
+            {/* ─── RODAPÉ COM VERSÃO ───────────────────────────────────── */}
             <p className="text-[9px] text-slate-400 mt-4 text-center uppercase font-bold tracking-tighter pb-4">
-              Salão Digital © 2026 - Todos os direitos reservados
+              Salão Digital © 2026 · Todos os direitos reservados · {APP_VERSION}
             </p>
           </div>
         )}
@@ -1238,7 +1501,6 @@ export default function App() {
     }
   };
 
-  // CORREÇÃO: filtra por 'id' do agendamento, não client_id
   const handleUpdateStatus = async (appointmentId, status) => {
     if (user?.isGuest) return;
     const { error } = await supabase.from('appointments').update({ status }).eq('id', appointmentId);
@@ -1257,6 +1519,7 @@ export default function App() {
         avatar_url: updatedUser.avatar_url, is_visible: updatedUser.is_visible, plano_ativo: updatedUser.plano_ativo,
         my_services: updatedUser.my_services, available_dates: updatedUser.available_dates,
         available_slots: updatedUser.available_slots, manual_appointments: updatedUser.manual_appointments,
+        appointment_duration: updatedUser.appointment_duration,
       };
       const { error } = await supabase.from('profiles').update(dataToSave).eq('id', updatedUser.id);
       if (error) throw error;
