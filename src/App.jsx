@@ -318,8 +318,67 @@ const WelcomePopup = ({ onClose }) => (
   </div>
 );
 
+// ─── MODAL DE SELEÇÃO DE MODO CONVIDADO ───────────────────────────────────────
+const GuestModeModal = ({ isOpen, onClose, onSelectGuestMode }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="relative bg-white w-full max-w-sm rounded-3xl p-7 shadow-2xl">
+        <h2 className="text-xl font-black text-slate-900 mb-1 text-center">Explorar como Convidado</h2>
+        <p className="text-xs text-slate-400 text-center mb-7">Escolha como deseja visualizar o app</p>
+
+        <div className="space-y-3">
+          {/* Opção Cliente */}
+          <button
+            onClick={() => onSelectGuestMode('client')}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40 transition-all active:scale-95 text-left"
+          >
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200">
+              <User size={22} className="text-white" />
+            </div>
+            <div>
+              <p className="font-black text-slate-900 text-sm">Ver como Cliente</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Explore serviços, profissionais e agendamentos</p>
+            </div>
+          </button>
+
+          {/* Opção Profissional */}
+          <button
+            onClick={() => onSelectGuestMode('barber')}
+            className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-slate-700 hover:bg-slate-50 transition-all active:scale-95 text-left"
+          >
+            <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-slate-200">
+              <Scissors size={22} className="text-white" />
+            </div>
+            <div>
+              <p className="font-black text-slate-900 text-sm">Ver como Profissional</p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Simule o painel, agenda e serviços (sem salvar)</p>
+            </div>
+          </button>
+        </div>
+
+        <button onClick={onClose} className="w-full mt-5 text-slate-400 font-bold text-xs py-2">
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+};
+
 const WelcomeScreen = ({ onSelectMode }) => {
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+
+  const handleGuestMode = (guestType) => {
+    setShowGuestModal(false);
+    if (guestType === 'client') {
+      onSelectMode('guest');
+    } else {
+      onSelectMode('guest-barber');
+    }
+  };
+
   return (
     <div
       className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
@@ -334,24 +393,41 @@ const WelcomeScreen = ({ onSelectMode }) => {
           SALÃO<span className="text-blue-500">DIGITAL</span>
         </h1>
         <div className="w-full max-w-xs space-y-3 mt-10">
+          {/* Sou Cliente */}
           <Button variant="secondary" onClick={() => onSelectMode('client')}>Sou Cliente</Button>
-          <Button variant="outline" className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" onClick={() => onSelectMode('guest')}>
+
+          {/* Explorar como Convidado — mesmo estilo visual */}
+          <Button
+            variant="outline"
+            className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md"
+            onClick={() => setShowGuestModal(true)}
+          >
             Explorar como Convidado
           </Button>
+
           <div className="py-2 flex items-center gap-4">
             <div className="h-[1px] bg-white/20 flex-1"></div>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
             <div className="h-[1px] bg-white/20 flex-1"></div>
           </div>
+
+          {/* Sou Profissional */}
           <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none" onClick={() => onSelectMode('barber')}>
             Sou Profissional
           </Button>
+
           <button onClick={() => setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">
             Política de Privacidade
           </button>
         </div>
       </div>
+
       <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
+      <GuestModeModal
+        isOpen={showGuestModal}
+        onClose={() => setShowGuestModal(false)}
+        onSelectGuestMode={handleGuestMode}
+      />
     </div>
   );
 };
@@ -702,7 +778,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 };
 
 // ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
-const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
+const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase, isGuestBarber }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
@@ -712,27 +788,60 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
 
-  // ─── NOVOS ESTADOS ────────────────────────────────────────────────────────
   const [showAllPending, setShowAllPending] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualSlotTarget, setManualSlotTarget] = useState(null);
   const [manualName, setManualName] = useState('');
   const [manualValue, setManualValue] = useState('');
 
-  // ─── DURAÇÃO DO ATENDIMENTO ───────────────────────────────────────────────
-  const appointmentDuration = user.appointment_duration || '30min';
+  // ─── ESTADO LOCAL PARA MODO CONVIDADO BARBEIRO ────────────────────────────
+  const [guestBarberState, setGuestBarberState] = useState({
+    ...user,
+    name: 'Profissional Demo',
+    plano_ativo: false,
+    is_visible: false,
+    my_services: [],
+    available_slots: {},
+    manual_appointments: [],
+    appointment_duration: '30min',
+    address: '',
+    avatar_url: '',
+  });
+
+  // Usa estado local se for convidado, senão usa user real
+  const effectiveUser = isGuestBarber ? guestBarberState : user;
+
+  // onUpdateProfile simulado para convidado (só atualiza estado local, não salva)
+  const handleGuestUpdateProfile = (updatedData) => {
+    setGuestBarberState(updatedData);
+  };
+
+  const effectiveOnUpdateProfile = isGuestBarber ? handleGuestUpdateProfile : onUpdateProfile;
+
+  // Wrapper para supabase simulado no modo convidado (não faz nada)
+  const effectiveSupabase = isGuestBarber
+    ? {
+        from: () => ({
+          update: () => ({ eq: () => Promise.resolve({ error: null }) }),
+          insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: null }) }) }),
+        }),
+        storage: supabase.storage,
+      }
+    : supabase;
+
+  const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h'
     ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00'))
     : GLOBAL_TIME_SLOTS;
 
   const myAppointments = (appointments || []).filter(a =>
-    String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
+    String(a.barber_id || a.barberId) === String(effectiveUser.id) && a.status !== 'rejected'
   );
   const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) =>
     new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`)
   );
   const confirmed = myAppointments.filter(a => a.status === 'confirmed');
-  const manualAppointments = user.manual_appointments || [];
+  const manualAppointments = effectiveUser.manual_appointments || [];
   const allAppointments = [...confirmed, ...manualAppointments];
   const agendaOrdenada = allAppointments.sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
@@ -741,17 +850,18 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const pendingToShow = showAllPending ? dedupedPending : dedupedPending.slice(0, 3);
 
   useEffect(() => {
+    if (isGuestBarber) return; // Não verifica pagamento no modo demo
     const queryParams = new URLSearchParams(window.location.search);
     const status = queryParams.get('status');
-    if (status === 'approved' && !user.plano_ativo) {
+    if (status === 'approved' && !effectiveUser.plano_ativo) {
       alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
-      onUpdateProfile({ ...user, plano_ativo: true, is_visible: true, plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() });
+      effectiveOnUpdateProfile({ ...effectiveUser, plano_ativo: true, is_visible: true, plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() });
       window.history.replaceState({}, document.title, window.location.pathname);
     }
-  }, [user, onUpdateProfile]);
+  }, [effectiveUser, effectiveOnUpdateProfile, isGuestBarber]);
 
   const setSlotAvailability = async (date, slot, makeAvailable) => {
-    const currentSlots = user.available_slots || {};
+    const currentSlots = effectiveUser.available_slots || {};
     const slotsForDay = currentSlots[date] || [];
     let newSlots;
     if (makeAvailable) {
@@ -760,39 +870,39 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot); else return;
     }
     const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
-    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
-    try {
-      const { error } = await supabase.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', user.id);
-      if (error) throw error;
-    } catch (err) { console.error("Erro ao salvar no Supabase:", err.message); }
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedAvailableSlots });
+    if (!isGuestBarber) {
+      try {
+        const { error } = await supabase.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id);
+        if (error) throw error;
+      } catch (err) { console.error("Erro ao salvar no Supabase:", err.message); }
+    }
   };
 
-  // ─── TOGGLE SLOT — abre modal em vez de window.prompt ────────────────────
   const toggleSlotForDate = async (date, slot) => {
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const slotsForDay = [...(currentSlots[date] || [])];
     const isAvailable = slotsForDay.includes(slot);
 
     if (isAvailable) {
-      // Abre modal para nome + valor
       setManualSlotTarget({ date, slot });
       setManualName('');
       setManualValue('');
       setShowManualModal(true);
     } else {
-      // Apenas abre o horário
       const updatedDaySlots = [...slotsForDay, slot];
-      const filteredManual = (user.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
-      onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
-      await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', user.id);
+      const filteredManual = (effectiveUser.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
+      if (!isGuestBarber) {
+        await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', effectiveUser.id);
+      }
     }
   };
 
-  // ─── CONFIRMAR RESERVA MANUAL ─────────────────────────────────────────────
   const handleManualBookingConfirm = async (saveWithClient) => {
     if (!manualSlotTarget) return;
     const { date, slot } = manualSlotTarget;
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const slotsForDay = [...(currentSlots[date] || [])];
     const updatedDaySlots = slotsForDay.filter(s => s !== slot);
 
@@ -806,13 +916,17 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         status: 'confirmed',
         isManual: true
       };
-      const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
-      onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
-      await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', user.id);
+      const updatedManualApps = [...(effectiveUser.manual_appointments || []), newManualApp];
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
+      if (!isGuestBarber) {
+        await supabase.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', effectiveUser.id);
+      }
     } else {
       const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
-      onUpdateProfile({ ...user, available_slots: finalSlots });
-      await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: finalSlots });
+      if (!isGuestBarber) {
+        await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', effectiveUser.id);
+      }
     }
     setShowManualModal(false);
     setManualSlotTarget(null);
@@ -820,49 +934,59 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     setManualValue('');
   };
 
-  // ─── SELECIONAR / DESMARCAR TODOS OS SLOTS DO DIA ────────────────────────
   const selectAllSlotsForDay = async (date) => {
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [...filteredTimeSlots] };
-    onUpdateProfile({ ...user, available_slots: updatedSlots });
-    await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', user.id);
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
+    if (!isGuestBarber) {
+      await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
+    }
   };
 
   const deselectAllSlotsForDay = async (date) => {
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [] };
-    onUpdateProfile({ ...user, available_slots: updatedSlots });
-    await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', user.id);
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
+    if (!isGuestBarber) {
+      await supabase.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
+    }
   };
 
-  // ─── MARCAR / DESMARCAR TODOS OS DIAS DO MÊS ─────────────────────────────
   const markAllDaysInMonth = async () => {
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) {
       const date = formatDate(configCalYear, configCalMonth, i);
       currentSlots[date] = [...filteredTimeSlots];
     }
-    onUpdateProfile({ ...user, available_slots: { ...currentSlots } });
-    await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', user.id);
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
+    if (!isGuestBarber) {
+      await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
+    }
   };
 
   const unmarkAllDaysInMonth = async () => {
-    const currentSlots = { ...(user.available_slots || {}) };
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) {
       const date = formatDate(configCalYear, configCalMonth, i);
       currentSlots[date] = [];
     }
-    onUpdateProfile({ ...user, available_slots: { ...currentSlots } });
-    await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', user.id);
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
+    if (!isGuestBarber) {
+      await supabase.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
+    }
   };
 
   const handlePayment = async () => {
+    if (isGuestBarber) {
+      alert("Para ativar o plano, faça login como profissional!");
+      return;
+    }
     setIsPaying(true);
     try {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
       const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
+        body: JSON.stringify({ barberId: effectiveUser.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
       });
       const data = await response.json();
       if (data.init_point) window.location.href = data.init_point;
@@ -872,28 +996,29 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   };
 
   const toggleService = (serviceId, defaultPrice) => {
-    const currentServices = user.my_services || [];
+    const currentServices = effectiveUser.my_services || [];
     const exists = currentServices.find(s => s.id === serviceId);
-    if (!exists && !user.plano_ativo && currentServices.length >= 3) { setShowPayModal(true); return; }
+    if (!exists && !effectiveUser.plano_ativo && currentServices.length >= 3) { setShowPayModal(true); return; }
     const newServices = exists ? currentServices.filter(s => s.id !== serviceId) : [...currentServices, { id: serviceId, price: defaultPrice }];
-    onUpdateProfile({ ...user, my_services: newServices });
+    effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
   };
 
   const updateServicePrice = (serviceId, newPrice) => {
-    const newServices = (user.my_services || []).map(s => s.id === serviceId ? { ...s, price: Number(newPrice) } : s);
-    onUpdateProfile({ ...user, my_services: newServices });
+    const newServices = (effectiveUser.my_services || []).map(s => s.id === serviceId ? { ...s, price: Number(newPrice) } : s);
+    effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
   };
 
   const handleUploadPhoto = async (event) => {
+    if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
     const file = event.target.files[0];
     if (!file) return;
     try {
       const fileExt = file.name.split('.').pop();
-      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+      const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
       const { error: uploadError } = await supabase.storage.from('barber-photos').upload(fileName, file);
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from('barber-photos').getPublicUrl(fileName);
-      onUpdateProfile({ ...user, avatar_url: publicUrl });
+      effectiveOnUpdateProfile({ ...effectiveUser, avatar_url: publicUrl });
       alert('Foto atualizada!');
     } catch (error) { alert('Erro ao carregar foto.'); }
   };
@@ -903,12 +1028,30 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
   const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
 
-  const slotsForSelectedDay = user.available_slots?.[selectedDateConfig] || [];
+  const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
 
-      {/* ─── MODAL RESERVA MANUAL (nome + valor) ─────────────────────────── */}
+      {/* ─── BANNER MODO CONVIDADO PROFISSIONAL ──────────────────────────────── */}
+      {isGuestBarber && (
+        <div className="bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <Eye size={14} className="flex-shrink-0" />
+            <p className="text-[11px] font-black uppercase tracking-tight truncate">
+              Modo Demo — Nada será salvo
+            </p>
+          </div>
+          <button
+            onClick={onLogout}
+            className="flex-shrink-0 bg-white/20 hover:bg-white/30 text-white text-[10px] font-black uppercase tracking-tight px-3 py-1.5 rounded-lg transition-all active:scale-95 whitespace-nowrap"
+          >
+            Fazer Login
+          </button>
+        </div>
+      )}
+
+      {/* ─── MODAL RESERVA MANUAL ─────────────────────────────────────────── */}
       {showManualModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowManualModal(false)}></div>
@@ -917,6 +1060,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             <p className="text-xs text-slate-400 mb-5">
               {manualSlotTarget?.slot} • {manualSlotTarget?.date?.split('-').reverse().join('/')}
             </p>
+            {isGuestBarber && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+                ⚠️ Modo demo: a reserva manual não será salva permanentemente.
+              </div>
+            )}
             <div className="space-y-3 mb-5">
               <div>
                 <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nome do Cliente</label>
@@ -968,13 +1116,27 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
             <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4"><Lock size={32} /></div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
-            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
-            <div className="space-y-3">
-              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
-                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
-              </button>
-              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
-            </div>
+            {isGuestBarber ? (
+              <>
+                <p className="text-slate-500 text-sm mb-6">Para ativar o plano, você precisa criar uma conta de profissional.</p>
+                <div className="space-y-3">
+                  <button className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold" onClick={() => { setShowPayModal(false); onLogout(); }}>
+                    Criar conta / Fazer Login
+                  </button>
+                  <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
+                <div className="space-y-3">
+                  <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
+                    {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
+                  </button>
+                  <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -983,17 +1145,21 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
-              {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
+              {effectiveUser.avatar_url ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
             </div>
             <div>
-              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
+              <h2 className="text-lg font-black text-slate-900 leading-tight">
+                {isGuestBarber ? 'Painel Demo' : `Painel ${effectiveUser.plano_ativo ? 'Pro' : 'Grátis'}`}
+              </h2>
               <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
+                <span className={`w-2 h-2 rounded-full ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                <p className="text-[10px] text-slate-500 font-bold uppercase">{effectiveUser.is_visible ? 'Online' : 'Offline'}</p>
               </div>
             </div>
           </div>
-          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500"><LogOut size={18} /></button>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+            <LogOut size={18} />
+          </button>
         </div>
       </header>
 
@@ -1022,7 +1188,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-            {/* ─── SOLICITAÇÕES PENDENTES ──────────────────────────────────── */}
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
@@ -1067,6 +1232,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <div className="flex gap-2">
                         <button
                           onClick={async () => {
+                            if (isGuestBarber) { alert("Para aceitar agendamentos, faça login como profissional!"); return; }
                             console.log("DEBUG - Dados do agendamento clicado:", app);
                             if (!app.id) {
                               return alert(`Erro: O objeto não tem ID. Campos disponíveis: ${Object.keys(app).join(', ')}`);
@@ -1083,7 +1249,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         >
                           <CheckCircle size={14} /> Aceitar Solicitação
                         </button>
-                        <button onClick={() => onUpdateStatus(app.id, 'rejected')} className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
+                        <button onClick={() => !isGuestBarber && onUpdateStatus(app.id, 'rejected')} className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
                           <XCircle size={18} />
                         </button>
                       </div>
@@ -1134,12 +1300,14 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                           onClick={() => {
                             if (window.confirm(`Deseja CANCELAR o horário de ${app.client_name || app.client}?`)) {
                               if (app.isManual) {
-                                const filtered = (user.manual_appointments || []).filter(m => m.id !== app.id);
-                                onUpdateProfile({ ...user, manual_appointments: filtered });
-                                supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', user.id);
+                                const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
+                                effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
+                                if (!isGuestBarber) {
+                                  supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', effectiveUser.id);
+                                }
                                 if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
                               } else {
-                                onUpdateStatus(app.id, 'rejected');
+                                if (!isGuestBarber) onUpdateStatus(app.id, 'rejected');
                                 if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
                               }
                             }
@@ -1161,11 +1329,17 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           <div className="space-y-4">
             <div className="p-4 bg-blue-50 rounded-2xl mb-4">
               <p className="text-xs text-blue-700 font-medium">
-                <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
+                <span className="font-bold">
+                  {isGuestBarber
+                    ? 'Modo Demo — Explore os serviços (sem salvar)'
+                    : effectiveUser.plano_ativo
+                      ? 'Assinatura Profissional Ativa'
+                      : `Limite Grátis: ${effectiveUser.my_services?.length || 0}/3`}
+                </span>
               </p>
             </div>
             {MASTER_SERVICES.map(service => {
-              const userServiceData = user.my_services?.find(s => s.id === service.id);
+              const userServiceData = effectiveUser.my_services?.find(s => s.id === service.id);
               const isActive = !!userServiceData;
               return (
                 <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
@@ -1200,7 +1374,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               <div className="flex flex-col items-center mb-6">
                 <div className="relative">
                   <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
-                    {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300" />}
+                    {effectiveUser.avatar_url ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300" />}
                   </div>
                   <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
                     <Camera size={16} />
@@ -1211,24 +1385,50 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               <div className="space-y-4">
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
-                  <input type="text" value={user.address || ''} onChange={(e) => onUpdateProfile({ ...user, address: e.target.value })}
-                    className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium" />
+                  <input
+                    type="text"
+                    value={effectiveUser.address || ''}
+                    onChange={(e) => effectiveOnUpdateProfile({ ...effectiveUser, address: e.target.value })}
+                    className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium"
+                  />
                 </div>
                 <button
-                  onClick={() => { if ("geolocation" in navigator) { navigator.geolocation.getCurrentPosition((pos) => { onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude }); alert("Localização capturada!"); }); } }}
+                  onClick={() => {
+                    if (isGuestBarber) { alert("Para salvar localização, faça login como profissional!"); return; }
+                    if ("geolocation" in navigator) {
+                      navigator.geolocation.getCurrentPosition((pos) => {
+                        effectiveOnUpdateProfile({ ...effectiveUser, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                        alert("Localização capturada!");
+                      });
+                    }
+                  }}
                   className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2"
                 >
-                  <MapPin size={14} /> Click aqui 
+                  <MapPin size={14} /> {isGuestBarber ? 'Capturar Localização (demo)' : 'Click aqui'}
                 </button>
               </div>
+
+              {/* Toggle visibilidade — bloqueado no modo demo */}
               <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
-                <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
-                <div onClick={() => onUpdateProfile({ ...user, is_visible: !user.is_visible })} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`} />
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
+                  {isGuestBarber && <p className="text-[10px] text-amber-500 font-bold mt-0.5">Faça login para ativar</p>}
+                </div>
+                <div
+                  onClick={() => {
+                    if (isGuestBarber) {
+                      alert("Para ativar sua loja, você precisa fazer login como profissional!");
+                      return;
+                    }
+                    effectiveOnUpdateProfile({ ...effectiveUser, is_visible: !effectiveUser.is_visible });
+                  }}
+                  className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${effectiveUser.is_visible ? 'bg-green-500' : isGuestBarber ? 'bg-slate-200 opacity-50' : 'bg-slate-300'}`}
+                >
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform ${effectiveUser.is_visible ? 'translate-x-6' : 'translate-x-0'}`} />
                 </div>
               </div>
 
-              {/* ─── DURAÇÃO DO ATENDIMENTO ──────────────────────────────── */}
+              {/* Duração do atendimento */}
               <div className="mt-6 pt-6 border-t border-slate-100">
                 <p className="font-bold text-slate-900 text-sm mb-1">Duração do Atendimento</p>
                 <p className="text-[10px] text-slate-400 mb-3">
@@ -1239,9 +1439,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     <button
                       key={dur}
                       onClick={async () => {
-                        const updated = { ...user, appointment_duration: dur };
-                        onUpdateProfile(updated);
-                        await supabase.from('profiles').update({ appointment_duration: dur }).eq('id', user.id);
+                        const updated = { ...effectiveUser, appointment_duration: dur };
+                        effectiveOnUpdateProfile(updated);
+                        if (!isGuestBarber) {
+                          await supabase.from('profiles').update({ appointment_duration: dur }).eq('id', effectiveUser.id);
+                        }
                       }}
                       className={`flex-1 py-3 rounded-xl font-black text-sm border-2 transition-all active:scale-95 ${appointmentDuration === dur ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400'}`}
                     >
@@ -1252,7 +1454,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </section>
 
-            {/* ─── HORÁRIOS DISPONÍVEIS ─────────────────────────────────── */}
+            {/* Horários disponíveis */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
               <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
                 <div className="flex items-center gap-3">
@@ -1264,7 +1466,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               {showCalendar && (
                 <div className="p-5">
 
-                  {/* ─── LEGENDA DE CORES ────────────────────────────────── */}
                   <div className="mb-5 p-3 bg-slate-50 rounded-2xl border border-slate-100">
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3">Legenda de Cores</p>
                     <div className="space-y-2">
@@ -1298,7 +1499,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     </div>
                   </div>
 
-                  {/* ─── NAVEGAÇÃO DO MÊS ────────────────────────────────── */}
                   <div className="flex items-center justify-between mb-3">
                     <button onClick={goConfigPrev} disabled={isPrevConfigDisabled} className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
                       <ChevronLeft size={18} />
@@ -1309,7 +1509,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     </button>
                   </div>
 
-                  {/* ─── MARCAR / DESMARCAR TODOS OS DIAS DO MÊS ────────── */}
                   <div className="flex gap-2 mb-4">
                     <button
                       onClick={markAllDaysInMonth}
@@ -1334,7 +1533,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     {Array.from({ length: daysInConfigMonth }, (_, i) => {
                       const fullDate = formatDate(configCalYear, configCalMonth, i + 1);
                       const isSelected = selectedDateConfig === fullDate;
-                      const isAvailable = user.available_slots?.[fullDate]?.length > 0;
+                      const isAvailable = effectiveUser.available_slots?.[fullDate]?.length > 0;
                       return (
                         <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
                           className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
@@ -1344,7 +1543,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     })}
                   </div>
 
-                  {/* ─── SLOTS DO DIA SELECIONADO ────────────────────────── */}
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
                       <div>
@@ -1373,7 +1571,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     <div className="h-[1px] bg-slate-200 mb-3"></div>
                     <div className="grid grid-cols-4 gap-2">
                       {filteredTimeSlots.map(slot => {
-                        const isOpen = user.available_slots?.[selectedDateConfig]?.includes(slot);
+                        const isOpen = effectiveUser.available_slots?.[selectedDateConfig]?.includes(slot);
                         return (
                           <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95 ${isOpen ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
@@ -1390,25 +1588,50 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             <div className="pt-2 text-center">
               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
-                <p className="text-sm font-black text-slate-900 mt-1">{user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}</p>
-                {user.plano_ativo && user.plano_expiracao && (
-                  <p className="text-[11px] text-slate-500 mt-2">Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span></p>
-                )}
-                {!user.plano_ativo && (
-                  <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
+                {isGuestBarber ? (
+                  <>
+                    <p className="text-sm font-black text-slate-900 mt-1">Modo Demonstração 👁️</p>
+                    <p className="text-[11px] text-slate-500 mt-2">Crie uma conta para ativar seu perfil profissional.</p>
+                    <button onClick={onLogout} className="mt-3 text-blue-600 font-bold text-xs">Criar conta / Fazer Login</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-black text-slate-900 mt-1">{effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}</p>
+                    {effectiveUser.plano_ativo && effectiveUser.plano_expiracao && (
+                      <p className="text-[11px] text-slate-500 mt-2">Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(effectiveUser.plano_expiracao).toLocaleDateString('pt-BR')}</span></p>
+                    )}
+                    {!effectiveUser.plano_ativo && (
+                      <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
+                    )}
+                  </>
                 )}
               </div>
             </div>
 
-            <section>
-              <div className="flex items-center gap-2 mb-3">
-                <Headphones size={16} className="text-slate-500" />
-                <h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3>
-              </div>
-              <SupportChat user={user} />
-            </section>
+            {!isGuestBarber && (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <Headphones size={16} className="text-slate-500" />
+                  <h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3>
+                </div>
+                <SupportChat user={effectiveUser} />
+              </section>
+            )}
 
-            {/* ─── RODAPÉ COM VERSÃO ───────────────────────────────────── */}
+            {isGuestBarber && (
+              <section className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center">
+                <p className="text-2xl mb-2">✂️</p>
+                <h3 className="font-black text-slate-900 mb-1">Gostou do que viu?</h3>
+                <p className="text-xs text-slate-500 mb-4">Crie sua conta como profissional e comece a receber agendamentos hoje!</p>
+                <button
+                  onClick={onLogout}
+                  className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all"
+                >
+                  Criar Conta Profissional
+                </button>
+              </section>
+            )}
+
             <p className="text-[9px] text-slate-400 mt-4 text-center uppercase font-bold tracking-tighter pb-4">
               Salão Digital © 2026 · Todos os direitos reservados · {APP_VERSION}
             </p>
@@ -1427,6 +1650,7 @@ export default function App() {
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [isGuestBarber, setIsGuestBarber] = useState(false);
 
   useEffect(() => {
     const restoreSession = async () => {
@@ -1454,7 +1678,7 @@ export default function App() {
     const fetchData = async () => {
       const { data: bData } = await supabase.from('profiles').select('*').eq('role', 'barber').eq('is_visible', true);
       if (bData) setBarbers(bData);
-      if (!user || user.isGuest) return;
+      if (!user || user.isGuest || isGuestBarber) return;
       const { data: aData } = await supabase.from('appointments').select('*').or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
       if (aData) {
         const formatted = aData.map(a => ({ ...a, client: a.client_name, service: a.service_name, time: a.time, date: a.date, barberId: a.barber_id }));
@@ -1462,11 +1686,22 @@ export default function App() {
       }
     };
     fetchData();
-  }, [user]);
+  }, [user, isGuestBarber]);
 
   const handleSelectMode = (mode) => {
-    if (mode === 'guest') { setUser({ id: 'guest', name: 'Visitante', isGuest: true }); setCurrentMode('client'); }
-    else setCurrentMode(mode);
+    if (mode === 'guest') {
+      setUser({ id: 'guest', name: 'Visitante', isGuest: true });
+      setCurrentMode('client');
+      setIsGuestBarber(false);
+    } else if (mode === 'guest-barber') {
+      // Modo convidado profissional: usuário fictício, sem autenticação
+      setUser({ id: 'guest-barber', name: 'Profissional Demo', isGuest: true, isGuestBarber: true });
+      setCurrentMode('barber');
+      setIsGuestBarber(true);
+    } else {
+      setCurrentMode(mode);
+      setIsGuestBarber(false);
+    }
   };
 
   const handleLogin = async (phone, password) => {
@@ -1474,6 +1709,7 @@ export default function App() {
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
     localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
+    setIsGuestBarber(false);
   };
 
   const handleRegister = async (name, phone, password) => {
@@ -1487,6 +1723,7 @@ export default function App() {
     }
     localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
+    setIsGuestBarber(false);
   };
 
   const handleBookingSubmit = async (data) => {
@@ -1502,7 +1739,7 @@ export default function App() {
   };
 
   const handleUpdateStatus = async (appointmentId, status) => {
-    if (user?.isGuest) return;
+    if (user?.isGuest || isGuestBarber) return;
     const { error } = await supabase.from('appointments').update({ status }).eq('id', appointmentId);
     if (!error) {
       if (status === 'rejected') setAppointments(prev => prev.filter(a => a.id !== appointmentId));
@@ -1535,6 +1772,7 @@ export default function App() {
     localStorage.removeItem('salao_user_data');
     setUser(null);
     setCurrentMode(null);
+    setIsGuestBarber(false);
   };
 
   if (loading) {
@@ -1555,9 +1793,27 @@ export default function App() {
       )}
       {user && (
         currentMode === 'barber' ? (
-          <BarberDashboard user={user} appointments={appointments} onLogout={handleLogout} onUpdateStatus={handleUpdateStatus} onUpdateProfile={handleUpdateProfile} MASTER_SERVICES={MASTER_SERVICES} GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} supabase={supabase} />
+          <BarberDashboard
+            user={user}
+            appointments={appointments}
+            onLogout={handleLogout}
+            onUpdateStatus={handleUpdateStatus}
+            onUpdateProfile={handleUpdateProfile}
+            MASTER_SERVICES={MASTER_SERVICES}
+            GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS}
+            supabase={supabase}
+            isGuestBarber={isGuestBarber}
+          />
         ) : (
-          <ClientApp user={user} barbers={barbers} appointments={appointments} onLogout={handleLogout} onBookingSubmit={handleBookingSubmit} onUpdateStatus={handleUpdateStatus} MASTER_SERVICES={MASTER_SERVICES} />
+          <ClientApp
+            user={user}
+            barbers={barbers}
+            appointments={appointments}
+            onLogout={handleLogout}
+            onBookingSubmit={handleBookingSubmit}
+            onUpdateStatus={handleUpdateStatus}
+            MASTER_SERVICES={MASTER_SERVICES}
+          />
         )
       )}
     </>
