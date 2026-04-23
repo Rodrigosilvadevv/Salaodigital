@@ -113,7 +113,7 @@ const BadgeList = ({ barber, small }) => {
   );
 };
 
-// ─── BOTÃO COPIAR LINK ────────────────────────────────────────────────────────
+// ─── BOTÃO COPIAR LINK — MINIMALISTA ──────────────────────────────────────────
 const CopyLinkButton = ({ barber }) => {
   const [copied, setCopied] = useState(false);
   const slug = barber.slug || generateSlug(barber.name || 'profissional', barber.id);
@@ -127,14 +127,14 @@ const CopyLinkButton = ({ barber }) => {
   };
 
   return (
-    <div className="bg-slate-900 rounded-2xl p-4">
-      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Seu Link de Agendamento</p>
-      <p className="text-xs text-slate-300 font-mono truncate mb-3">{url}</p>
+    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+      <Link size={14} className="text-slate-400 flex-shrink-0" />
+      <p className="text-[10px] text-slate-400 font-mono truncate flex-1">{url}</p>
       <button
         onClick={handleCopy}
-        className={`w-full py-3 rounded-xl font-black text-sm flex items-center justify-center gap-2 transition-all active:scale-95 ${copied ? 'bg-green-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${copied ? 'bg-green-100 text-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'}`}
       >
-        {copied ? <><CheckCircle size={16} /> Link Copiado!</> : <><Copy size={16} /> Copiar Meu Link</>}
+        {copied ? <><CheckCircle size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
       </button>
     </div>
   );
@@ -459,7 +459,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
   const [saving, setSaving] = useState(false);
   const TOTAL_STEPS = 4;
 
-  // State para cada passo
   const [address, setAddress] = useState(user.address || '');
   const [selectedServices, setSelectedServices] = useState(user.my_services || []);
   const [duration, setDuration] = useState(user.appointment_duration || '30min');
@@ -518,7 +517,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      {/* Header */}
       <div className="bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <div>
@@ -529,55 +527,36 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
             {saving ? 'Aguarde...' : 'Pular tudo'}
           </button>
         </div>
-        {/* Barra de progresso */}
         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
         </div>
       </div>
 
       <div className="flex-1 p-6 max-w-md mx-auto w-full pb-32">
-
-        {/* PASSO 1 — Endereço + Localização */}
         {step === 1 && (
           <div className="space-y-5 animate-in fade-in">
-            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2">
-              <MapPin size={28} className="text-blue-600" />
-            </div>
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><MapPin size={28} className="text-blue-600" /></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900 mb-1">Onde você atende?</h2>
               <p className="text-sm text-slate-500">Clientes vão encontrar você pelo endereço e localização.</p>
             </div>
             <div>
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Endereço do Salão</label>
-              <input
-                type="text"
-                value={address}
-                onChange={e => setAddress(e.target.value)}
-                placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
-                className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors"
-              />
+              <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
+                className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors" />
             </div>
-            <button
-              onClick={handleCaptureLocation}
-              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat ? 'bg-green-50 border-green-500 text-green-700' : 'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}
-            >
+            <button onClick={handleCaptureLocation}
+              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat ? 'bg-green-50 border-green-500 text-green-700' : 'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}>
               <MapPin size={18} />
               {capturedLocation?.lat ? '✓ Localização capturada!' : 'Capturar Minha Localização'}
             </button>
-            {capturedLocation?.lat && (
-              <p className="text-[10px] text-green-600 font-bold text-center">
-                📍 {capturedLocation.lat.toFixed(4)}, {capturedLocation.lng.toFixed(4)}
-              </p>
-            )}
+            {capturedLocation?.lat && <p className="text-[10px] text-green-600 font-bold text-center">📍 {capturedLocation.lat.toFixed(4)}, {capturedLocation.lng.toFixed(4)}</p>}
           </div>
         )}
 
-        {/* PASSO 2 — Serviços */}
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in">
-            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2">
-              <Scissors size={28} className="text-purple-600" />
-            </div>
+            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2"><Scissors size={28} className="text-purple-600" /></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900 mb-1">Quais serviços você oferece?</h2>
               <p className="text-sm text-slate-500">Selecione os serviços. Você pode ajustar os preços depois.</p>
@@ -586,15 +565,10 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
               {MASTER_SERVICES.map(s => {
                 const isActive = selectedServices.some(sv => sv.id === s.id);
                 return (
-                  <button
-                    key={s.id}
-                    onClick={() => toggleService(s.id, s.defaultPrice)}
-                    className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}
-                  >
+                  <button key={s.id} onClick={() => toggleService(s.id, s.defaultPrice)}
+                    className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : 'bg-slate-100'}`}>
-                        {React.cloneElement(s.icon, { size: 16 })}
-                      </div>
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : 'bg-slate-100'}`}>{React.cloneElement(s.icon, { size: 16 })}</div>
                       <div>
                         <p className="font-bold text-sm">{s.name}</p>
                         <p className={`text-[10px] ${isActive ? 'text-slate-300' : 'text-slate-400'}`}>R$ {s.defaultPrice} · {s.duration}</p>
@@ -610,12 +584,9 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
           </div>
         )}
 
-        {/* PASSO 3 — Duração */}
         {step === 3 && (
           <div className="space-y-5 animate-in fade-in">
-            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2">
-              <Clock size={28} className="text-amber-600" />
-            </div>
+            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2"><Clock size={28} className="text-amber-600" /></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900 mb-1">Duração dos atendimentos</h2>
               <p className="text-sm text-slate-500">Define o intervalo mínimo entre horários na sua agenda.</p>
@@ -625,11 +596,8 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
                 { value: '30min', label: '30 minutos', desc: 'Intervalos de meia hora — mais horários disponíveis', icon: '⏱' },
                 { value: '1h', label: '1 hora', desc: 'Intervalos de uma hora — ideal para serviços mais longos', icon: '🕐' },
               ].map(opt => (
-                <button
-                  key={opt.value}
-                  onClick={() => setDuration(opt.value)}
-                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration === opt.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white hover:border-slate-400'}`}
-                >
+                <button key={opt.value} onClick={() => setDuration(opt.value)}
+                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration === opt.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white hover:border-slate-400'}`}>
                   <p className="text-2xl mb-2">{opt.icon}</p>
                   <p className="font-black text-sm">{opt.label}</p>
                   <p className={`text-[10px] mt-1 ${duration === opt.value ? 'text-slate-300' : 'text-slate-400'}`}>{opt.desc}</p>
@@ -639,29 +607,20 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
           </div>
         )}
 
-        {/* PASSO 4 — Link + Conclusão */}
         {step === 4 && (
           <div className="space-y-5 animate-in fade-in">
-            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2">
-              <Link size={28} className="text-green-600" />
-            </div>
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600" /></div>
             <div>
               <h2 className="text-2xl font-black text-slate-900 mb-1">Seu link de agendamento</h2>
               <p className="text-sm text-slate-500">Compartilhe com seus clientes e comece a receber agendamentos!</p>
             </div>
-
-            {/* Preview do link */}
             <div className="bg-slate-900 rounded-2xl p-5 text-center">
               <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 overflow-hidden flex items-center justify-center">
                 {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar" /> : <User size={28} className="text-slate-400" />}
               </div>
               <p className="text-white font-black text-lg">{user.name}</p>
-              <p className="text-slate-400 text-xs mt-1 font-mono break-all">
-                {getPublicUrl(generateSlug(user.name, user.id))}
-              </p>
+              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name, user.id))}</p>
             </div>
-
-            {/* Resumo das configurações */}
             <div className="space-y-2">
               {[
                 { label: 'Endereço', value: address || 'Não informado', ok: !!address },
@@ -680,34 +639,21 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
                 </div>
               ))}
             </div>
-
-            {/* Botão principal de finalizar */}
-            <button
-              onClick={handleFinish}
-              disabled={saving}
-              className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50"
-            >
+            <button onClick={handleFinish} disabled={saving}
+              className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50">
               {saving ? <Loader2 className="animate-spin" size={22} /> : <><CheckCircle size={22} /> Finalizar e Ir ao Painel</>}
             </button>
           </div>
         )}
       </div>
 
-      {/* Botões de navegação fixos */}
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-100 z-10">
         <div className="max-w-md mx-auto flex gap-3">
           {step > 1 && (
-            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">
-              ← Voltar
-            </button>
+            <button onClick={() => setStep(s => s - 1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">← Voltar</button>
           )}
           {step < TOTAL_STEPS && (
-            <button
-              onClick={() => setStep(s => s + 1)}
-              className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg"
-            >
-              Próximo →
-            </button>
+            <button onClick={() => setStep(s => s + 1)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Próximo →</button>
           )}
         </div>
       </div>
@@ -715,9 +661,9 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase }) => {
   );
 };
 
-// ─── PÁGINA PÚBLICA DO PROFISSIONAL ──────────────────────────────────────────
+// ─── PÁGINA PÚBLICA DO PROFISSIONAL — CARTÃO DE VISITA ───────────────────────
 const PublicBarberPage = ({ barber, onBook }) => {
-  const [bookStep, setBookStep] = useState(0); // 0=view, 1=service, 2=datetime, 3=client-info, 4=success
+  const [bookStep, setBookStep] = useState(0);
   const [selectedService, setSelectedService] = useState(null);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedTime, setSelectedTime] = useState(null);
@@ -788,41 +734,63 @@ const PublicBarberPage = ({ barber, onBook }) => {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header do profissional */}
-      <div className="bg-slate-900 pb-6 pt-8 px-6 relative">
-        <div className="max-w-md mx-auto">
-          <div className="flex items-start gap-4">
-            <div className="w-20 h-20 rounded-2xl bg-slate-700 overflow-hidden flex-shrink-0 border-2 border-slate-600">
+      {/* ── HEADER CENTRADO — CARTÃO DE VISITA ── */}
+      <div className="bg-slate-900 pb-8 pt-10 px-6 relative overflow-hidden">
+        {/* Fundo decorativo sutil */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500 rounded-full blur-3xl" />
+        </div>
+
+        <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
+          {/* Avatar grande centralizado */}
+          <div className="relative mb-4">
+            <div className="w-28 h-28 rounded-full bg-slate-700 overflow-hidden border-4 border-slate-600 shadow-2xl shadow-black/40">
               {barber.avatar_url
-                ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt="avatar" />
-                : <div className="w-full h-full flex items-center justify-center"><User size={32} className="text-slate-400" /></div>}
+                ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name} />
+                : <div className="w-full h-full flex items-center justify-center"><User size={40} className="text-slate-400" /></div>}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1">
-                <h1 className="text-white font-black text-xl leading-tight truncate">{barber.name}</h1>
-                {barber.plano_ativo && (
-                  <span className="flex-shrink-0 bg-blue-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                    <Zap size={8} /> PRO
-                  </span>
-                )}
+            {barber.plano_ativo && (
+              <div className="absolute -bottom-1 -right-1 bg-blue-600 rounded-full p-1.5 border-2 border-slate-900 shadow-lg">
+                <Zap size={12} className="text-white" />
               </div>
-              {barber.address && <p className="text-slate-400 text-xs flex items-center gap-1 mb-2"><MapPin size={11} />{barber.address}</p>}
-              <BadgeList barber={barber} />
-            </div>
+            )}
           </div>
+
+          {/* Nome */}
+          <h1 className="text-white font-black text-2xl leading-tight mb-1">{barber.name}</h1>
+
+          {/* Endereço */}
+          {barber.address && (
+            <p className="text-slate-400 text-xs flex items-center justify-center gap-1 mb-3">
+              <MapPin size={11} />{barber.address}
+            </p>
+          )}
+
+          {/* Badges centralizados */}
+          {badges.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 justify-center mb-5">
+              {badges.map((b, i) => (
+                <span key={i} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>
+                  {b.icon} {b.label}
+                </span>
+              ))}
+            </div>
+          )}
+
           {/* Botões ação */}
-          <div className="flex gap-2 mt-5">
+          <div className="flex gap-2 w-full max-w-xs">
             <button
               onClick={() => setBookStep(1)}
-              className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/30"
+              className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/40"
             >
-              <CalendarDays size={16} /> Agendar Agora
+              <CalendarDays size={16} /> Agendar
             </button>
             <button
               onClick={handleCopyLink}
-              className={`px-4 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-white hover:bg-slate-600'}`}
+              className={`px-4 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
             >
-              {copied ? <CheckCircle size={16} /> : <Copy size={16} />}
+              {copied ? <CheckCircle size={15} /> : <Copy size={15} />}
+              {copied ? 'Copiado' : 'Link'}
             </button>
           </div>
         </div>
@@ -840,15 +808,11 @@ const PublicBarberPage = ({ barber, onBook }) => {
               <button onClick={() => setBookStep(0)} className="text-slate-400 font-bold text-xs">Cancelar</button>
             </div>
             <div className="p-4">
-              {/* Step 1 — serviço */}
               {bookStep === 1 && (
                 <div className="space-y-2">
                   {services.map(s => (
-                    <button
-                      key={s.id}
-                      onClick={() => { setSelectedService(s); setBookStep(2); }}
-                      className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all active:scale-95 text-left ${selectedService?.id === s.id ? 'border-slate-900 bg-slate-50' : 'border-slate-100 hover:border-slate-300'}`}
-                    >
+                    <button key={s.id} onClick={() => { setSelectedService(s); setBookStep(2); }}
+                      className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all active:scale-95 text-left ${selectedService?.id === s.id ? 'border-slate-900 bg-slate-50' : 'border-slate-100 hover:border-slate-300'}`}>
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon, { size: 16 })}</div>
                         <div>
@@ -861,17 +825,13 @@ const PublicBarberPage = ({ barber, onBook }) => {
                   ))}
                 </div>
               )}
-              {/* Step 2 — data/hora */}
               {bookStep === 2 && (
                 <div>
                   <button onClick={() => setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1">
                     <ChevronLeft size={14} /> {selectedService?.name} · R$ {selectedService?.price}
                   </button>
-                  <MonthCalendar
-                    availableSlots={barber.available_slots}
-                    selectedDate={selectedDate}
-                    onSelectDate={(d) => { setSelectedDate(d); setSelectedTime(null); }}
-                  />
+                  <MonthCalendar availableSlots={barber.available_slots} selectedDate={selectedDate}
+                    onSelectDate={(d) => { setSelectedDate(d); setSelectedTime(null); }} />
                   {selectedDate && (
                     <div className="mt-5">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Horários disponíveis</p>
@@ -896,13 +856,11 @@ const PublicBarberPage = ({ barber, onBook }) => {
                   )}
                 </div>
               )}
-              {/* Step 3 — dados do cliente */}
               {bookStep === 3 && (
                 <div className="space-y-4">
                   <button onClick={() => setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1">
                     <ChevronLeft size={14} /> {selectedDate?.split('-').reverse().join('/')} às {selectedTime}
                   </button>
-                  {/* Resumo */}
                   <div className="bg-blue-50 rounded-xl p-3 flex justify-between items-center">
                     <div>
                       <p className="font-black text-slate-900 text-sm">{selectedService?.name}</p>
@@ -968,6 +926,134 @@ const PublicBarberPage = ({ barber, onBook }) => {
           <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Agendamento via</p>
           <p className="font-black text-slate-400 italic text-sm">SALÃO<span className="text-blue-500">DIGITAL</span></p>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── CARD DE REVIEW DE PROFISSIONAL ──────────────────────────────────────────
+const getBarberRating = (barber) => {
+  const badges = getBadges(barber);
+  const serviceCount = (barber.my_services || []).length;
+  // Rating sintético baseado em dados do perfil (sem DB de reviews)
+  let score = 3.5;
+  if (barber.plano_ativo) score += 0.5;
+  if (barber.avatar_url) score += 0.3;
+  if (barber.address) score += 0.2;
+  if (serviceCount >= 5) score += 0.3;
+  if (badges.find(b => b.label === 'Verificado')) score += 0.2;
+  return Math.min(5, parseFloat(score.toFixed(1)));
+};
+
+const StarRating = ({ rating }) => {
+  const full = Math.floor(rating);
+  const half = rating % 1 >= 0.5;
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({ length: 5 }, (_, i) => (
+        <svg key={i} width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M5 1l1.12 2.27 2.51.36-1.82 1.77.43 2.5L5 6.77l-2.24 1.13.43-2.5L1.37 3.63l2.51-.36z"
+            fill={i < full ? '#f59e0b' : (i === full && half ? 'url(#half)' : '#e2e8f0')}
+            stroke={i < full || (i === full && half) ? '#f59e0b' : '#cbd5e1'}
+            strokeWidth="0.5"
+          />
+          {i === full && half && (
+            <defs>
+              <linearGradient id="half">
+                <stop offset="50%" stopColor="#f59e0b" />
+                <stop offset="50%" stopColor="#e2e8f0" />
+              </linearGradient>
+            </defs>
+          )}
+        </svg>
+      ))}
+    </div>
+  );
+};
+
+const TopProfessionalsSection = ({ barbers }) => {
+  // Filtra visíveis com pelo menos avatar ou serviços
+  const topBarbers = barbers
+    .filter(b => b.is_visible && ((b.my_services || []).length > 0 || b.avatar_url))
+    .sort((a, b) => getBarberRating(b) - getBarberRating(a))
+    .slice(0, 8);
+
+  if (!topBarbers.length) return null;
+
+  const specialties = (barber) => {
+    const services = barber.my_services || [];
+    const names = services.slice(0, 2).map(s => {
+      const master = MASTER_SERVICES.find(m => m.id === s.id);
+      return master?.name || '';
+    }).filter(Boolean);
+    return names;
+  };
+
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhores Profissionais</h3>
+        <div className="flex items-center gap-1">
+          <Star size={10} className="text-amber-400 fill-amber-400" />
+          <span className="text-[9px] font-bold text-slate-400">Avaliações</span>
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-3 -mx-0 scrollbar-hide">
+        {topBarbers.map((barber) => {
+          const rating = getBarberRating(barber);
+          const specs = specialties(barber);
+          const badges = getBadges(barber);
+          const isPro = barber.plano_ativo;
+
+          return (
+            <div
+              key={barber.id}
+              className="flex-shrink-0 w-[148px] bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+            >
+              {/* Faixa superior com avatar */}
+              <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 pt-4 pb-5 flex justify-center">
+                {isPro && (
+                  <div className="absolute top-2 right-2 bg-blue-600 rounded-full p-0.5">
+                    <Zap size={8} className="text-white" />
+                  </div>
+                )}
+                <div className="w-16 h-16 rounded-full border-2 border-slate-600 overflow-hidden bg-slate-700 shadow-lg">
+                  {barber.avatar_url
+                    ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name} />
+                    : <div className="w-full h-full flex items-center justify-center"><User size={24} className="text-slate-400" /></div>}
+                </div>
+              </div>
+
+              {/* Conteúdo */}
+              <div className="px-3 pt-2 pb-3">
+                <p className="font-black text-slate-900 text-xs leading-tight truncate">{barber.name}</p>
+
+                {/* Stars + nota */}
+                <div className="flex items-center gap-1.5 mt-1 mb-2">
+                  <StarRating rating={rating} />
+                  <span className="text-[9px] font-black text-amber-500">{rating}</span>
+                </div>
+
+                {/* Especialidades */}
+                {specs.length > 0 && (
+                  <div className="flex flex-col gap-0.5 mb-2">
+                    {specs.map((s, i) => (
+                      <span key={i} className="text-[8px] font-bold text-slate-500 bg-slate-50 rounded-md px-1.5 py-0.5 truncate">{s}</span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Distância */}
+                {barber.distanceLabel && (
+                  <div className="flex items-center gap-0.5">
+                    <MapPin size={9} className="text-blue-400" />
+                    <span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -1059,15 +1145,18 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
       </header>
       <main className="p-6 max-w-md mx-auto">
         {view === 'home' && (
-          <div className="space-y-6 animate-in fade-in">
-            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl">
+          <div className="space-y-1 animate-in fade-in">
+            {/* Hero card */}
+            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl mb-2">
               <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
               <div className="flex gap-2">
                 <Button variant="secondary" onClick={() => setView('booking')}>Novo Agendamento</Button>
                 <Button variant="outline" className="text-white border-white/20" onClick={() => setView('history')}>Histórico</Button>
               </div>
             </div>
-            <div className="mt-2">
+
+            {/* Galeria */}
+            <div className="mt-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
               <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
                 {[imgMp, imgMao, imgTes].map((img, i) => (
@@ -1077,6 +1166,9 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                 ))}
               </div>
             </div>
+
+            {/* ── SEÇÃO MELHORES PROFISSIONAIS ── */}
+            <TopProfessionalsSection barbers={processedBarbers} />
           </div>
         )}
 
@@ -1172,7 +1264,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
                   {processedBarbers.filter(b => b.my_services?.some(s => s.id === bookingData.service?.id)).map((b) => {
                     const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
                     const isSelected = bookingData.barber?.id === b.id;
-                    const badges = getBadges(b);
                     return (
                       <div key={b.id} onClick={() => setBookingData({ ...bookingData, barber: b, price: displayPrice })}
                         className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'}`}>
@@ -1429,7 +1520,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     } catch (error) { alert('Erro ao carregar foto.'); }
   };
 
-  // ─── UPLOAD FOTOS DO TRABALHO ─────────────────────────────────────────────
   const handleUploadWorkPhoto = async (event) => {
     if (isGuestBarber) { alert("Para adicionar fotos, faça login como profissional!"); return; }
     const file = event.target.files[0];
@@ -1561,7 +1651,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
         {activeTab === 'home' && (
           <div className="space-y-6">
-            {/* Botão copiar link — destaque no topo */}
+            {/* Link minimalista no topo */}
             {!isGuestBarber && <CopyLinkButton barber={effectiveUser} />}
 
             <div className="grid grid-cols-2 gap-4">
@@ -1740,10 +1830,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 {(effectiveUser.work_photos || []).map((url, i) => (
                   <div key={i} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
                     <img src={url} alt={`Trabalho ${i + 1}`} className="w-full h-full object-cover" />
-                    <button
-                      onClick={() => handleRemoveWorkPhoto(i)}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg"
-                    >
+                    <button onClick={() => handleRemoveWorkPhoto(i)} className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg">
                       <XCircle size={14} />
                     </button>
                   </div>
@@ -1821,7 +1908,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </section>
 
-            {/* Copiar link */}
+            {/* Link minimalista na config */}
             {!isGuestBarber && <CopyLinkButton barber={effectiveUser} />}
 
             {/* Horários disponíveis */}
@@ -1960,16 +2047,13 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
   const [isGuestBarber, setIsGuestBarber] = useState(false);
-  const [publicBarber, setPublicBarber] = useState(null); // para rota pública /:slug
+  const [publicBarber, setPublicBarber] = useState(null);
 
-  // ─── ROTEAMENTO POR SLUG ──────────────────────────────────────────────────
   useEffect(() => {
     const checkPublicRoute = async () => {
       const path = window.location.pathname;
-      // Ignora rotas vazias ou raiz
       if (!path || path === '/') {
         setLoading(false);
-        // Continua sessão normal
         restoreSession();
         return;
       }
@@ -1977,7 +2061,6 @@ export default function App() {
       if (!slug) { setLoading(false); restoreSession(); return; }
 
       try {
-        // Busca pelo slug
         const { data } = await supabase.from('profiles').select('*').eq('slug', slug).maybeSingle();
         if (data) {
           setPublicBarber(data);
@@ -1985,7 +2068,6 @@ export default function App() {
           return;
         }
       } catch (_) { }
-      // Slug não encontrado — vai para fluxo normal
       setLoading(false);
       restoreSession();
     };
@@ -2058,7 +2140,6 @@ export default function App() {
       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
       throw new Error(error.message);
     }
-    // Atualiza slug com o ID real
     const realSlug = generateSlug(name, data.id);
     await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
     const finalData = { ...data, slug: realSlug };
@@ -2114,8 +2195,9 @@ export default function App() {
     setIsGuestBarber(false);
   };
 
-  // ─── ONBOARDING: detectar se é primeira vez ────────────────────────────────
-  const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && !user.onboarding_done;
+  // ─── ONBOARDING: apenas para profissionais novos (onboarding_done === false estrito)
+  // Usuários existentes com onboarding_done null/undefined não veem onboarding
+  const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && user.onboarding_done === false;
 
   if (loading) {
     return (
@@ -2126,7 +2208,6 @@ export default function App() {
     );
   }
 
-  // ─── ROTA PÚBLICA DO PROFISSIONAL ─────────────────────────────────────────
   if (publicBarber) {
     return <PublicBarberPage barber={publicBarber} />;
   }
