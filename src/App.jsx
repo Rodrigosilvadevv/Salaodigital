@@ -769,7 +769,7 @@ const WebcamScanner = ({ onScanResult }) => {
               <input type="text"
                 value={parsedData.clientName}
                 onChange={e => setParsedData({ ...parsedData, clientName: e.target.value })}
-                placeholder="Nome completo"
+                placeholder="Nome e sobrenome"
                 className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 transition-colors"
               />
             </div>
@@ -1302,7 +1302,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         <div className="space-y-4">
           {mode === 'register' && (
             <div>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome Completo (mín. 3 letras)"
+              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome e sobrenome (mín. 3 letras)"
                 className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${name.length > 0 ? (nameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`} />
               {name.length > 0 && !nameValid && <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>}
             </div>
@@ -1674,7 +1674,7 @@ const PublicBarberPage = ({ barber }) => {
                   </div>
                   <div>
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label>
-                    <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nome completo"
+                    <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nome e sobrenome"
                       className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors" />
                   </div>
                   <div>
