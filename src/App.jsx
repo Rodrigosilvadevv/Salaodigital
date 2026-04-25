@@ -2541,11 +2541,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               <div className="flex items-center gap-2 mb-3">
                 <ScanLine size={16} className="text-blue-500" />
                 <h3 className="font-bold text-sm text-slate-900">Scanner de Caderno de Horários</h3>
-              </div>
-              <p className="text-[10px] text-slate-400 mb-3">
-                Aponte a câmera para seu caderno e extraia os horários automaticamente.
-                Requer: <code className="bg-slate-100 px-1 rounded text-blue-600">npm install tesseract.js</code>
-              </p>
+              </div> 
               <WebcamScanner onScanResult={(text) => {
                 console.log('OCR result:', text);
               }} />
@@ -2581,7 +2577,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 <p className="text-2xl mb-2">✂️</p>
                 <h3 className="font-black text-slate-900 mb-1">Gostou do que viu?</h3>
                 <p className="text-xs text-slate-500 mb-4">Crie sua conta profissional e comece a receber agendamentos hoje!</p>
-                <button onClick={onLogout} className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">Criar Conta Profissional</button>
+                <button onClick={onLogout} className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">tenha gratis - utimas 13</button>
               </section>
             )}
 
