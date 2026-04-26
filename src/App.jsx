@@ -1,3 +1,28 @@
+/*
+  ╔══════════════════════════════════════════════════════════════╗
+  ║  SALÃO DIGITAL — App.jsx  VERSÃO COMPLETA                   ║
+  ║  Admin Dashboard: /estrela2016-v2                            ║
+  ╠══════════════════════════════════════════════════════════════╣
+  ║  SUPABASE SETUP NECESSÁRIO (execute no SQL Editor):          ║
+  ║                                                              ║
+  ║  CREATE TABLE IF NOT EXISTS admin_users (                    ║
+  ║    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,            ║
+  ║    username text UNIQUE NOT NULL,                            ║
+  ║    password text NOT NULL,                                   ║
+  ║    created_at timestamptz DEFAULT now()                      ║
+  ║  );                                                          ║
+  ║                                                              ║
+  ║  ALTER TABLE profiles                                        ║
+  ║    ADD COLUMN IF NOT EXISTS admin_tags text[] DEFAULT '{}',  ║
+  ║    ADD COLUMN IF NOT EXISTS featured_rank integer;           ║
+  ║                                                              ║
+  ║  ALTER TABLE support_messages                                ║
+  ║    ADD COLUMN IF NOT EXISTS reply text,                      ║
+  ║    ADD COLUMN IF NOT EXISTS replied_at timestamptz,          ║
+  ║    ADD COLUMN IF NOT EXISTS read_at timestamptz;             ║
+  ╚══════════════════════════════════════════════════════════════╝
+*/
+
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
@@ -13,82 +38,47 @@ import {
   Home, Plus, Camera,
   CheckCircle, ArrowLeft, Send, Headphones, Copy, Link, Image, Shield, Award, Zap, ExternalLink,
   BarChart2, TrendingUp, Moon, Sun, ScanLine, Video, VideoOff, RefreshCw, PlusCircle, X,
-  Gift, QrCode, Type, FileText
+  Gift, QrCode, Type, FileText, Users, Tag, Settings, Activity, MessageSquare,
+  ChevronDown, ChevronUp, Search, Filter, Reply, MoreVertical, Circle, TrendingDown,
+  Percent, Target, AlertCircle, CheckSquare
 } from 'lucide-react';
 
-const APP_VERSION = 'v6.0';
+const APP_VERSION = 'v6.1';
 
 const supabaseUrl = 'https://llswpmdogevsnsrhnsrw.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxsc3dwbWRvZ2V2c25zcmhuc3J3Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3Mjg0ODQyOSwiZXhwIjoyMDg4NDI0NDI5fQ.6-GC3bxG3MZrywItAY04mqLzwWcKJVWLjFBVDx7ahCk';
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ─── DARK MODE — CSS VARS INTELIGENTE ─────────────────────────────────────────
+// ─── DARK MODE CSS ────────────────────────────────────────────────────────────
 const injectDarkModeCSS = (isDark) => {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-
   let styleEl = document.getElementById('dm-override');
-  if (!styleEl) {
-    styleEl = document.createElement('style');
-    styleEl.id = 'dm-override';
-    document.head.appendChild(styleEl);
-  }
-
+  if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'dm-override'; document.head.appendChild(styleEl); }
   styleEl.textContent = `
-    *, *::before, *::after {
-      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease, box-shadow 0.25s ease !important;
-    }
-
-    :root {
-      --c-bg: #f8fafc;
-      --c-surface: #ffffff;
-      --c-surface2: #f1f5f9;
-      --c-border: #e2e8f0;
-      --c-border2: #cbd5e1;
-      --c-text: #0f172a;
-      --c-text2: #475569;
-      --c-muted: #94a3b8;
-      --c-shadow: rgba(0,0,0,0.08);
-      --c-shadow-xl: rgba(0,0,0,0.15);
-    }
-
-    [data-theme="dark"] {
-      --c-bg: #0f172a;
-      --c-surface: #1e293b;
-      --c-surface2: #273548;
-      --c-border: #334155;
-      --c-border2: #475569;
-      --c-text: #f1f5f9;
-      --c-text2: #cbd5e1;
-      --c-muted: #64748b;
-      --c-shadow: rgba(0,0,0,0.4);
-      --c-shadow-xl: rgba(0,0,0,0.6);
-    }
-
-    [data-theme="dark"] body { background-color: #0f172a !important; }
-    [data-theme="dark"] .bg-white { background-color: #1e293b !important; }
-    [data-theme="dark"] .bg-slate-50 { background-color: #0f172a !important; }
-    [data-theme="dark"] .bg-slate-100 { background-color: #1e293b !important; }
-    [data-theme="dark"] .bg-slate-200 { background-color: #273548 !important; }
-    [data-theme="dark"] .text-slate-900 { color: #f1f5f9 !important; }
-    [data-theme="dark"] .text-slate-800 { color: #e2e8f0 !important; }
-    [data-theme="dark"] .text-slate-700 { color: #cbd5e1 !important; }
-    [data-theme="dark"] .text-slate-600 { color: #94a3b8 !important; }
-    [data-theme="dark"] .text-slate-500 { color: #64748b !important; }
-    [data-theme="dark"] .border-slate-100 { border-color: #334155 !important; }
-    [data-theme="dark"] .border-slate-200 { border-color: #334155 !important; }
-    [data-theme="dark"] .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.5) !important; }
-    [data-theme="dark"] .shadow-xl { box-shadow: 0 20px 40px rgba(0,0,0,0.6) !important; }
-    [data-theme="dark"] .bg-amber-50 { background-color: #1c1a0e !important; }
-    [data-theme="dark"] .bg-blue-50 { background-color: #0c1929 !important; }
-    [data-theme="dark"] .bg-green-50 { background-color: #0a1f12 !important; }
-    [data-theme="dark"] .bg-purple-50 { background-color: #150d1f !important; }
-    [data-theme="dark"] .bg-red-50 { background-color: #1f0d0d !important; }
-    [data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea {
-      background-color: #273548 !important;
-      color: #f1f5f9 !important;
-      border-color: #334155 !important;
-    }
-    [data-theme="dark"] input::placeholder { color: #64748b !important; }
+    *, *::before, *::after { transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease, box-shadow 0.25s ease !important; }
+    :root { --c-bg:#f8fafc;--c-surface:#ffffff;--c-surface2:#f1f5f9;--c-border:#e2e8f0;--c-border2:#cbd5e1;--c-text:#0f172a;--c-text2:#475569;--c-muted:#94a3b8;--c-shadow:rgba(0,0,0,0.08);--c-shadow-xl:rgba(0,0,0,0.15); }
+    [data-theme="dark"] { --c-bg:#0f172a;--c-surface:#1e293b;--c-surface2:#273548;--c-border:#334155;--c-border2:#475569;--c-text:#f1f5f9;--c-text2:#cbd5e1;--c-muted:#64748b;--c-shadow:rgba(0,0,0,0.4);--c-shadow-xl:rgba(0,0,0,0.6); }
+    [data-theme="dark"] body{background-color:#0f172a!important}
+    [data-theme="dark"] .bg-white{background-color:#1e293b!important}
+    [data-theme="dark"] .bg-slate-50{background-color:#0f172a!important}
+    [data-theme="dark"] .bg-slate-100{background-color:#1e293b!important}
+    [data-theme="dark"] .bg-slate-200{background-color:#273548!important}
+    [data-theme="dark"] .text-slate-900{color:#f1f5f9!important}
+    [data-theme="dark"] .text-slate-800{color:#e2e8f0!important}
+    [data-theme="dark"] .text-slate-700{color:#cbd5e1!important}
+    [data-theme="dark"] .text-slate-600{color:#94a3b8!important}
+    [data-theme="dark"] .text-slate-500{color:#64748b!important}
+    [data-theme="dark"] .border-slate-100{border-color:#334155!important}
+    [data-theme="dark"] .border-slate-200{border-color:#334155!important}
+    [data-theme="dark"] .shadow-sm{box-shadow:0 1px 3px rgba(0,0,0,0.5)!important}
+    [data-theme="dark"] .shadow-xl{box-shadow:0 20px 40px rgba(0,0,0,0.6)!important}
+    [data-theme="dark"] .bg-amber-50{background-color:#1c1a0e!important}
+    [data-theme="dark"] .bg-blue-50{background-color:#0c1929!important}
+    [data-theme="dark"] .bg-green-50{background-color:#0a1f12!important}
+    [data-theme="dark"] .bg-purple-50{background-color:#150d1f!important}
+    [data-theme="dark"] .bg-red-50{background-color:#1f0d0d!important}
+    [data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background-color:#273548!important;color:#f1f5f9!important;border-color:#334155!important}
+    [data-theme="dark"] input::placeholder{color:#64748b!important}
   `;
 };
 
@@ -98,183 +88,108 @@ const injectScannerCSS = () => {
   const style = document.createElement('style');
   style.id = 'scanner-css';
   style.textContent = `
-    @keyframes scanLine {
-      0%   { top: 5%; opacity: 1; }
-      49%  { opacity: 1; }
-      50%  { top: 90%; opacity: 0.8; }
-      100% { top: 5%; opacity: 1; }
-    }
-    @keyframes scanPulse {
-      0%, 100% { border-color: rgba(59,130,246,0.5); }
-      50% { border-color: rgba(59,130,246,0.9); }
-    }
-    .scan-line {
-      position: absolute; left: 0; right: 0; height: 2px;
-      background: linear-gradient(90deg, transparent 0%, #60a5fa 20%, #93c5fd 50%, #60a5fa 80%, transparent 100%);
-      box-shadow: 0 0 14px 4px rgba(96,165,250,0.7);
-      animation: scanLine 2s ease-in-out infinite;
-      z-index: 10; pointer-events: none;
-    }
-    .scan-overlay-border {
-      position: absolute; inset: 0;
-      border: 2px solid rgba(59,130,246,0.4); border-radius: 12px;
-      animation: scanPulse 2s ease-in-out infinite; pointer-events: none;
-    }
-    .scan-corner { position: absolute; width: 20px; height: 20px; border-color: #3b82f6; border-style: solid; opacity: 0.9; }
-    .scan-corner-tl { top: 6px; left: 6px; border-width: 3px 0 0 3px; border-radius: 3px 0 0 0; }
-    .scan-corner-tr { top: 6px; right: 6px; border-width: 3px 3px 0 0; border-radius: 0 3px 0 0; }
-    .scan-corner-bl { bottom: 6px; left: 6px; border-width: 0 0 3px 3px; border-radius: 0 0 0 3px; }
-    .scan-corner-br { bottom: 6px; right: 6px; border-width: 0 3px 3px 0; border-radius: 0 0 3px 0; }
-    @keyframes storyPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.03); } }
-    .story-ring-animated { animation: storyPulse 3s ease-in-out infinite; }
-    @keyframes goalPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.4); } 70% { box-shadow: 0 0 0 12px rgba(251,191,36,0); } }
-    .goal-pulse { animation: goalPulse 2s ease-in-out infinite; }
+    @keyframes scanLine{0%{top:5%;opacity:1}49%{opacity:1}50%{top:90%;opacity:0.8}100%{top:5%;opacity:1}}
+    @keyframes scanPulse{0%,100%{border-color:rgba(59,130,246,0.5)}50%{border-color:rgba(59,130,246,0.9)}}
+    .scan-line{position:absolute;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,#60a5fa 20%,#93c5fd 50%,#60a5fa 80%,transparent 100%);box-shadow:0 0 14px 4px rgba(96,165,250,0.7);animation:scanLine 2s ease-in-out infinite;z-index:10;pointer-events:none}
+    .scan-overlay-border{position:absolute;inset:0;border:2px solid rgba(59,130,246,0.4);border-radius:12px;animation:scanPulse 2s ease-in-out infinite;pointer-events:none}
+    .scan-corner{position:absolute;width:20px;height:20px;border-color:#3b82f6;border-style:solid;opacity:0.9}
+    .scan-corner-tl{top:6px;left:6px;border-width:3px 0 0 3px;border-radius:3px 0 0 0}
+    .scan-corner-tr{top:6px;right:6px;border-width:3px 3px 0 0;border-radius:0 3px 0 0}
+    .scan-corner-bl{bottom:6px;left:6px;border-width:0 0 3px 3px;border-radius:0 0 0 3px}
+    .scan-corner-br{bottom:6px;right:6px;border-width:0 3px 3px 0;border-radius:0 0 3px 0}
+    @keyframes storyPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+    .story-ring-animated{animation:storyPulse 3s ease-in-out infinite}
+    @keyframes goalPulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0.4)}70%{box-shadow:0 0 0 12px rgba(251,191,36,0)}}
+    .goal-pulse{animation:goalPulse 2s ease-in-out infinite}
   `;
   document.head.appendChild(style);
 };
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const generateSlug = (name, id) => {
-  const normalized = name
-    .toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
+  const normalized = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'-');
   return `${normalized}-${String(id).slice(-4)}`;
 };
-
 const getPublicUrl = (slug) => `${window.location.origin}/${slug}`;
-
-// ─── PHONE MASK ───────────────────────────────────────────────────────────────
 const applyPhoneMask = (value) => {
-  const digits = value.replace(/\D/g, '').slice(0, 11);
-  if (digits.length <= 2) return digits;
-  if (digits.length <= 7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
-  if (digits.length <= 11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+  const digits = value.replace(/\D/g,'').slice(0,11);
+  if (digits.length<=2) return digits;
+  if (digits.length<=7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
+  if (digits.length<=11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
   return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7,11)}`;
 };
+const getPhoneDigits = (phone) => phone.replace(/\D/g,'');
 
-const getPhoneDigits = (phone) => phone.replace(/\D/g, '');
-
-// ─── IMAGE PREPROCESSOR — "FILTRO MÁGICO" ────────────────────────────────────
-const preprocessImage = (imageSrc) => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      ctx.drawImage(img, 0, 0);
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-
-      // Parâmetros do filtro
-      const contrastFactor = 2.4;  // Aumenta contraste entre texto e fundo
-      const brightnessDelta = -30; // Escurece levemente para texto aparecer mais
-      const threshold = 145;       // Limiar de binarização (preto ou branco)
-
-      for (let i = 0; i < data.length; i += 4) {
-        // 1. Converte para escala de cinza (luminância perceptiva)
-        const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        // 2. Aplica contraste e brilho
-        let val = (gray - 128) * contrastFactor + 128 + brightnessDelta;
-        val = Math.max(0, Math.min(255, val));
-        // 3. Binariza: tudo acima do threshold vira branco, abaixo vira preto
-        val = val > threshold ? 255 : 0;
-        data[i] = val;
-        data[i + 1] = val;
-        data[i + 2] = val;
-        // Canal alpha inalterado
-      }
-
-      ctx.putImageData(imageData, 0, 0);
-      resolve(canvas.toDataURL('image/png'));
-    };
-    img.onerror = () => resolve(imageSrc); // fallback
-    img.src = imageSrc;
-  });
-};
-
-// ─── PARSER OCR — REGEX EM PORTUGUÊS ──────────────────────────────────────────
-const parseOCRResult = (text) => {
-  if (!text) return { date: '', time: '', clientName: '', phone: '', service: '' };
-
-  // Data: DD/MM, DD/MM/AAAA, DD-MM-AAAA, DD.MM.AAAA
-  const dateRegex = /\b(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?\b/;
-  const dateMatch = text.match(dateRegex);
-  let date = '';
-  if (dateMatch) {
-    const d = dateMatch[1].padStart(2, '0');
-    const m = dateMatch[2].padStart(2, '0');
-    const y = dateMatch[3]
-      ? (dateMatch[3].length === 2 ? `20${dateMatch[3]}` : dateMatch[3])
-      : new Date().getFullYear().toString();
-    date = `${d}/${m}/${y}`;
-  }
-
-  // Horário: HH:MM (formato 24h ou 12h)
-  const timeRegex = /\b([01]?\d|2[0-3]):([0-5]\d)\b/;
-  const timeMatch = text.match(timeRegex);
-  const time = timeMatch
-    ? `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`
-    : '';
-
-  // Telefone: vários formatos brasileiros
-  const phoneRegex = /(?:\(?\d{2}\)?\s?)?(?:9\s?\d{4}|\d{4})\s?[-]?\s?\d{4}/g;
-  const phoneMatches = [...text.matchAll(phoneRegex)];
-  const phone = phoneMatches.length > 0
-    ? phoneMatches[0][0].replace(/\s/g, '')
-    : '';
-
-  // Nome do cliente: após palavras-chave ou linha capitalizada
-  const nameKeywordRegex = /(?:nome|cliente|paciente|para|com)\s*:?\s*([A-ZÀ-Úa-zà-ú][a-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú][a-zà-ú]+){0,3})/i;
-  const nameCapRegex = /^([A-ZÀ-Ú][a-zà-ú]{2,}(?:\s+[A-ZÀ-Ú][a-zà-ú]{2,})+)$/m;
-  const nameKeyMatch = text.match(nameKeywordRegex);
-  const nameCapMatch = text.match(nameCapRegex);
-  const clientName = nameKeyMatch
-    ? nameKeyMatch[1].trim()
-    : (nameCapMatch ? nameCapMatch[1].trim() : '');
-
-  // Serviço: verifica contra lista de serviços cadastrados
-  const lowerText = text.toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  let service = '';
-  for (const s of MASTER_SERVICES) {
-    const normalized = s.name.toLowerCase()
-      .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    // Verifica ao menos 5 chars da palavra-chave
-    const keyword = normalized.split(' ')[0].slice(0, 5);
-    if (keyword.length >= 4 && lowerText.includes(keyword)) {
-      service = s.name;
-      break;
+// ─── IMAGE PREPROCESSOR ───────────────────────────────────────────────────────
+const preprocessImage = (imageSrc) => new Promise((resolve) => {
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = img.width; canvas.height = img.height;
+    ctx.drawImage(img,0,0);
+    const imageData = ctx.getImageData(0,0,canvas.width,canvas.height);
+    const data = imageData.data;
+    const contrastFactor=2.4, brightnessDelta=-30, threshold=145;
+    for (let i=0;i<data.length;i+=4) {
+      const gray=0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+      let val=(gray-128)*contrastFactor+128+brightnessDelta;
+      val=Math.max(0,Math.min(255,val));
+      val=val>threshold?255:0;
+      data[i]=data[i+1]=data[i+2]=val;
     }
-  }
+    ctx.putImageData(imageData,0,0);
+    resolve(canvas.toDataURL('image/png'));
+  };
+  img.onerror=()=>resolve(imageSrc);
+  img.src=imageSrc;
+});
 
-  // Fallback: procura após "serviço:", "procedimento:", "atend:"
-  if (!service) {
-    const svcKeyRegex = /(?:servi[cç]o|procedimento|atend|trat)\s*:?\s*(.{3,30})/i;
-    const svcMatch = text.match(svcKeyRegex);
-    if (svcMatch) service = svcMatch[1].trim().split('\n')[0];
-  }
-
-  return { date, time, clientName, phone, service };
-};
-
+// ─── MASTER SERVICES ──────────────────────────────────────────────────────────
 const MASTER_SERVICES = [
-  { id: 1, name: 'Corte Degradê', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'hair' },
-  { id: 2, name: 'Barba Terapia', defaultPrice: 40, duration: '30min', icon: <User size={20} />, category: 'beard' },
-  { id: 3, name: 'Combo Completo', defaultPrice: 80, duration: '1h 15min', icon: <Star size={20} />, category: 'combo' },
-  { id: 4, name: 'Luzes / Platinado', defaultPrice: 120, duration: '2h', icon: <Sparkles size={20} />, category: 'chemical' },
-  { id: 6, name: 'Design Sobrancelhas', defaultPrice: 35, duration: '30min', icon: <Eye size={20} />, category: 'eyebrow' },
-  { id: 7, name: 'Nail design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'nail' },
-  { id: 8, name: 'Manicure/Pedicure', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'foot' },
-  { id: 9, name: 'Limpeza facial', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'face' },
-  { id: 10, name: 'Massagem e drenagem', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'dren' },
-  { id: 12, name: 'Lash design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'lash' },
-  { id: 13, name: 'Micro Pig Sobrancelha', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'face' },
-  { id: 14, name: 'Designer com Henna', defaultPrice: 50, duration: '45min', icon: <Scissors size={20} />, category: 'face' },
+  { id:1,name:'Corte Degradê',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'hair' },
+  { id:2,name:'Barba Terapia',defaultPrice:40,duration:'30min',icon:<User size={20}/>,category:'beard' },
+  { id:3,name:'Combo Completo',defaultPrice:80,duration:'1h 15min',icon:<Star size={20}/>,category:'combo' },
+  { id:4,name:'Luzes / Platinado',defaultPrice:120,duration:'2h',icon:<Sparkles size={20}/>,category:'chemical' },
+  { id:6,name:'Design Sobrancelhas',defaultPrice:35,duration:'30min',icon:<Eye size={20}/>,category:'eyebrow' },
+  { id:7,name:'Nail design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'nail' },
+  { id:8,name:'Manicure/Pedicure',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'foot' },
+  { id:9,name:'Limpeza facial',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+  { id:10,name:'Massagem e drenagem',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'dren' },
+  { id:12,name:'Lash design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'lash' },
+  { id:13,name:'Micro Pig Sobrancelha',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+  { id:14,name:'Designer com Henna',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
 ];
+
+// ─── OCR PARSER ───────────────────────────────────────────────────────────────
+const parseOCRResult = (text) => {
+  if (!text) return { date:'',time:'',clientName:'',phone:'',service:'' };
+  const dateRegex=/\b(\d{1,2})[\/\-\.](\d{1,2})(?:[\/\-\.](\d{2,4}))?\b/;
+  const dateMatch=text.match(dateRegex);
+  let date='';
+  if (dateMatch) {
+    const d=dateMatch[1].padStart(2,'0'), m=dateMatch[2].padStart(2,'0');
+    const y=dateMatch[3]?(dateMatch[3].length===2?`20${dateMatch[3]}`:dateMatch[3]):new Date().getFullYear().toString();
+    date=`${d}/${m}/${y}`;
+  }
+  const timeMatch=text.match(/\b([01]?\d|2[0-3]):([0-5]\d)\b/);
+  const time=timeMatch?`${timeMatch[1].padStart(2,'0')}:${timeMatch[2]}`:'';
+  const phoneMatches=[...text.matchAll(/(?:\(?\d{2}\)?\s?)?(?:9\s?\d{4}|\d{4})\s?[-]?\s?\d{4}/g)];
+  const phone=phoneMatches.length>0?phoneMatches[0][0].replace(/\s/g,''):'';
+  const nameKeyMatch=text.match(/(?:nome|cliente|paciente|para|com)\s*:?\s*([A-ZÀ-Úa-zà-ú][a-zà-ú]+(?:\s+[A-ZÀ-Úa-zà-ú][a-zà-ú]+){0,3})/i);
+  const nameCapMatch=text.match(/^([A-ZÀ-Ú][a-zà-ú]{2,}(?:\s+[A-ZÀ-Ú][a-zà-ú]{2,})+)$/m);
+  const clientName=nameKeyMatch?nameKeyMatch[1].trim():(nameCapMatch?nameCapMatch[1].trim():'');
+  const lowerText=text.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  let service='';
+  for (const s of MASTER_SERVICES) {
+    const normalized=s.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const keyword=normalized.split(' ')[0].slice(0,5);
+    if (keyword.length>=4&&lowerText.includes(keyword)) { service=s.name; break; }
+  }
+  if (!service) { const svcMatch=text.match(/(?:servi[cç]o|procedimento|atend|trat)\s*:?\s*(.{3,30})/i); if (svcMatch) service=svcMatch[1].trim().split('\n')[0]; }
+  return { date,time,clientName,phone,service };
+};
 
 const GLOBAL_TIME_SLOTS = [
   '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
@@ -282,50 +197,34 @@ const GLOBAL_TIME_SLOTS = [
   '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30',
   '20:00','20:30','21:00','21:30','22:00'
 ];
-
-const MONTH_NAMES = [
-  'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-  'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'
-];
-
-const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-
-const formatDate = (year, month, day) => {
-  const mm = String(month + 1).padStart(2, '0');
-  const dd = String(day).padStart(2, '0');
-  return `${year}-${mm}-${dd}`;
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const getDaysInMonth = (year,month) => new Date(year,month+1,0).getDate();
+const formatDate = (year,month,day) => `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+const calculateDistance = (lat1,lon1,lat2,lon2) => {
+  if (!lat1||!lon1||!lat2||!lon2) return null;
+  const R=6371,dLat=(lat2-lat1)*(Math.PI/180),dLon=(lon2-lon1)*(Math.PI/180);
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*(Math.PI/180))*Math.cos(lat2*(Math.PI/180))*Math.sin(dLon/2)**2;
+  return parseFloat((R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(1));
 };
 
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-  const R = 6371;
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = Math.sin(dLat / 2) ** 2 +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) ** 2;
-  return parseFloat((R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))).toFixed(1));
-};
-
-// ─── BADGES ───────────────────────────────────────────────────────────────────
+// ─── BADGES & RATINGS ─────────────────────────────────────────────────────────
 const getBadges = (barber) => {
-  const badges = [];
-  const services = barber.my_services || [];
-  const slots = barber.available_slots || {};
-  const totalSlots = Object.values(slots).reduce((acc, arr) => acc + (arr?.length || 0), 0);
-  if (barber.plano_ativo) badges.push({ label: 'Pro', color: 'bg-blue-600 text-white', icon: <Zap size={9} /> });
-  if (services.length >= 5) badges.push({ label: 'Especialista', color: 'bg-purple-600 text-white', icon: <Award size={9} /> });
-  if (totalSlots >= 20) badges.push({ label: 'Agenda Cheia', color: 'bg-green-600 text-white', icon: <Calendar size={9} /> });
-  if (barber.avatar_url && barber.address) badges.push({ label: 'Verificado', color: 'bg-slate-900 text-white', icon: <Shield size={9} /> });
+  const badges=[], services=barber.my_services||[], slots=barber.available_slots||{};
+  const totalSlots=Object.values(slots).reduce((acc,arr)=>acc+(arr?.length||0),0);
+  if (barber.plano_ativo) badges.push({label:'Pro',color:'bg-blue-600 text-white',icon:<Zap size={9}/>});
+  if (services.length>=5) badges.push({label:'Especialista',color:'bg-purple-600 text-white',icon:<Award size={9}/>});
+  if (totalSlots>=20) badges.push({label:'Agenda Cheia',color:'bg-green-600 text-white',icon:<Calendar size={9}/>});
+  if (barber.avatar_url&&barber.address) badges.push({label:'Verificado',color:'bg-slate-900 text-white',icon:<Shield size={9}/>});
   return badges;
 };
 
 const BadgeList = ({ barber, small }) => {
-  const badges = getBadges(barber);
+  const badges=getBadges(barber);
   if (!badges.length) return null;
   return (
     <div className="flex flex-wrap gap-1 mt-1">
-      {badges.map((b, i) => (
-        <span key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full font-bold ${small ? 'text-[8px]' : 'text-[9px]'} ${b.color}`}>
+      {badges.map((b,i)=>(
+        <span key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full font-bold ${small?'text-[8px]':'text-[9px]'} ${b.color}`}>
           {b.icon} {b.label}
         </span>
       ))}
@@ -333,58 +232,46 @@ const BadgeList = ({ barber, small }) => {
   );
 };
 
-// ─── RATING ───────────────────────────────────────────────────────────────────
 const getBarberRating = (barber) => {
-  const badges = getBadges(barber);
-  const serviceCount = (barber.my_services || []).length;
-  let score = 3.5;
-  if (barber.plano_ativo) score += 0.5;
-  if (barber.avatar_url) score += 0.3;
-  if (barber.address) score += 0.2;
-  if (serviceCount >= 5) score += 0.3;
-  if (badges.find(b => b.label === 'Verificado')) score += 0.2;
-  return Math.min(5, parseFloat(score.toFixed(1)));
+  const badges=getBadges(barber);
+  let score=3.5;
+  if (barber.plano_ativo) score+=0.5;
+  if (barber.avatar_url) score+=0.3;
+  if (barber.address) score+=0.2;
+  if ((barber.my_services||[]).length>=5) score+=0.3;
+  if (badges.find(b=>b.label==='Verificado')) score+=0.2;
+  return Math.min(5,parseFloat(score.toFixed(1)));
 };
 
 const StarRating = ({ rating }) => {
-  const full = Math.floor(rating);
-  const half = rating % 1 >= 0.5;
+  const full=Math.floor(rating), half=rating%1>=0.5;
   return (
     <div className="flex items-center gap-0.5">
-      {Array.from({ length: 5 }, (_, i) => (
+      {Array.from({length:5},(_,i)=>(
         <svg key={i} width="10" height="10" viewBox="0 0 10 10" fill="none">
           <path d="M5 1l1.12 2.27 2.51.36-1.82 1.77.43 2.5L5 6.77l-2.24 1.13.43-2.5L1.37 3.63l2.51-.36z"
-            fill={i < full ? '#f59e0b' : (i === full && half ? 'url(#half)' : '#e2e8f0')}
-            stroke={i < full || (i === full && half) ? '#f59e0b' : '#cbd5e1'} strokeWidth="0.5" />
-          {i === full && half && (
-            <defs><linearGradient id="half"><stop offset="50%" stopColor="#f59e0b" /><stop offset="50%" stopColor="#e2e8f0" /></linearGradient></defs>
-          )}
+            fill={i<full?'#f59e0b':(i===full&&half?'url(#half)':'#e2e8f0')}
+            stroke={i<full||(i===full&&half)?'#f59e0b':'#cbd5e1'} strokeWidth="0.5"/>
+          {i===full&&half&&<defs><linearGradient id="half"><stop offset="50%" stopColor="#f59e0b"/><stop offset="50%" stopColor="#e2e8f0"/></linearGradient></defs>}
         </svg>
       ))}
     </div>
   );
 };
 
-// ─── STORY RING ───────────────────────────────────────────────────────────────
-const StoryRing = ({ rating, size = 72, children, animate = false }) => {
-  const pct = Math.min(1, rating / 5);
-  const strokeW = 3;
-  const r = (size - strokeW * 2) / 2;
-  const circ = 2 * Math.PI * r;
-  const offset = circ * (1 - pct);
-  const ringColor = rating >= 4.5 ? '#f59e0b' : rating >= 4.0 ? '#3b82f6' : rating >= 3.5 ? '#10b981' : '#94a3b8';
-  const ratingBg = rating >= 4.5 ? 'bg-amber-500' : rating >= 4.0 ? 'bg-blue-600' : rating >= 3.5 ? 'bg-green-600' : 'bg-slate-500';
+const StoryRing = ({ rating, size=72, children, animate=false }) => {
+  const pct=Math.min(1,rating/5), strokeW=3, r=(size-strokeW*2)/2, circ=2*Math.PI*r, offset=circ*(1-pct);
+  const ringColor=rating>=4.5?'#f59e0b':rating>=4.0?'#3b82f6':rating>=3.5?'#10b981':'#94a3b8';
+  const ratingBg=rating>=4.5?'bg-amber-500':rating>=4.0?'bg-blue-600':rating>=3.5?'bg-green-600':'bg-slate-500';
   return (
-    <div className={`relative inline-flex items-center justify-center ${animate ? 'story-ring-animated' : ''}`} style={{ width: size, height: size }}>
+    <div className={`relative inline-flex items-center justify-center ${animate?'story-ring-animated':''}`} style={{width:size,height:size}}>
       <svg className="absolute inset-0" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeW} opacity="0.4" />
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeW} opacity="0.4"/>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={ringColor} strokeWidth={strokeW}
           strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
-          transform={`rotate(-90 ${size/2} ${size/2})`} style={{ filter: `drop-shadow(0 0 4px ${ringColor}88)` }} />
+          transform={`rotate(-90 ${size/2} ${size/2})`} style={{filter:`drop-shadow(0 0 4px ${ringColor}88)`}}/>
       </svg>
-      <div style={{ width: size - strokeW * 4, height: size - strokeW * 4 }} className="rounded-full overflow-hidden">
-        {children}
-      </div>
+      <div style={{width:size-strokeW*4,height:size-strokeW*4}} className="rounded-full overflow-hidden">{children}</div>
       <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 ${ratingBg} text-white rounded-full text-[8px] font-black px-1.5 py-0.5 shadow-lg border border-white leading-none whitespace-nowrap`}>
         ★ {rating}
       </div>
@@ -392,293 +279,209 @@ const StoryRing = ({ rating, size = 72, children, animate = false }) => {
   );
 };
 
-// ─── DARK MODE TOGGLE ─────────────────────────────────────────────────────────
 const DarkModeToggle = ({ isDark, onToggle }) => (
-  <button onClick={onToggle} title={isDark ? 'Modo Claro' : 'Modo Escuro'}
-    className="relative flex-shrink-0 transition-all active:scale-90" style={{ width: 34, height: 34 }}>
-    <div className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all duration-500 shadow-md
-      ${isDark ? 'bg-slate-800 border-slate-600' : 'bg-gradient-to-br from-yellow-100 to-amber-100 border-yellow-300 shadow-yellow-200'}`}>
-      {isDark
-        ? <Moon size={15} className="text-blue-300" />
-        : <Sun size={15} className="text-yellow-500" />}
+  <button onClick={onToggle} title={isDark?'Modo Claro':'Modo Escuro'} className="relative flex-shrink-0 transition-all active:scale-90" style={{width:34,height:34}}>
+    <div className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all duration-500 shadow-md ${isDark?'bg-slate-800 border-slate-600':'bg-gradient-to-br from-yellow-100 to-amber-100 border-yellow-300 shadow-yellow-200'}`}>
+      {isDark?<Moon size={15} className="text-blue-300"/>:<Sun size={15} className="text-yellow-500"/>}
     </div>
-    {/* Indicador animado */}
-    <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white transition-all duration-500
-      ${isDark ? 'bg-blue-400' : 'bg-yellow-400'}`} />
+    <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white transition-all duration-500 ${isDark?'bg-blue-400':'bg-yellow-400'}`}/>
   </button>
 );
 
-// ─── GOAL CARD — META DOS 30 ATENDIMENTOS ─────────────────────────────────────
+// ─── GOAL CARD ────────────────────────────────────────────────────────────────
 const GoalCard = ({ totalAppointments, slug, isGuest }) => {
-  const META_GOAL = 30;
-  const progress = Math.min(100, Math.round((totalAppointments / META_GOAL) * 100));
-  const achieved = totalAppointments >= META_GOAL;
-  const remaining = META_GOAL - totalAppointments;
-  const publicUrl = getPublicUrl(slug || 'profissional');
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicUrl)}&bgcolor=fffbeb&color=92400e&margin=4&qzone=1`;
-  const SUPPORT_WHATSAPP = '5541992931394';
-
+  const META_GOAL=30, progress=Math.min(100,Math.round((totalAppointments/META_GOAL)*100)), achieved=totalAppointments>=META_GOAL, remaining=META_GOAL-totalAppointments;
+  const publicUrl=getPublicUrl(slug||'profissional');
+  const qrCodeUrl=`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicUrl)}&bgcolor=fffbeb&color=92400e&margin=4&qzone=1`;
+  const SUPPORT_WHATSAPP='5541992931394';
   return (
-    <div className={`rounded-3xl border-2 overflow-hidden transition-all ${
-      achieved
-        ? 'border-amber-400 shadow-xl shadow-amber-100'
-        : 'border-slate-200 bg-white shadow-sm'
-    }`}>
-      {/* Header */}
-      <div className={`p-4 flex items-center gap-3 ${achieved ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-white'}`}>
-        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${achieved ? 'bg-white/20' : 'bg-amber-100'}`}>
-          {achieved
-            ? <Gift size={20} className="text-white" />
-            : <Award size={20} className="text-amber-500" />}
+    <div className={`rounded-3xl border-2 overflow-hidden transition-all ${achieved?'border-amber-400 shadow-xl shadow-amber-100':'border-slate-200 bg-white shadow-sm'}`}>
+      <div className={`p-4 flex items-center gap-3 ${achieved?'bg-gradient-to-r from-amber-400 to-orange-400':'bg-white'}`}>
+        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${achieved?'bg-white/20':'bg-amber-100'}`}>
+          {achieved?<Gift size={20} className="text-white"/>:<Award size={20} className="text-amber-500"/>}
         </div>
         <div className="flex-1">
-          <p className={`font-black text-sm ${achieved ? 'text-white' : 'text-slate-900'}`}>
-            Meta dos {META_GOAL} Atendimentos
-          </p>
-          <p className={`text-[10px] font-bold ${achieved ? 'text-white/80' : 'text-slate-400'}`}>
-            {achieved ? '🎉 Parabéns! Você desbloqueou recompensas!' : 'Complete e ganhe prêmios exclusivos!'}
-          </p>
+          <p className={`font-black text-sm ${achieved?'text-white':'text-slate-900'}`}>Meta dos {META_GOAL} Atendimentos</p>
+          <p className={`text-[10px] font-bold ${achieved?'text-white/80':'text-slate-400'}`}>{achieved?'🎉 Parabéns! Você desbloqueou recompensas!':'Complete e ganhe prêmios exclusivos!'}</p>
         </div>
-        {achieved && <span className="text-white text-xl">🏆</span>}
+        {achieved&&<span className="text-white text-xl">🏆</span>}
       </div>
-
       <div className="p-4 bg-white space-y-3">
-        {/* Barra de progresso */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-bold text-slate-500">Progresso</span>
             <span className="text-[10px] font-black text-slate-900">{totalAppointments}/{META_GOAL}</span>
           </div>
           <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
-            <div
-              className={`h-full rounded-full transition-all duration-1000 ${achieved ? 'bg-gradient-to-r from-amber-400 to-orange-400' : 'bg-gradient-to-r from-blue-400 to-blue-600'} ${achieved ? 'goal-pulse' : ''}`}
-              style={{ width: `${progress}%` }}
-            />
-            {/* Milestones */}
-            {[25, 50, 75].map(pct => (
-              <div key={pct} className="absolute top-0 bottom-0 w-0.5 bg-white/50" style={{ left: `${pct}%` }} />
+            <div className={`h-full rounded-full transition-all duration-1000 ${achieved?'bg-gradient-to-r from-amber-400 to-orange-400':'bg-gradient-to-r from-blue-400 to-blue-600'} ${achieved?'goal-pulse':''}`} style={{width:`${progress}%`}}/>
+            {[25,50,75].map(pct=><div key={pct} className="absolute top-0 bottom-0 w-0.5 bg-white/50" style={{left:`${pct}%`}}/>)}
+          </div>
+          {!achieved&&<p className="text-[9px] text-slate-400 mt-1 text-center">Faltam {remaining} atendimento{remaining!==1?'s':''} para desbloquear!</p>}
+        </div>
+        <div className={`rounded-2xl p-3 border ${achieved?'bg-amber-50 border-amber-200':'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${achieved?'text-amber-600':'text-slate-400'}`}>Recompensas ao atingir</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[{icon:'📱',title:'3 Cabos de Carregamento',sub:'Tipo-C ou iPhone'},{icon:'🖨️',title:'QR Code Personalizado',sub:'Com seu link'}].map((r,i)=>(
+              <div key={i} className={`rounded-xl p-2.5 text-center border ${achieved?'bg-white border-amber-200':'bg-white border-slate-200 opacity-50'}`}>
+                <p className="text-xl mb-1">{r.icon}</p>
+                <p className="text-[9px] font-black text-slate-700 leading-tight">{r.title}</p>
+                <p className="text-[8px] text-slate-400 mt-0.5">{r.sub}</p>
+              </div>
             ))}
           </div>
-          {!achieved && (
-            <p className="text-[9px] text-slate-400 mt-1 text-center">
-              Faltam {remaining} atendimento{remaining !== 1 ? 's' : ''} para desbloquear!
-            </p>
-          )}
         </div>
-
-        {/* Prêmios */}
-        <div className={`rounded-2xl p-3 border ${achieved ? 'bg-amber-50 border-amber-200' : 'bg-slate-50 border-slate-100'}`}>
-          <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${achieved ? 'text-amber-600' : 'text-slate-400'}`}>
-            Recompensas ao atingir
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <div className={`rounded-xl p-2.5 text-center border ${achieved ? 'bg-white border-amber-200' : 'bg-white border-slate-200 opacity-50'}`}>
-              <p className="text-xl mb-1">📱</p>
-              <p className="text-[9px] font-black text-slate-700 leading-tight">3 Cabos de Carregamento</p>
-              <p className="text-[8px] text-slate-400 mt-0.5">Tipo-C ou iPhone</p>
-            </div>
-            <div className={`rounded-xl p-2.5 text-center border ${achieved ? 'bg-white border-amber-200' : 'bg-white border-slate-200 opacity-50'}`}>
-              <p className="text-xl mb-1">🖨️</p>
-              <p className="text-[9px] font-black text-slate-700 leading-tight">QR Code Personalizado</p>
-              <p className="text-[8px] text-slate-400 mt-0.5">Com seu link</p>
-            </div>
-          </div>
-        </div>
-
-        {/* QR Code e resgate — só aparece se atingiu */}
-        {achieved && !isGuest && (
+        {achieved&&!isGuest&&(
           <div className="space-y-3">
             <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-2xl p-4">
               <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Seu QR Code Exclusivo</p>
-              <img
-                src={qrCodeUrl}
-                alt="QR Code"
-                className="w-36 h-36 rounded-2xl border-4 border-amber-200 shadow-lg"
-                onError={e => { e.target.style.display = 'none'; }}
-              />
+              <img src={qrCodeUrl} alt="QR Code" className="w-36 h-36 rounded-2xl border-4 border-amber-200 shadow-lg" onError={e=>{e.target.style.display='none'}}/>
               <p className="text-[9px] text-amber-600 font-bold mt-2 text-center break-all">{publicUrl}</p>
             </div>
-            <a
-              href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(
-                `Olá! Atingi a meta de ${META_GOAL} atendimentos no Salão Digital! Gostaria de resgatar minhas recompensas.\n\nMeu link: ${publicUrl}`
-              )}`}
+            <a href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Atingi a meta de ${META_GOAL} atendimentos no Salão Digital! Gostaria de resgatar minhas recompensas.\n\nMeu link: ${publicUrl}`)}`}
               target="_blank" rel="noopener noreferrer"
-              className="flex items-center justify-center gap-2 w-full py-3.5 bg-green-500 text-white rounded-xl font-black text-sm active:scale-95 transition-all shadow-lg shadow-green-100"
-            >
-              <Phone size={15} /> Resgatar Prêmio no WhatsApp
+              className="flex items-center justify-center gap-2 w-full py-3.5 bg-green-500 text-white rounded-xl font-black text-sm active:scale-95 transition-all shadow-lg shadow-green-100">
+              <Phone size={15}/> Resgatar Prêmio no WhatsApp
             </a>
           </div>
         )}
-
-        {achieved && isGuest && (
-          <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
-            <p className="text-xs text-amber-700 font-bold">Faça login para resgatar seus prêmios!</p>
-          </div>
-        )}
+        {achieved&&isGuest&&<div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center"><p className="text-xs text-amber-700 font-bold">Faça login para resgatar seus prêmios!</p></div>}
       </div>
     </div>
   );
 };
 
-// ─── WEBCAM SCANNER com preprocessImage + OCR parsing ─────────────────────────
+// ─── WEBCAM SCANNER (OCR CORRIGIDO) ──────────────────────────────────────────
 const WebcamScanner = ({ onScanResult }) => {
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
-  const [stream, setStream] = useState(null);
-  const [cameraActive, setCameraActive] = useState(false);
-  const [scanning, setScanning] = useState(false);
-  const [rawText, setRawText] = useState('');
-  const [parsedData, setParsedData] = useState(null);
-  const [error, setError] = useState('');
-  const [progress, setProgress] = useState(0);
-  const [preprocessed, setPreprocessed] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [previewSrc, setPreviewSrc] = useState('');
-  const [saveSuccess, setSaveSuccess] = useState(false);
+  const videoRef=useRef(null), canvasRef=useRef(null);
+  const [stream,setStream]=useState(null), [cameraActive,setCameraActive]=useState(false);
+  const [scanning,setScanning]=useState(false), [rawText,setRawText]=useState('');
+  const [parsedData,setParsedData]=useState(null), [error,setError]=useState('');
+  const [progress,setProgress]=useState(0), [showPreview,setShowPreview]=useState(false);
+  const [previewSrc,setPreviewSrc]=useState(''), [saveSuccess,setSaveSuccess]=useState(false);
 
-  const startCamera = async () => {
+  const startCamera=async()=>{
     setError('');
     try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-      });
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}});
       setStream(s);
-      if (videoRef.current) { videoRef.current.srcObject = s; videoRef.current.play(); }
+      if (videoRef.current) { videoRef.current.srcObject=s; videoRef.current.play(); }
       setCameraActive(true);
-    } catch (err) { setError('Câmera não disponível: ' + err.message); }
+    } catch(err) { setError('Câmera não disponível: '+err.message); }
   };
 
-  const stopCamera = () => {
-    if (stream) stream.getTracks().forEach(t => t.stop());
+  const stopCamera=()=>{
+    if (stream) stream.getTracks().forEach(t=>t.stop());
     setStream(null); setCameraActive(false); setScanning(false);
     setRawText(''); setParsedData(null); setProgress(0); setPreviewSrc('');
   };
 
-  const captureAndScan = async () => {
-    if (!videoRef.current || !canvasRef.current) return;
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext('2d').drawImage(video, 0, 0);
-
-    // Imagem original
-    const rawImageData = canvas.toDataURL('image/jpeg', 0.92);
-
+  const captureAndScan=async()=>{
+    if (!videoRef.current||!canvasRef.current) return;
+    const video=videoRef.current, canvas=canvasRef.current;
+    canvas.width=video.videoWidth||640; canvas.height=video.videoHeight||480;
+    canvas.getContext('2d').drawImage(video,0,0);
+    const rawImageData=canvas.toDataURL('image/jpeg',0.92);
     setScanning(true); setProgress(5); setRawText(''); setParsedData(null);
-
     try {
-      // ── ETAPA 1: Pré-processamento (Filtro Mágico)
       setProgress(15);
-      const processedImageData = await preprocessImage(rawImageData);
+      const processedImageData=await preprocessImage(rawImageData);
       setPreviewSrc(processedImageData);
-      setPreprocessed(true);
       setProgress(25);
 
-      // ── ETAPA 2: OCR com Tesseract
-      const TesseractModule = await import('tesseract.js').catch(() => null);
+      // ─ OCR FIX: handle different module export shapes ─
+      let TesseractModule=null;
+      try { TesseractModule=await import('tesseract.js'); } catch(_) {}
+
       if (!TesseractModule) {
-        setRawText('⚠️ Instale tesseract.js:\nnpm install tesseract.js');
-        const fakeText = 'João Silva\n14/06/2025\n14:30\nCorte Degradê\n(41) 99999-1234';
+        const fakeText='João Silva\n14/06/2025\n14:30\nCorte Degradê\n(41) 99999-1234';
+        setRawText('⚠️ Tesseract.js não instalado.\nnpm install tesseract.js\n\nDados de exemplo preenchidos:');
         setParsedData(parseOCRResult(fakeText));
         setProgress(100); setScanning(false); return;
       }
 
-      const { createWorker } = TesseractModule;
+      // Resolve createWorker de qualquer formato de exportação
+      const createWorker = typeof TesseractModule.createWorker === 'function'
+        ? TesseractModule.createWorker
+        : typeof TesseractModule.default?.createWorker === 'function'
+          ? TesseractModule.default.createWorker
+          : TesseractModule.default && typeof TesseractModule.default === 'function'
+            ? TesseractModule.default
+            : null;
+
+      if (!createWorker) {
+        const fakeText='João Silva\n14/06/2025\n14:30\nCorte Degradê\n(41) 99999-1234';
+        setRawText('⚠️ Tesseract.js incompatível. Dados de exemplo preenchidos:');
+        setParsedData(parseOCRResult(fakeText));
+        setProgress(100); setScanning(false); return;
+      }
+
       setProgress(30);
+      let worker;
+      try {
+        worker=await createWorker(['por','eng'],1,{
+          logger:m=>{ if (m.status==='recognizing text') setProgress(30+Math.round(m.progress*60)); }
+        });
+      } catch(workerErr) {
+        setRawText('⚠️ Erro ao iniciar OCR: '+workerErr.message+'\n\nPreencha os campos manualmente.');
+        setParsedData({date:'',time:'',clientName:'',phone:'',service:''});
+        setProgress(0); setScanning(false); return;
+      }
 
-      const worker = await createWorker(['por', 'eng'], 1, {
-        logger: m => {
-          if (m.status === 'recognizing text') setProgress(30 + Math.round(m.progress * 60));
-        }
-      });
-
-      // Reconhece a imagem pré-processada (melhor contraste = mais precisão)
-      const { data: { text } } = await worker.recognize(processedImageData);
+      const { data:{ text } }=await worker.recognize(processedImageData);
       await worker.terminate();
-
       setProgress(100);
-      const cleanText = text.trim();
-      setRawText(cleanText || 'Nenhum texto detectado. Tente aproximar o caderno e melhorar a iluminação.');
-
-      // ── ETAPA 3: Parsing com regex
-      const parsed = parseOCRResult(cleanText);
-      setParsedData(parsed);
-
-    } catch (err) {
-      setRawText('Erro no OCR: ' + err.message);
+      const cleanText=text.trim();
+      setRawText(cleanText||'Nenhum texto detectado. Tente aproximar o caderno e melhorar a iluminação.');
+      setParsedData(parseOCRResult(cleanText));
+    } catch(err) {
+      setRawText('Erro no OCR: '+err.message+'\n\nPreencha manualmente.');
+      setParsedData({date:'',time:'',clientName:'',phone:'',service:''});
       setProgress(0);
-    } finally {
-      setScanning(false);
-    }
+    } finally { setScanning(false); }
   };
 
-  const handleSaveBooking = () => {
+  const handleSaveBooking=()=>{
     if (!parsedData) return;
-    if (!parsedData.date || !parsedData.time) {
-      alert('Data e horário são obrigatórios para salvar o agendamento.');
-      return;
-    }
+    if (!parsedData.date||!parsedData.time) { alert('Data e horário são obrigatórios.'); return; }
     if (onScanResult) onScanResult(parsedData);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 3000);
+    setSaveSuccess(true); setTimeout(()=>setSaveSuccess(false),3000);
   };
 
-  useEffect(() => {
-    injectScannerCSS();
-    return () => { if (stream) stream.getTracks().forEach(t => t.stop()); };
-  }, []);
+  useEffect(()=>{ injectScannerCSS(); return()=>{ if (stream) stream.getTracks().forEach(t=>t.stop()); }; },[]);
 
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-      {/* Header */}
       <div className="p-4 bg-slate-900 flex items-center gap-3">
-        <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0">
-          <ScanLine size={18} className="text-white" />
-        </div>
-        <div className="flex-1">
-          <p className="font-bold text-white text-sm">Scanner de Caderno</p>
-          <p className="text-[10px] text-slate-400">Filtro mágico + leitura em português</p>
-        </div>
-        {cameraActive && (
-          <button onClick={stopCamera} className="p-2 bg-red-600/20 rounded-xl">
-            <VideoOff size={16} className="text-red-400" />
-          </button>
-        )}
+        <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0"><ScanLine size={18} className="text-white"/></div>
+        <div className="flex-1"><p className="font-bold text-white text-sm">Scanner de Caderno</p><p className="text-[10px] text-slate-400">Filtro mágico + leitura em português</p></div>
+        {cameraActive&&<button onClick={stopCamera} className="p-2 bg-red-600/20 rounded-xl"><VideoOff size={16} className="text-red-400"/></button>}
       </div>
-
       <div className="p-4 space-y-4">
-        {error && <div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-bold">{error}</div>}
-
-        {!cameraActive ? (
-          <button onClick={startCamera}
-            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-100">
-            <Video size={18} /> Abrir Câmera
+        {error&&<div className="p-3 bg-red-50 border border-red-100 rounded-xl text-xs text-red-600 font-bold">{error}</div>}
+        {!cameraActive?(
+          <button onClick={startCamera} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-100">
+            <Video size={18}/> Abrir Câmera
           </button>
-        ) : (
+        ):(
           <div className="space-y-3">
-            {/* Câmera */}
-            <div className="relative w-full overflow-hidden rounded-2xl bg-slate-900" style={{ aspectRatio: '16/9' }}>
-              <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover" />
-              {scanning && (
-                <>
-                  <div className="scan-line" />
-                  <div className="scan-overlay-border" />
-                  <div className="scan-corner scan-corner-tl" /><div className="scan-corner scan-corner-tr" />
-                  <div className="scan-corner scan-corner-bl" /><div className="scan-corner scan-corner-br" />
-                  <div className="absolute inset-0 flex items-end justify-center pb-4">
-                    <div className="bg-slate-900/80 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
-                      <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest">
-                        {progress < 25 ? '🔍 Aplicando filtro mágico...' : `📖 Lendo texto... ${progress}%`}
-                      </p>
-                      <div className="w-full h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
-                        <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{ width: `${progress}%` }} />
-                      </div>
+            <div className="relative w-full overflow-hidden rounded-2xl bg-slate-900" style={{aspectRatio:'16/9'}}>
+              <video ref={videoRef} playsInline muted autoPlay className="w-full h-full object-cover"/>
+              {scanning&&(<>
+                <div className="scan-line"/><div className="scan-overlay-border"/>
+                <div className="scan-corner scan-corner-tl"/><div className="scan-corner scan-corner-tr"/>
+                <div className="scan-corner scan-corner-bl"/><div className="scan-corner scan-corner-br"/>
+                <div className="absolute inset-0 flex items-end justify-center pb-4">
+                  <div className="bg-slate-900/80 backdrop-blur-sm rounded-xl px-4 py-2 text-center">
+                    <p className="text-[10px] text-blue-400 font-black uppercase tracking-widest">
+                      {progress<25?'🔍 Aplicando filtro mágico...':`📖 Lendo texto... ${progress}%`}
+                    </p>
+                    <div className="w-full h-1 bg-slate-700 rounded-full mt-1 overflow-hidden">
+                      <div className="h-full bg-blue-500 rounded-full transition-all duration-300" style={{width:`${progress}%`}}/>
                     </div>
                   </div>
-                </>
-              )}
-              {!scanning && (
+                </div>
+              </>)}
+              {!scanning&&(
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                   <div className="border-2 border-dashed border-white/30 rounded-xl w-3/4 h-2/3 flex items-center justify-center">
                     <p className="text-white/50 text-[10px] font-bold text-center px-4">Posicione o caderno aqui</p>
@@ -686,147 +489,61 @@ const WebcamScanner = ({ onScanResult }) => {
                 </div>
               )}
             </div>
-
-            <canvas ref={canvasRef} className="hidden" />
-
-            {/* Preview do filtro */}
-            {previewSrc && (
+            <canvas ref={canvasRef} className="hidden"/>
+            {previewSrc&&(
               <div className="rounded-xl overflow-hidden border border-blue-200">
-                <button onClick={() => setShowPreview(!showPreview)}
-                  className="w-full px-3 py-2 bg-blue-50 text-blue-600 text-[10px] font-black uppercase flex items-center gap-2">
-                  <Eye size={12} /> {showPreview ? 'Ocultar' : 'Ver'} imagem após filtro mágico
+                <button onClick={()=>setShowPreview(!showPreview)} className="w-full px-3 py-2 bg-blue-50 text-blue-600 text-[10px] font-black uppercase flex items-center gap-2">
+                  <Eye size={12}/> {showPreview?'Ocultar':'Ver'} imagem após filtro mágico
                 </button>
-                {showPreview && <img src={previewSrc} alt="Pré-processada" className="w-full" />}
+                {showPreview&&<img src={previewSrc} alt="Pré-processada" className="w-full"/>}
               </div>
             )}
-
-            <button onClick={captureAndScan} disabled={scanning}
-              className="w-full py-3.5 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
-              {scanning
-                ? <><Loader2 size={16} className="animate-spin" /> Processando...</>
-                : <><ScanLine size={16} /> Escanear Caderno</>}
+            <button onClick={captureAndScan} disabled={scanning} className="w-full py-3.5 bg-slate-900 text-white rounded-2xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+              {scanning?<><Loader2 size={16} className="animate-spin"/> Processando...</>:<><ScanLine size={16}/> Escanear Caderno</>}
             </button>
           </div>
         )}
-
-        {/* Texto bruto */}
-        {rawText && (
+        {rawText&&(
           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText size={12} className="text-slate-400" />
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Texto detectado</p>
-            </div>
+            <div className="flex items-center gap-2 mb-2"><FileText size={12} className="text-slate-400"/><p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Texto detectado</p></div>
             <pre className="text-[10px] text-slate-600 whitespace-pre-wrap font-mono leading-relaxed max-h-24 overflow-y-auto">{rawText}</pre>
-            <button onClick={() => { setRawText(''); setParsedData(null); setProgress(0); setPreviewSrc(''); }}
-              className="mt-2 text-[10px] text-slate-400 font-bold flex items-center gap-1">
-              <RefreshCw size={10} /> Limpar
+            <button onClick={()=>{setRawText('');setParsedData(null);setProgress(0);setPreviewSrc('');}} className="mt-2 text-[10px] text-slate-400 font-bold flex items-center gap-1">
+              <RefreshCw size={10}/> Limpar
             </button>
           </div>
         )}
-
-        {/* ── DADOS EXTRAÍDOS + FORMULÁRIO EDITÁVEL ── */}
-        {parsedData && (
+        {parsedData&&(
           <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <CheckCircle size={14} className="text-blue-600" />
-              <p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Dados Extraídos — Edite se necessário</p>
-            </div>
-
-            {/* Data — obrigatório */}
-            <div>
-              <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
-                <span>📅 Data</span>
-                <span className="text-red-500 font-black">* Obrigatório</span>
-              </label>
-              <input type="text"
-                value={parsedData.date}
-                onChange={e => setParsedData({ ...parsedData, date: e.target.value })}
-                placeholder="DD/MM/AAAA"
-                className={`w-full bg-white border-2 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${parsedData.date ? 'border-green-400' : 'border-red-300 focus:border-red-400'}`}
-              />
-            </div>
-
-            {/* Horário — obrigatório */}
-            <div>
-              <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
-                <span>⏰ Horário</span>
-                <span className="text-red-500 font-black">* Obrigatório</span>
-              </label>
-              <input type="text"
-                value={parsedData.time}
-                onChange={e => setParsedData({ ...parsedData, time: e.target.value })}
-                placeholder="HH:MM"
-                className={`w-full bg-white border-2 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${parsedData.time ? 'border-green-400' : 'border-red-300 focus:border-red-400'}`}
-              />
-            </div>
-
-            {/* Nome — opcional */}
-            <div>
-              <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
-                <span>👤 Nome do Cliente</span>
-                <span className="text-slate-400">opcional</span>
-              </label>
-              <input type="text"
-                value={parsedData.clientName}
-                onChange={e => setParsedData({ ...parsedData, clientName: e.target.value })}
-                placeholder="Nome e sobrenome"
-                className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-
-            {/* Telefone — opcional */}
-            <div>
-              <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
-                <span>📱 Telefone</span>
-                <span className="text-slate-400">opcional</span>
-              </label>
-              <input type="tel"
-                value={parsedData.phone}
-                onChange={e => setParsedData({ ...parsedData, phone: e.target.value })}
-                placeholder="(00) 00000-0000"
-                className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 transition-colors"
-              />
-            </div>
-
-            {/* Serviço — opcional */}
-            <div>
-              <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
-                <span>✂️ Serviço</span>
-                <span className="text-slate-400">opcional</span>
-              </label>
-              <input type="text"
-                value={parsedData.service}
-                onChange={e => setParsedData({ ...parsedData, service: e.target.value })}
-                placeholder="Ex: Corte Degradê"
-                className="w-full bg-white border-2 border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-blue-400 transition-colors"
-              />
-              {/* Sugestões de serviços */}
-              {!parsedData.service && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {MASTER_SERVICES.slice(0, 4).map(s => (
-                    <button key={s.id} onClick={() => setParsedData({ ...parsedData, service: s.name })}
-                      className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                      {s.name}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Botão salvar */}
-            <button onClick={handleSaveBooking}
-              disabled={!parsedData.date || !parsedData.time}
-              className={`w-full py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-40 ${
-                saveSuccess ? 'bg-green-500 text-white' : 'bg-slate-900 text-white'
-              }`}>
-              {saveSuccess
-                ? <><CheckCircle size={16} /> Agendamento salvo!</>
-                : <><Calendar size={16} /> Salvar Agendamento</>}
+            <div className="flex items-center gap-2"><CheckCircle size={14} className="text-blue-600"/><p className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Dados Extraídos — Edite se necessário</p></div>
+            {[
+              {key:'date',label:'📅 Data',placeholder:'DD/MM/AAAA',required:true,type:'text'},
+              {key:'time',label:'⏰ Horário',placeholder:'HH:MM',required:true,type:'text'},
+              {key:'clientName',label:'👤 Nome do Cliente',placeholder:'Nome e sobrenome',required:false,type:'text'},
+              {key:'phone',label:'📱 Telefone',placeholder:'(00) 00000-0000',required:false,type:'tel'},
+              {key:'service',label:'✂️ Serviço',placeholder:'Ex: Corte Degradê',required:false,type:'text'},
+            ].map(({key,label,placeholder,required,type})=>(
+              <div key={key}>
+                <label className="flex items-center justify-between text-[9px] font-black text-slate-500 uppercase mb-1">
+                  <span>{label}</span>
+                  <span className={required?'text-red-500 font-black':'text-slate-400'}>{required?'* Obrigatório':'opcional'}</span>
+                </label>
+                <input type={type} value={parsedData[key]} onChange={e=>setParsedData({...parsedData,[key]:e.target.value})} placeholder={placeholder}
+                  className={`w-full bg-white border-2 rounded-xl px-3 py-2.5 text-sm outline-none transition-colors ${required?(parsedData[key]?'border-green-400':'border-red-300 focus:border-red-400'):'border-slate-200 focus:border-blue-400'}`}/>
+                {key==='service'&&!parsedData.service&&(
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {MASTER_SERVICES.slice(0,4).map(s=>(
+                      <button key={s.id} onClick={()=>setParsedData({...parsedData,service:s.name})}
+                        className="text-[9px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">{s.name}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+            <button onClick={handleSaveBooking} disabled={!parsedData.date||!parsedData.time}
+              className={`w-full py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-40 ${saveSuccess?'bg-green-500 text-white':'bg-slate-900 text-white'}`}>
+              {saveSuccess?<><CheckCircle size={16}/> Agendamento salvo!</>:<><Calendar size={16}/> Salvar Agendamento</>}
             </button>
-
-            {(!parsedData.date || !parsedData.time) && (
-              <p className="text-[9px] text-red-500 font-bold text-center">Preencha data e horário para continuar</p>
-            )}
+            {(!parsedData.date||!parsedData.time)&&<p className="text-[9px] text-red-500 font-bold text-center">Preencha data e horário para continuar</p>}
           </div>
         )}
       </div>
@@ -835,66 +552,777 @@ const WebcamScanner = ({ onScanResult }) => {
 };
 
 // ─── SIMPLE BAR CHART ─────────────────────────────────────────────────────────
-const SimpleBarChart = ({ data, color = '#3b82f6', height = 80 }) => {
-  const max = Math.max(...data.map(d => d.value), 1);
+const SimpleBarChart = ({ data, color='#3b82f6', height=80 }) => {
+  const max=Math.max(...data.map(d=>d.value),1);
   return (
     <div>
-      <div className="flex items-end gap-1.5" style={{ height }}>
-        {data.map((d, i) => (
+      <div className="flex items-end gap-1.5" style={{height}}>
+        {data.map((d,i)=>(
           <div key={i} className="flex-1 flex flex-col items-center justify-end gap-0.5">
-            <span className="text-[8px] font-black text-slate-500">{d.value > 0 ? d.value : ''}</span>
+            <span className="text-[8px] font-black text-slate-500">{d.value>0?d.value:''}</span>
             <div className="w-full rounded-t-lg transition-all duration-700"
-              style={{ height: `${Math.max((d.value / max) * (height - 20), d.value > 0 ? 4 : 0)}px`, backgroundColor: color, opacity: 0.7 + 0.3 * (d.value / max) }} />
+              style={{height:`${Math.max((d.value/max)*(height-20),d.value>0?4:0)}px`,backgroundColor:color,opacity:0.7+0.3*(d.value/max)}}/>
           </div>
         ))}
       </div>
       <div className="flex gap-1.5 mt-1">
-        {data.map((d, i) => (
-          <div key={i} className="flex-1 text-center text-[8px] text-slate-400 font-bold truncate">{d.label}</div>
+        {data.map((d,i)=><div key={i} className="flex-1 text-center text-[8px] text-slate-400 font-bold truncate">{d.label}</div>)}
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN PIE CHART ──────────────────────────────────────────────────────────
+const AdminPieChart = ({ data = [] }) => {
+  const COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#ec4899','#6366f1'];
+  const total = data.reduce((acc,d)=>acc+d.value,0);
+  if (!data.length||total===0) return <div className="text-center text-slate-400 text-xs py-8">Sem dados suficientes</div>;
+  const cx=80, cy=80, r=65, innerR=30;
+  const toRad=(deg)=>(deg-90)*Math.PI/180;
+  const polar=(angle)=>({x:cx+r*Math.cos(toRad(angle)),y:cy+r*Math.sin(toRad(angle))});
+  let cur=0;
+  const slices=data.map((d,i)=>{
+    const angle=(d.value/total)*360;
+    const start=polar(cur), end=polar(cur+angle);
+    const large=angle>180?1:0;
+    const path=angle>=359.99
+      ? `M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx-0.01} ${cy-r} Z`
+      : `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y} Z`;
+    const midAngle=cur+angle/2;
+    const mp=polar(midAngle);
+    cur+=angle;
+    return {...d,path,pct:Math.round((d.value/total)*100),color:d.color||COLORS[i%COLORS.length],midX:mp.x,midY:mp.y};
+  });
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <svg viewBox="0 0 160 160" width={160} height={160}>
+        {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth={2}/>)}
+        <circle cx={cx} cy={cy} r={innerR} fill="white"/>
+        <text x={cx} y={cy-4} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#64748b">TOTAL</text>
+        <text x={cx} y={cy+10} textAnchor="middle" fontSize={13} fontWeight="900" fill="#0f172a">{total}</text>
+      </svg>
+      <div className="grid grid-cols-2 gap-1.5 w-full max-w-xs">
+        {slices.map((s,i)=>(
+          <div key={i} className="flex items-center gap-1.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor:s.color}}/>
+            <span className="text-[9px] font-bold text-slate-600 truncate">{s.label}</span>
+            <span className="text-[9px] font-black text-slate-900 ml-auto flex-shrink-0">{s.pct}%</span>
+          </div>
         ))}
       </div>
     </div>
   );
 };
 
-// ─── REPORTS SECTION ──────────────────────────────────────────────────────────
-const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdateProfile, supabase: sb }) => {
-  const [hourlyRate, setHourlyRate] = useState(user.hourly_rate || 50);
-  const [savingRate, setSavingRate] = useState(false);
+// ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
+const AdminDashboard = () => {
+  // noindex / nofollow
+  useEffect(()=>{
+    let meta=document.querySelector('meta[name="robots"]');
+    if (!meta) { meta=document.createElement('meta'); meta.name='robots'; document.head.appendChild(meta); }
+    meta.content='noindex, nofollow';
+    document.title='Admin — Salão Digital';
+    return()=>{ meta.content='index, follow'; };
+  },[]);
 
-  const confirmedApps = (appointments || []).filter(a =>
-    String(a.barber_id || a.barberId) === String(user.id) && a.status === 'confirmed'
+  const [isLoggedIn,setIsLoggedIn]=useState(()=>localStorage.getItem('sd_admin_session')==='true');
+  const [loginUser,setLoginUser]=useState('');
+  const [loginPass,setLoginPass]=useState('');
+  const [loginError,setLoginError]=useState('');
+  const [loginLoading,setLoginLoading]=useState(false);
+  const [activeSection,setActiveSection]=useState('financial');
+  const [allProfiles,setAllProfiles]=useState([]);
+  const [allAppointments,setAllAppointments]=useState([]);
+  const [supportMessages,setSupportMessages]=useState([]);
+  const [dataLoading,setDataLoading]=useState(false);
+  const [replyTexts,setReplyTexts]=useState({});
+  const [sendingReply,setSendingReply]=useState({});
+  const [tagInputs,setTagInputs]=useState({});
+  const [savingTags,setSavingTags]=useState({});
+  const [selectedMsg,setSelectedMsg]=useState(null);
+
+  const fetchAllData=useCallback(async()=>{
+    setDataLoading(true);
+    try {
+      const [pRes,aRes,sRes]=await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('appointments').select('*').order('created_at',{ascending:false}).limit(500),
+        supabase.from('support_messages').select('*').order('created_at',{ascending:false}).limit(100),
+      ]);
+      if (pRes.data) setAllProfiles(pRes.data);
+      if (aRes.data) setAllAppointments(aRes.data);
+      if (sRes.data) setSupportMessages(sRes.data);
+    } catch(e) { console.error(e); }
+    setDataLoading(false);
+  },[]);
+
+  useEffect(()=>{
+    if (!isLoggedIn) return;
+    fetchAllData();
+    const channel=supabase.channel('admin-rt')
+      .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},()=>fetchAllData())
+      .on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>fetchAllData())
+      .subscribe();
+    return()=>supabase.removeChannel(channel);
+  },[isLoggedIn,fetchAllData]);
+
+  const handleLogin=async()=>{
+    if (!loginUser.trim()||!loginPass.trim()) { setLoginError('Preencha usuário e senha.'); return; }
+    setLoginLoading(true); setLoginError('');
+    try {
+      const {data,error}=await supabase.from('admin_users').select('*').eq('username',loginUser.trim()).eq('password',loginPass.trim()).maybeSingle();
+      if (data&&!error) { localStorage.setItem('sd_admin_session','true'); setIsLoggedIn(true); }
+      else setLoginError('Usuário ou senha incorretos.');
+    } catch(e) { setLoginError('Erro de conexão: '+e.message); }
+    setLoginLoading(false);
+  };
+
+  const handleLogout=()=>{ localStorage.removeItem('sd_admin_session'); setIsLoggedIn(false); };
+
+  const handleSendReply=async(msgId,barberName,barberPhone)=>{
+    const reply=replyTexts[msgId]||'';
+    if (!reply.trim()) return;
+    setSendingReply(p=>({...p,[msgId]:true}));
+    try {
+      await supabase.from('support_messages').update({reply:reply.trim(),replied_at:new Date().toISOString()}).eq('id',msgId);
+      setSupportMessages(prev=>prev.map(m=>m.id===msgId?{...m,reply:reply.trim(),replied_at:new Date().toISOString()}:m));
+      setReplyTexts(p=>({...p,[msgId]:''}));
+    } catch(e) { alert('Erro: '+e.message); }
+    setSendingReply(p=>({...p,[msgId]:false}));
+  };
+
+  const handleSaveTags=async(profileId,tags)=>{
+    setSavingTags(p=>({...p,[profileId]:true}));
+    try {
+      const tagsArray=tags.split(',').map(t=>t.trim()).filter(Boolean);
+      await supabase.from('profiles').update({admin_tags:tagsArray}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,admin_tags:tagsArray}:p));
+    } catch(e) { alert('Erro: '+e.message); }
+    setSavingTags(p=>({...p,[profileId]:false}));
+  };
+
+  const handleSetFeatured=async(profileId,rank)=>{
+    try {
+      // Remove from anyone who had this rank
+      if (rank!==null) {
+        const existing=allProfiles.find(p=>p.featured_rank===rank&&p.id!==profileId);
+        if (existing) await supabase.from('profiles').update({featured_rank:null}).eq('id',existing.id);
+      }
+      await supabase.from('profiles').update({featured_rank:rank}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>{
+        if (p.id===profileId) return {...p,featured_rank:rank};
+        if (rank!==null&&p.featured_rank===rank) return {...p,featured_rank:null};
+        return p;
+      }));
+    } catch(e) { alert('Erro: '+e.message); }
+  };
+
+  const handleToggleVisibility=async(profileId,currentValue)=>{
+    try {
+      await supabase.from('profiles').update({is_visible:!currentValue}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,is_visible:!currentValue}:p));
+    } catch(e) { alert('Erro: '+e.message); }
+  };
+
+  // ── DERIVED DATA ──
+  const barbers=allProfiles.filter(p=>p.role==='barber');
+  const clients=allProfiles.filter(p=>p.role==='client');
+  const confirmedApps=allAppointments.filter(a=>a.status==='confirmed');
+  const pendingApps=allAppointments.filter(a=>a.status==='pending');
+  const totalRevenue=confirmedApps.reduce((acc,a)=>acc+(Number(a.price)||0),0);
+  const avgTicket=confirmedApps.length>0?(totalRevenue/confirmedApps.length).toFixed(2):0;
+
+  // Monthly revenue
+  const monthlyRevenue=useMemo(()=>{
+    const months={};
+    confirmedApps.forEach(a=>{
+      if (!a.date) return;
+      const [y,m]=a.date.split('-');
+      const key=`${y}-${m}`;
+      months[key]=(months[key]||0)+(Number(a.price)||0);
+    });
+    return Object.entries(months).sort(([a],[b])=>a.localeCompare(b)).slice(-6).map(([k,v])=>({
+      label:MONTH_NAMES[parseInt(k.split('-')[1])-1]?.slice(0,3)||k,value:v
+    }));
+  },[confirmedApps]);
+
+  // Revenue per barber
+  const revenuePerBarber=useMemo(()=>{
+    const map={};
+    confirmedApps.forEach(a=>{
+      const b=barbers.find(br=>String(br.id)===String(a.barber_id));
+      if (!b) return;
+      if (!map[b.id]) map[b.id]={name:b.name,revenue:0,count:0};
+      map[b.id].revenue+=(Number(a.price)||0);
+      map[b.id].count++;
+    });
+    return Object.values(map).sort((a,b)=>b.revenue-a.revenue);
+  },[confirmedApps,barbers]);
+
+  // Service distribution
+  const serviceDistribution=useMemo(()=>{
+    const map={};
+    allAppointments.forEach(a=>{
+      if (!a.service_name) return;
+      map[a.service_name]=(map[a.service_name]||0)+1;
+    });
+    return Object.entries(map).sort(([,a],[,b])=>b-a).slice(0,8).map(([label,value])=>({label,value}));
+  },[allAppointments]);
+
+  // Appointments by day of week
+  const appsByDay=useMemo(()=>{
+    const days=Array(7).fill(0);
+    allAppointments.forEach(a=>{ if (a.date) days[new Date(a.date+'T00:00:00').getDay()]++; });
+    return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>({label,value:days[i]}));
+  },[allAppointments]);
+
+  // CRM - inactive
+  const sevenDaysAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
+  const inactiveBarbers=useMemo(()=>barbers.filter(b=>{
+    const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
+    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
+  }),[barbers,allAppointments,sevenDaysAgo]);
+
+  const inactiveClients=useMemo(()=>clients.filter(c=>{
+    const lastApp=allAppointments.filter(a=>String(a.client_id)===String(c.id)).sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
+    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
+  }),[clients,allAppointments,sevenDaysAgo]);
+
+  const newThisWeek=allProfiles.filter(p=>p.created_at&&p.created_at>new Date(Date.now()-7*24*60*60*1000).toISOString());
+
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3 shadow-2xl">
+              <Settings size={32} className="text-white"/>
+            </div>
+            <h1 className="text-2xl font-black text-white italic">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
+            <p className="text-slate-400 text-sm mt-1 font-bold">Painel Administrativo</p>
+          </div>
+          <div className="bg-slate-800 rounded-3xl p-8 shadow-2xl border border-slate-700">
+            <h2 className="text-white font-black text-lg mb-6 text-center">Acesso Restrito</h2>
+            {loginError&&<div className="mb-4 p-3 bg-red-900/50 border border-red-700 text-red-300 text-xs font-bold rounded-xl">{loginError}</div>}
+            <div className="space-y-3">
+              <input type="text" value={loginUser} onChange={e=>setLoginUser(e.target.value)} placeholder="Usuário"
+                className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
+              <input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} placeholder="Senha"
+                onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+                className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
+              <button onClick={handleLogin} disabled={loginLoading}
+                className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+                {loginLoading?<Loader2 size={18} className="animate-spin"/>:'Entrar'}
+              </button>
+            </div>
+          </div>
+          <p className="text-center text-slate-600 text-[10px] mt-6 font-bold uppercase tracking-widest">Acesso não autorizado é proibido</p>
+        </div>
+      </div>
+    );
+  }
+
+  const NAV=[
+    {id:'financial',label:'Financeiro',icon:<DollarSign size={16}/>},
+    {id:'operations',label:'Operações',icon:<BarChart2 size={16}/>},
+    {id:'crm',label:'CRM',icon:<Users size={16}/>},
+    {id:'realtime',label:'Tempo Real',icon:<Activity size={16}/>},
+    {id:'support',label:'Suporte',icon:<MessageSquare size={16}/>},
+    {id:'professionals',label:'Profissionais',icon:<Tag size={16}/>},
+  ];
+
+  const unreadSupport=supportMessages.filter(m=>!m.reply&&!m.read_at).length;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Header */}
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Settings size={16} className="text-white"/></div>
+          <div>
+            <h1 className="font-black text-white text-sm">Painel Admin</h1>
+            <p className="text-[10px] text-slate-400 font-bold">SALÃO DIGITAL</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {dataLoading&&<Loader2 size={16} className="text-blue-400 animate-spin"/>}
+          <button onClick={fetchAllData} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><RefreshCw size={15}/></button>
+          <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/30 text-red-400 rounded-lg text-xs font-bold hover:bg-red-900/50 transition-colors"><LogOut size={14}/> Sair</button>
+        </div>
+      </header>
+
+      {/* Nav */}
+      <nav className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex gap-1 overflow-x-auto">
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setActiveSection(n.id)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all relative ${activeSection===n.id?'bg-blue-600 text-white':'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            {n.icon} {n.label}
+            {n.id==='support'&&unreadSupport>0&&(
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">{unreadSupport}</span>
+            )}
+            {n.id==='realtime'&&pendingApps.length>0&&(
+              <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"/>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <main className="p-4 md:p-6 max-w-5xl mx-auto pb-16">
+
+        {/* ── FINANCIAL ── */}
+        {activeSection==='financial'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><DollarSign size={20} className="text-green-400"/> Visão Financeira</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                {label:'Faturamento Total',value:`R$ ${totalRevenue.toFixed(2)}`,icon:<DollarSign size={18}/>,color:'bg-green-600',sub:`${confirmedApps.length} confirmados`},
+                {label:'Ticket Médio',value:`R$ ${avgTicket}`,icon:<TrendingUp size={18}/>,color:'bg-blue-600',sub:'por atendimento'},
+                {label:'Profissionais',value:barbers.length,icon:<Scissors size={18}/>,color:'bg-purple-600',sub:`${barbers.filter(b=>b.is_visible).length} ativos`},
+                {label:'Clientes',value:clients.length,icon:<Users size={18}/>,color:'bg-amber-600',sub:`+${newThisWeek.length} esta semana`},
+              ].map((c,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className={`w-8 h-8 ${c.color} rounded-lg flex items-center justify-center mb-3`}>{c.icon}</div>
+                  <p className="text-xl font-black text-white">{c.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{c.label}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+
+            {monthlyRevenue.length>0&&(
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-green-400"/> Faturamento Mensal</h3>
+                <SimpleBarChart data={monthlyRevenue} color="#22c55e" height={80}/>
+              </div>
+            )}
+
+            {revenuePerBarber.length>0&&(
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Award size={16} className="text-amber-400"/> Faturamento por Profissional</h3>
+                <div className="space-y-2">
+                  {revenuePerBarber.map((b,i)=>(
+                    <div key={i} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                      <span className="text-[10px] font-black text-slate-500 w-4">{i+1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{b.name}</p>
+                        <p className="text-[10px] text-slate-400">{b.count} atendimentos</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-black text-green-400">R$ {b.revenue.toFixed(2)}</p>
+                        <p className="text-[9px] text-slate-400">avg R$ {b.count>0?(b.revenue/b.count).toFixed(2):0}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── OPERATIONS ── */}
+        {activeSection==='operations'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><BarChart2 size={20} className="text-blue-400"/> Controle de Operação</h2>
+            <div className="grid md:grid-cols-2 gap-5">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Percent size={16} className="text-blue-400"/> Serviços Mais Solicitados</h3>
+                <AdminPieChart data={serviceDistribution}/>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Calendar size={16} className="text-purple-400"/> Agendamentos por Dia da Semana</h3>
+                <SimpleBarChart data={appsByDay} color="#8b5cf6" height={80}/>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {label:'Total agendamentos',value:allAppointments.length,icon:'📅'},
+                {label:'Taxa de confirmação',value:`${allAppointments.length>0?Math.round((confirmedApps.length/allAppointments.length)*100):0}%`,icon:'✅'},
+                {label:'Pendentes',value:pendingApps.length,icon:'⏳'},
+              ].map((s,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+                  <p className="text-2xl mb-1">{s.icon}</p>
+                  <p className="text-xl font-black text-white">{s.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-4">Top Serviços em Detalhe</h3>
+              <div className="space-y-2">
+                {serviceDistribution.slice(0,6).map((s,i)=>{
+                  const pct=Math.round((s.value/allAppointments.length)*100)||0;
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-[10px] text-slate-500 w-3 font-black">{i+1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-bold text-white truncate">{s.label}</span>
+                          <span className="text-[11px] font-black text-slate-300 flex-shrink-0 ml-2">{s.value}×</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-blue-500" style={{width:`${pct}%`}}/>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-black text-blue-400 w-8 text-right flex-shrink-0">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── CRM ── */}
+        {activeSection==='crm'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><Users size={20} className="text-amber-400"/> Gestão de CRM</h2>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {label:'Profissionais inativos (7d)',value:inactiveBarbers.length,color:'text-red-400'},
+                {label:'Clientes inativos (7d)',value:inactiveClients.length,color:'text-orange-400'},
+                {label:'Novos esta semana',value:newThisWeek.length,color:'text-green-400'},
+              ].map((s,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+                  <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-red-400"/> Profissionais sem movimento (&gt;7 dias)</h3>
+              {inactiveBarbers.length===0
+                ? <p className="text-slate-400 text-sm text-center py-4">Todos os profissionais estão ativos 🎉</p>
+                : <div className="space-y-2">
+                    {inactiveBarbers.map(b=>{
+                      const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)).sort((a,c)=>c.date?.localeCompare(a.date)||0)[0];
+                      return (
+                        <div key={b.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                          <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
+                            {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover rounded-full" alt=""/>:<User size={14} className="text-slate-400"/>}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-bold text-white truncate">{b.name}</p>
+                            <p className="text-[10px] text-slate-400">{lastApp?`Último: ${lastApp.date?.split('-').reverse().join('/')}`:'Nunca teve agendamento'}</p>
+                          </div>
+                          <span className="flex-shrink-0 text-[9px] font-black bg-red-900/50 text-red-400 px-2 py-1 rounded-lg uppercase">Inativo</span>
+                        </div>
+                      );
+                    })}
+                  </div>}
+            </div>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-orange-400"/> Clientes sem agendamento (&gt;7 dias)</h3>
+              {inactiveClients.length===0
+                ? <p className="text-slate-400 text-sm text-center py-4">Todos os clientes estão engajados 🎉</p>
+                : <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {inactiveClients.slice(0,20).map(c=>(
+                      <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                        <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0"><User size={14} className="text-slate-400"/></div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{c.name}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{c.phone}</p>
+                        </div>
+                        {c.phone&&(
+                          <a href={`https://wa.me/55${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent('Olá! Sentimos sua falta no Salão Digital 💙 Que tal agendar um horário?')}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex-shrink-0 p-2 bg-green-900/30 text-green-400 rounded-lg hover:bg-green-900/50 transition-colors">
+                            <Phone size={13}/>
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>}
+            </div>
+          </div>
+        )}
+
+        {/* ── REAL TIME ── */}
+        {activeSection==='realtime'&&(
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white flex items-center gap-2"><Activity size={20} className="text-green-400"/> Agendamentos em Tempo Real</h2>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/><span className="text-[10px] text-green-400 font-bold">Ao vivo</span></div>
+            </div>
+
+            {pendingApps.length>0&&(
+              <div className="bg-orange-950/40 border border-orange-800 rounded-2xl p-4">
+                <h3 className="text-sm font-black text-orange-300 mb-3 flex items-center gap-2"><Bell size={16}/> Pendentes ({pendingApps.length})</h3>
+                <div className="space-y-2">
+                  {pendingApps.slice(0,5).map(a=>{
+                    const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
+                    return (
+                      <div key={a.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-white text-sm">{a.client_name}</p>
+                          <p className="text-[10px] text-slate-400">{a.service_name} • com {barber?.name||'Profissional'}</p>
+                          <p className="text-[10px] text-blue-400 font-bold">{a.date?.split('-').reverse().join('/')} às {a.time}</p>
+                        </div>
+                        <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3">Últimos Agendamentos</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {allAppointments.slice(0,30).map(a=>{
+                  const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
+                  const statusColor={confirmed:'bg-green-900/50 text-green-400 border-green-800',pending:'bg-orange-900/50 text-orange-400 border-orange-800',rejected:'bg-red-900/50 text-red-400 border-red-800'};
+                  return (
+                    <div key={a.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-white">{a.client_name}</p>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${statusColor[a.status]||'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                            {a.status==='confirmed'?'CONFIRMADO':a.status==='pending'?'PENDENTE':'REJEITADO'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400">{a.service_name} • {barber?.name}</p>
+                        <p className="text-[10px] text-slate-500">{a.date?.split('-').reverse().join('/')} {a.time}</p>
+                      </div>
+                      <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price||0}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SUPPORT ── */}
+        {activeSection==='support'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><MessageSquare size={20} className="text-blue-400"/> Central de Suporte</h2>
+            {supportMessages.length===0
+              ? <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center"><p className="text-slate-400">Nenhuma mensagem de suporte ainda.</p></div>
+              : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {/* Message list */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-800"><h3 className="font-black text-white text-sm">Mensagens ({supportMessages.length})</h3></div>
+                    <div className="overflow-y-auto max-h-[500px]">
+                      {supportMessages.map(msg=>(
+                        <button key={msg.id} onClick={()=>setSelectedMsg(msg)}
+                          className={`w-full text-left p-4 border-b border-slate-800 hover:bg-slate-800 transition-colors ${selectedMsg?.id===msg.id?'bg-slate-800':''}`}>
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-white text-sm truncate">{msg.barber_name||'Profissional'}</p>
+                                {!msg.reply&&<span className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0"/>}
+                              </div>
+                              <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{msg.message}</p>
+                              <p className="text-[9px] text-slate-600 mt-1">{new Date(msg.created_at).toLocaleString('pt-BR')}</p>
+                            </div>
+                            {msg.reply&&<CheckSquare size={14} className="text-green-400 flex-shrink-0 mt-1"/>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Reply panel */}
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                    {selectedMsg?(
+                      <>
+                        <div className="p-4 border-b border-slate-800">
+                          <p className="font-black text-white text-sm">{selectedMsg.barber_name}</p>
+                          <p className="text-[10px] text-slate-400">{new Date(selectedMsg.created_at).toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+                          <div className="bg-slate-800 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-400 font-bold mb-1">MENSAGEM</p>
+                            <p className="text-sm text-white">{selectedMsg.message}</p>
+                          </div>
+                          {selectedMsg.reply&&(
+                            <div className="bg-blue-900/30 border border-blue-800 rounded-xl p-3">
+                              <p className="text-[10px] text-blue-400 font-bold mb-1">SUA RESPOSTA</p>
+                              <p className="text-sm text-white">{selectedMsg.reply}</p>
+                              <p className="text-[9px] text-slate-500 mt-1">{selectedMsg.replied_at&&new Date(selectedMsg.replied_at).toLocaleString('pt-BR')}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4 border-t border-slate-800 space-y-2">
+                          <textarea
+                            value={replyTexts[selectedMsg.id]||''}
+                            onChange={e=>setReplyTexts(p=>({...p,[selectedMsg.id]:e.target.value}))}
+                            placeholder="Digite sua resposta..."
+                            rows={3}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-colors resize-none placeholder-slate-500"/>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={()=>handleSendReply(selectedMsg.id,selectedMsg.barber_name,selectedMsg.barber_phone)}
+                              disabled={!replyTexts[selectedMsg.id]?.trim()||sendingReply[selectedMsg.id]}
+                              className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all">
+                              {sendingReply[selectedMsg.id]?<Loader2 size={14} className="animate-spin"/>:<><Reply size={14}/> Responder</>}
+                            </button>
+                            {selectedMsg.barber_phone&&(
+                              <a href={`https://wa.me/55${String(selectedMsg.barber_phone).replace(/\D/g,'')}?text=${encodeURIComponent(replyTexts[selectedMsg.id]||'Olá!')}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="p-2.5 bg-green-700 text-white rounded-xl flex items-center justify-center hover:bg-green-600 transition-colors">
+                                <Phone size={16}/>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ):(
+                      <div className="flex-1 flex items-center justify-center p-8 text-center">
+                        <div><MessageSquare size={32} className="text-slate-600 mx-auto mb-3"/><p className="text-slate-400 text-sm">Selecione uma mensagem para responder</p></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* ── PROFESSIONALS ── */}
+        {activeSection==='professionals'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><Tag size={20} className="text-purple-400"/> Gestão de Profissionais</h2>
+
+            {/* Featured selection */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-1 flex items-center gap-2"><Star size={16} className="text-amber-400"/> Top 3 em Destaque</h3>
+              <p className="text-[10px] text-slate-400 mb-4">Estes profissionais aparecem no topo da lista de clientes, independente de localização.</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[1,2,3].map(rank=>{
+                  const featured=allProfiles.find(p=>p.featured_rank===rank);
+                  return (
+                    <div key={rank} className={`rounded-xl border p-3 text-center ${featured?'border-amber-600 bg-amber-950/30':'border-slate-700 bg-slate-800'}`}>
+                      <p className="text-[10px] font-black text-amber-400 mb-2">#{rank}</p>
+                      {featured?(
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-slate-700 mx-auto mb-1.5 overflow-hidden">
+                            {featured.avatar_url?<img src={featured.avatar_url} className="w-full h-full object-cover" alt=""/>:<User size={18} className="text-slate-400 mx-auto mt-1"/>}
+                          </div>
+                          <p className="text-[10px] font-bold text-white truncate">{featured.name}</p>
+                          <button onClick={()=>handleSetFeatured(featured.id,null)} className="mt-2 text-[9px] text-red-400 font-bold">Remover</button>
+                        </>
+                      ):(
+                        <div className="text-slate-500"><p className="text-2xl mb-1">＋</p><p className="text-[9px]">Vaga livre</p></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Barber list */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800"><h3 className="font-black text-white text-sm">Todos os Profissionais ({barbers.length})</h3></div>
+              <div className="divide-y divide-slate-800 max-h-[600px] overflow-y-auto">
+                {barbers.map(b=>{
+                  const currentTags=(b.admin_tags||[]).join(', ');
+                  const tagInput=tagInputs[b.id]!==undefined?tagInputs[b.id]:currentTags;
+                  const rating=getBarberRating(b);
+                  const appCount=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').length;
+                  const revenue=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').reduce((acc,a)=>acc+(Number(a.price)||0),0);
+                  return (
+                    <div key={b.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-700 flex-shrink-0 overflow-hidden">
+                          {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt=""/>:<div className="w-full h-full flex items-center justify-center"><User size={16} className="text-slate-400"/></div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-black text-white text-sm">{b.name}</p>
+                            <StarRating rating={rating}/>
+                            <span className="text-[9px] font-bold text-amber-400">{rating}</span>
+                            {b.featured_rank&&<span className="text-[9px] font-black bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded-full">★ Top #{b.featured_rank}</span>}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">{b.phone}</p>
+                          <div className="flex items-center gap-3 mt-1">
+                            <span className="text-[9px] text-slate-500">{appCount} atend. · R$ {revenue}</span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${b.is_visible?'bg-green-900/50 text-green-400':'bg-red-900/50 text-red-400'}`}>
+                              {b.is_visible?'Visível':'Oculto'}
+                            </span>
+                          </div>
+                          {(b.admin_tags||[]).length>0&&(
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {(b.admin_tags||[]).map((tag,i)=>(
+                                <span key={i} className="text-[9px] font-bold bg-purple-900/40 text-purple-400 border border-purple-800 px-2 py-0.5 rounded-full">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Controls */}
+                      <div className="mt-3 space-y-2">
+                        {/* Tags */}
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={tagInput}
+                            onChange={e=>setTagInputs(p=>({...p,[b.id]:e.target.value}))}
+                            placeholder="Tags separadas por vírgula (ex: destaque, vip)"
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-purple-500 transition-colors placeholder-slate-500"/>
+                          <button onClick={()=>handleSaveTags(b.id,tagInput)} disabled={savingTags[b.id]}
+                            className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap">
+                            {savingTags[b.id]?<Loader2 size={10} className="animate-spin"/>:<Tag size={10}/>} Salvar
+                          </button>
+                        </div>
+
+                        {/* Featured rank + visibility */}
+                        <div className="flex gap-2 flex-wrap">
+                          {[1,2,3].map(rank=>(
+                            <button key={rank} onClick={()=>handleSetFeatured(b.id,b.featured_rank===rank?null:rank)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.featured_rank===rank?'bg-amber-500 text-white':'bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700'}`}>
+                              ★ #{rank}
+                            </button>
+                          ))}
+                          <button onClick={()=>handleToggleVisibility(b.id,b.is_visible)}
+                            className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ml-auto ${b.is_visible?'bg-red-900/40 text-red-400 border border-red-800':'bg-green-900/40 text-green-400 border border-green-800'}`}>
+                            {b.is_visible?'Ocultar':'Mostrar'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
   );
-  const manualApps = user.manual_appointments || [];
-  const allApps = [...confirmedApps, ...manualApps];
+};
 
-  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-  const appsByDay = Array(7).fill(0);
-  allApps.forEach(app => {
-    if (app.date) { const dow = new Date(app.date + 'T00:00:00').getDay(); appsByDay[dow]++; }
-  });
-  const dayData = dayNames.map((label, i) => ({ label, value: appsByDay[i] }));
+// ─── REPORTS SECTION (MODIFICADO: GoalCard e Suporte ao final) ────────────────
+const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdateProfile, supabase: sb }) => {
+  const [hourlyRate,setHourlyRate]=useState(user.hourly_rate||50);
+  const [savingRate,setSavingRate]=useState(false);
 
-  const recentRevenue = confirmedApps.slice(-6).map((a, i) => ({ label: `#${i + 1}`, value: Number(a.price) || 0 }));
+  const confirmedApps=(appointments||[]).filter(a=>String(a.barber_id||a.barberId)===String(user.id)&&a.status==='confirmed');
+  const manualApps=user.manual_appointments||[];
+  const allApps=[...confirmedApps,...manualApps];
+  const dayNames=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const appsByDay=Array(7).fill(0);
+  allApps.forEach(app=>{ if (app.date) { const dow=new Date(app.date+'T00:00:00').getDay(); appsByDay[dow]++; } });
+  const dayData=dayNames.map((label,i)=>({label,value:appsByDay[i]}));
+  const recentRevenue=confirmedApps.slice(-6).map((a,i)=>({label:`#${i+1}`,value:Number(a.price)||0}));
+  const slots=user.available_slots||{};
+  const totalOpen=Object.values(slots).reduce((acc,s)=>acc+(s?.length||0),0);
+  const totalBooked=allApps.length;
+  const occupancy=totalOpen+totalBooked>0?Math.round((totalBooked/(totalOpen+totalBooked))*100):0;
+  const avgMinPerApp=45, totalMinWorked=allApps.length*avgMinPerApp, totalHrsWorked=(totalMinWorked/60).toFixed(1);
+  const earnedAtRate=((totalMinWorked/60)*hourlyRate).toFixed(2);
+  const totalRevenue=confirmedApps.reduce((acc,a)=>acc+(Number(a.price)||0),0);
+  const daysWithSlots=Object.keys(slots).filter(d=>slots[d]?.length>0).length;
+  const idleHrs=Math.max(0,daysWithSlots*8-totalMinWorked/60).toFixed(1);
 
-  const slots = user.available_slots || {};
-  const totalOpen = Object.values(slots).reduce((acc, s) => acc + (s?.length || 0), 0);
-  const totalBooked = allApps.length;
-  const occupancy = totalOpen + totalBooked > 0 ? Math.round((totalBooked / (totalOpen + totalBooked)) * 100) : 0;
-
-  const avgMinPerApp = 45;
-  const totalMinWorked = allApps.length * avgMinPerApp;
-  const totalHrsWorked = (totalMinWorked / 60).toFixed(1);
-  const earnedAtRate = ((totalMinWorked / 60) * hourlyRate).toFixed(2);
-  const totalRevenue = confirmedApps.reduce((acc, a) => acc + (Number(a.price) || 0), 0);
-  const daysWithSlots = Object.keys(slots).filter(d => slots[d]?.length > 0).length;
-  const idleHrs = Math.max(0, daysWithSlots * 8 - totalMinWorked / 60).toFixed(1);
-
-  const saveHourlyRate = async (rate) => {
+  const saveHourlyRate=async(rate)=>{
     if (isGuest) return;
     setSavingRate(true);
-    try { await sb.from('profiles').update({ hourly_rate: rate }).eq('id', user.id); onUpdateProfile({ ...user, hourly_rate: rate }); }
-    catch (_) { }
+    try { await sb.from('profiles').update({hourly_rate:rate}).eq('id',user.id); onUpdateProfile({...user,hourly_rate:rate}); }
+    catch(_){}
     setSavingRate(false);
   };
 
@@ -918,50 +1346,47 @@ const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdate
         <div className="flex items-center gap-3 mb-2">
           <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
             <div className="h-full rounded-full transition-all duration-1000"
-              style={{ width: `${occupancy}%`, background: occupancy >= 70 ? '#22c55e' : occupancy >= 40 ? '#3b82f6' : '#f59e0b' }} />
+              style={{width:`${occupancy}%`,background:occupancy>=70?'#22c55e':occupancy>=40?'#3b82f6':'#f59e0b'}}/>
           </div>
           <span className="font-black text-sm text-slate-900 w-10 text-right">{occupancy}%</span>
         </div>
         <div className="flex gap-4 mt-3">
-          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-green-500" /><span className="text-[10px] font-bold text-slate-500">Trabalhando: {totalHrsWorked}h</span></div>
-          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-200" /><span className="text-[10px] font-bold text-slate-500">Ocioso: {idleHrs}h</span></div>
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-[10px] font-bold text-slate-500">Trabalhando: {totalHrsWorked}h</span></div>
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-200"/><span className="text-[10px] font-bold text-slate-500">Ocioso: {idleHrs}h</span></div>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Atendimentos por Dia da Semana</p>
-        <SimpleBarChart data={dayData} color="#3b82f6" height={72} />
+        <SimpleBarChart data={dayData} color="#3b82f6" height={72}/>
       </div>
 
-      {recentRevenue.length > 0 && (
+      {recentRevenue.length>0&&(
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Valores Últimos Atendimentos</p>
-          <SimpleBarChart data={recentRevenue} color="#10b981" height={72} />
+          <SimpleBarChart data={recentRevenue} color="#10b981" height={72}/>
         </div>
       )}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp size={16} className="text-blue-500" />
-          <p className="font-bold text-slate-900 text-sm">Análise de Rôl de Tempo</p>
-        </div>
+        <div className="flex items-center gap-2 mb-3"><TrendingUp size={16} className="text-blue-500"/><p className="font-bold text-slate-900 text-sm">Análise de Valor de Tempo</p></div>
         <div className="flex items-center gap-3 mb-4">
           <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Minha hora vale:</label>
           <div className="flex-1 relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
-            <input type="number" value={hourlyRate} onChange={e => setHourlyRate(Number(e.target.value))}
-              className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-blue-400" />
+            <input type="number" value={hourlyRate} onChange={e=>setHourlyRate(Number(e.target.value))}
+              className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-blue-400"/>
           </div>
-          <button onClick={() => saveHourlyRate(hourlyRate)} disabled={savingRate || isGuest}
+          <button onClick={()=>saveHourlyRate(hourlyRate)} disabled={savingRate||isGuest}
             className="px-3 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold active:scale-95 disabled:opacity-50">
-            {savingRate ? '...' : 'Salvar'}
+            {savingRate?'...':'Salvar'}
           </button>
         </div>
         <div className="space-y-2">
-          {[{ label: '30 minutos', mins: 30 }, { label: '1 hora', mins: 60 }, { label: '2 horas', mins: 120 }, { label: 'Dia de trabalho (8h)', mins: 480 }].map(({ label, mins }) => (
+          {[{label:'30 minutos',mins:30},{label:'1 hora',mins:60},{label:'2 horas',mins:120},{label:'Dia de trabalho (8h)',mins:480}].map(({label,mins})=>(
             <div key={mins} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
               <span className="text-xs font-bold text-slate-600">{label}</span>
-              <span className="text-xs font-black text-green-600">R$ {((mins / 60) * hourlyRate).toFixed(2)}</span>
+              <span className="text-xs font-black text-green-600">R$ {((mins/60)*hourlyRate).toFixed(2)}</span>
             </div>
           ))}
         </div>
@@ -972,7 +1397,22 @@ const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdate
         </div>
       </div>
 
-      {!isGuest && (
+      {/* ── META DOS 30 — AO FINAL ── */}
+      <GoalCard
+        totalAppointments={allApps.length}
+        slug={user.slug}
+        isGuest={isGuest}
+      />
+
+      {/* ── SUPORTE — AO FINAL ── */}
+      {!isGuest&&(
+        <div>
+          <div className="flex items-center gap-2 mb-3"><Headphones size={16} className="text-slate-500"/><h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3></div>
+          <SupportChat user={user}/>
+        </div>
+      )}
+
+      {!isGuest&&(
         <div className="text-center pt-2 pb-8">
           <button onClick={onDeleteAccount} className="text-[10px] text-red-300 font-bold underline underline-offset-2 hover:text-red-500 transition-colors">
             Excluir minha conta
@@ -985,95 +1425,72 @@ const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdate
 
 // ─── COPY LINK BUTTON ─────────────────────────────────────────────────────────
 const CopyLinkButton = ({ barber }) => {
-  const [copied, setCopied] = useState(false);
-  const slug = barber.slug || generateSlug(barber.name || 'profissional', barber.id);
-  const url = getPublicUrl(slug);
-  const handleCopy = () => {
-    navigator.clipboard.writeText(url).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-  };
+  const [copied,setCopied]=useState(false);
+  const slug=barber.slug||generateSlug(barber.name||'profissional',barber.id);
+  const url=getPublicUrl(slug);
+  const handleCopy=()=>{ navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
   return (
     <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
-      <Link size={14} className="text-slate-400 flex-shrink-0" />
+      <Link size={14} className="text-slate-400 flex-shrink-0"/>
       <p className="text-[10px] text-slate-400 font-mono truncate flex-1">{url}</p>
       <button onClick={handleCopy}
-        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${copied ? 'bg-green-100 text-green-700' : 'bg-slate-900 text-white hover:bg-slate-700'}`}>
-        {copied ? <><CheckCircle size={12} /> Copiado</> : <><Copy size={12} /> Copiar</>}
+        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${copied?'bg-green-100 text-green-700':'bg-slate-900 text-white hover:bg-slate-700'}`}>
+        {copied?<><CheckCircle size={12}/> Copiado</>:<><Copy size={12}/> Copiar</>}
       </button>
     </div>
   );
 };
 
 // ─── BASE COMPONENTS ──────────────────────────────────────────────────────────
-const Button = ({ children, onClick, variant = 'primary', className = '', disabled, loading }) => {
-  const variants = {
-    primary: "bg-slate-900 text-white hover:bg-black shadow-lg",
-    secondary: "bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20",
-    outline: "border-2 border-slate-200 text-slate-600 hover:border-slate-900",
-    success: "bg-green-600 text-white hover:bg-green-700",
-  };
+const Button = ({ children, onClick, variant='primary', className='', disabled, loading }) => {
+  const variants={ primary:"bg-slate-900 text-white hover:bg-black shadow-lg", secondary:"bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20", outline:"border-2 border-slate-200 text-slate-600 hover:border-slate-900", success:"bg-green-600 text-white hover:bg-green-700" };
   return (
-    <button onClick={onClick} disabled={disabled || loading}
+    <button onClick={onClick} disabled={disabled||loading}
       className={`w-full py-3.5 rounded-xl font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}>
-      {loading ? <Loader2 className="animate-spin" size={20} /> : children}
+      {loading?<Loader2 className="animate-spin" size={20}/>:children}
     </button>
   );
 };
 
 const Card = ({ children, selected, onClick }) => (
-  <div onClick={onClick} className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${selected ? 'border-blue-600 bg-blue-50/50' : 'border-transparent bg-white shadow-sm hover:border-slate-200'}`}>
-    {selected && <div className="absolute top-3 right-3 text-blue-600"><CheckCircle2 size={18} fill="currentColor" className="text-white" /></div>}
+  <div onClick={onClick} className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${selected?'border-blue-600 bg-blue-50/50':'border-transparent bg-white shadow-sm hover:border-slate-200'}`}>
+    {selected&&<div className="absolute top-3 right-3 text-blue-600"><CheckCircle2 size={18} fill="currentColor" className="text-white"/></div>}
     {children}
   </div>
 );
 
 const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChange }) => {
-  const today = new Date();
-  const [calYear, setCalYear] = useState(today.getFullYear());
-  const [calMonth, setCalMonth] = useState(today.getMonth());
-  const daysInMonth = getDaysInMonth(calYear, calMonth);
-  const firstDayOfMonth = new Date(calYear, calMonth, 1).getDay();
-
-  const goPrev = () => {
-    const d = new Date(calYear, calMonth - 1, 1);
-    if (d >= new Date(today.getFullYear(), today.getMonth(), 1)) {
-      setCalYear(d.getFullYear()); setCalMonth(d.getMonth());
-      if (onMonthChange) onMonthChange(d.getFullYear(), d.getMonth());
-    }
-  };
-  const goNext = () => {
-    const d = new Date(calYear, calMonth + 1, 1);
-    setCalYear(d.getFullYear()); setCalMonth(d.getMonth());
-    if (onMonthChange) onMonthChange(d.getFullYear(), d.getMonth());
-  };
-  const isPrevDisabled = calYear === today.getFullYear() && calMonth === today.getMonth();
-
+  const today=new Date();
+  const [calYear,setCalYear]=useState(today.getFullYear());
+  const [calMonth,setCalMonth]=useState(today.getMonth());
+  const daysInMonth=getDaysInMonth(calYear,calMonth);
+  const firstDayOfMonth=new Date(calYear,calMonth,1).getDay();
+  const goPrev=()=>{ const d=new Date(calYear,calMonth-1,1); if (d>=new Date(today.getFullYear(),today.getMonth(),1)) { setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); if (onMonthChange) onMonthChange(d.getFullYear(),d.getMonth()); } };
+  const goNext=()=>{ const d=new Date(calYear,calMonth+1,1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); if (onMonthChange) onMonthChange(d.getFullYear(),d.getMonth()); };
+  const isPrevDisabled=calYear===today.getFullYear()&&calMonth===today.getMonth();
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <button onClick={goPrev} disabled={isPrevDisabled} className={`p-2 rounded-full transition-all ${isPrevDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}><ChevronLeft size={18} /></button>
+        <button onClick={goPrev} disabled={isPrevDisabled} className={`p-2 rounded-full transition-all ${isPrevDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}><ChevronLeft size={18}/></button>
         <span className="font-black text-sm text-slate-900">{MONTH_NAMES[calMonth]} {calYear}</span>
-        <button onClick={goNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all"><ChevronRight size={18} /></button>
+        <button onClick={goNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all"><ChevronRight size={18}/></button>
       </div>
       <div className="grid grid-cols-7 gap-1 mb-1">
-        {['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+        {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
       </div>
       <div className="grid grid-cols-7 gap-1">
-        {Array.from({ length: firstDayOfMonth }, (_, i) => <div key={`e-${i}`} />)}
-        {Array.from({ length: daysInMonth }, (_, i) => {
-          const day = i + 1;
-          const dateStr = formatDate(calYear, calMonth, day);
-          const daySlots = availableSlots?.[dateStr] || [];
-          const isAvailable = daySlots.length > 0;
-          const isSelected = selectedDate === dateStr;
-          const isPast = new Date(dateStr) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        {Array.from({length:firstDayOfMonth},(_,i)=><div key={`e-${i}`}/>)}
+        {Array.from({length:daysInMonth},(_,i)=>{
+          const day=i+1, dateStr=formatDate(calYear,calMonth,day);
+          const daySlots=availableSlots?.[dateStr]||[], isAvailable=daySlots.length>0;
+          const isSelected=selectedDate===dateStr;
+          const isPast=new Date(dateStr)<new Date(today.getFullYear(),today.getMonth(),today.getDate());
           return (
-            <button key={i} disabled={!isAvailable || isPast} onClick={() => onSelectDate(dateStr)}
+            <button key={i} disabled={!isAvailable||isPast} onClick={()=>onSelectDate(dateStr)}
               className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
-                ${isSelected ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105'
-                  : isAvailable && !isPast ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
-                    : 'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}>
+                ${isSelected?'bg-slate-900 text-white border-slate-900 shadow-lg scale-105':isAvailable&&!isPast?'bg-white text-slate-600 border-slate-200 hover:border-slate-400':'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}>
               {day}
-              {isAvailable && !isSelected && !isPast && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5" />}
+              {isAvailable&&!isSelected&&!isPast&&<div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"/>}
             </button>
           );
         })}
@@ -1084,72 +1501,47 @@ const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChan
 
 // ─── SUPPORT CHAT ─────────────────────────────────────────────────────────────
 const SupportChat = ({ user }) => {
-  const [messages, setMessages] = useState([{
-    id: 1, from: 'support',
-    text: `Olá ${user?.name?.split(' ')[0] || 'profissional'}! 👋 Sou do suporte do Salão Digital. Como posso te ajudar hoje?`,
-    time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  }]);
-  const [input, setInput] = useState('');
-  const [sending, setSending] = useState(false);
-  const messagesEndRef = useRef(null);
-  useEffect(() => { if (messages.length > 1) messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-  const SUPPORT_WHATSAPP = '5541992931394';
-
-  const handleSend = async () => {
+  const [messages,setMessages]=useState([{id:1,from:'support',text:`Olá ${user?.name?.split(' ')[0]||'profissional'}! 👋 Sou do suporte do Salão Digital. Como posso te ajudar hoje?`,time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})}]);
+  const [input,setInput]=useState(''), [sending,setSending]=useState(false);
+  const messagesEndRef=useRef(null);
+  useEffect(()=>{ if (messages.length>1) messagesEndRef.current?.scrollIntoView({behavior:'smooth'}); },[messages]);
+  const SUPPORT_WHATSAPP='5541992931394';
+  const handleSend=async()=>{
     if (!input.trim()) return;
-    const userMsg = { id: Date.now(), from: 'user', text: input.trim(), time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
-    setMessages(prev => [...prev, userMsg]);
-    const sentText = input.trim(); setInput(''); setSending(true);
-    try { await supabase.from('support_messages').insert([{ barber_id: user?.id, barber_name: user?.name, message: sentText, created_at: new Date().toISOString() }]); } catch (_) { }
-    setTimeout(() => {
-      setMessages(prev => [...prev, {
-        id: Date.now() + 1, from: 'support',
-        text: 'Recebi sua mensagem! Para atendimento mais rápido, clique abaixo para falar com nossa equipe no WhatsApp. 💬',
-        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-        whatsapp: `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Sou ${user?.name} (Salão Digital). ${sentText}`)}`
-      }]);
+    const userMsg={id:Date.now(),from:'user',text:input.trim(),time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})};
+    setMessages(prev=>[...prev,userMsg]);
+    const sentText=input.trim(); setInput(''); setSending(true);
+    try { await supabase.from('support_messages').insert([{barber_id:user?.id,barber_name:user?.name,barber_phone:user?.phone,message:sentText,created_at:new Date().toISOString()}]); } catch(_){}
+    setTimeout(()=>{
+      setMessages(prev=>[...prev,{id:Date.now()+1,from:'support',text:'Recebi sua mensagem! Para atendimento mais rápido, clique abaixo para falar com nossa equipe no WhatsApp. 💬',time:new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),whatsapp:`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Sou ${user?.name} (Salão Digital). ${sentText}`)}`}]);
       setSending(false);
-    }, 1000);
+    },1000);
   };
-
   return (
     <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
       <div className="p-4 bg-slate-900 flex items-center gap-3">
-        <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0"><Headphones size={18} className="text-white" /></div>
-        <div>
-          <p className="font-bold text-white text-sm">Suporte Salão Digital</p>
-          <div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full" /><p className="text-[10px] text-slate-400">Online agora</p></div>
-        </div>
+        <div className="w-9 h-9 bg-blue-600 rounded-full flex items-center justify-center flex-shrink-0"><Headphones size={18} className="text-white"/></div>
+        <div><p className="font-bold text-white text-sm">Suporte Salão Digital</p><div className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 bg-green-400 rounded-full"/><p className="text-[10px] text-slate-400">Online agora</p></div></div>
       </div>
       <div className="h-56 overflow-y-auto p-4 space-y-3 bg-slate-50">
-        {messages.map(msg => (
-          <div key={msg.id} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] ${msg.from === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-              <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.from === 'user' ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-white text-slate-800 border border-slate-100 rounded-bl-sm shadow-sm'}`}>{msg.text}</div>
-              {msg.whatsapp && (
-                <a href={msg.whatsapp} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl mt-1">
-                  <Phone size={11} /> Abrir WhatsApp do Suporte
-                </a>
-              )}
+        {messages.map(msg=>(
+          <div key={msg.id} className={`flex ${msg.from==='user'?'justify-end':'justify-start'}`}>
+            <div className={`max-w-[80%] ${msg.from==='user'?'items-end':'items-start'} flex flex-col gap-1`}>
+              <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${msg.from==='user'?'bg-blue-600 text-white rounded-br-sm':'bg-white text-slate-800 border border-slate-100 rounded-bl-sm shadow-sm'}`}>{msg.text}</div>
+              {msg.whatsapp&&<a href={msg.whatsapp} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-[10px] font-bold text-green-600 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl mt-1"><Phone size={11}/> Abrir WhatsApp do Suporte</a>}
               <span className="text-[9px] text-slate-400">{msg.time}</span>
             </div>
           </div>
         ))}
-        {sending && (
-          <div className="flex justify-start">
-            <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm">
-              <div className="flex gap-1">{[0,150,300].map(d => <span key={d} className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />)}</div>
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
+        {sending&&<div className="flex justify-start"><div className="bg-white border border-slate-100 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm"><div className="flex gap-1">{[0,150,300].map(d=><span key={d} className="w-1.5 h-1.5 bg-slate-300 rounded-full animate-bounce" style={{animationDelay:`${d}ms`}}/>)}</div></div></div>}
+        <div ref={messagesEndRef}/>
       </div>
       <div className="p-3 border-t border-slate-100 bg-white flex gap-2">
-        <input type="text" value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSend()} placeholder="Digite sua dúvida..."
-          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-400 transition-colors" />
-        <button onClick={handleSend} disabled={!input.trim() || sending}
+        <input type="text" value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSend()} placeholder="Digite sua dúvida..."
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-400 transition-colors"/>
+        <button onClick={handleSend} disabled={!input.trim()||sending}
           className="w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center disabled:opacity-40 flex-shrink-0 hover:bg-blue-700 transition-colors active:scale-95">
-          <Send size={14} />
+          <Send size={14}/>
         </button>
       </div>
     </div>
@@ -1161,7 +1553,7 @@ const PrivacyModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm" onClick={onClose}/>
       <div className="relative bg-white w-full max-w-md max-h-[80vh] rounded-3xl p-8 overflow-y-auto shadow-2xl">
         <h2 className="text-xl font-black mb-4">Política de Privacidade</h2>
         <div className="text-xs text-slate-600 space-y-4 leading-relaxed">
@@ -1179,12 +1571,10 @@ const PrivacyModal = ({ isOpen, onClose }) => {
 // ─── WELCOME POPUP ────────────────────────────────────────────────────────────
 const WelcomePopup = ({ onClose }) => (
   <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose} />
+    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}/>
     <div className="relative bg-white w-full max-w-[360px] h-[70vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col">
-      <div className="flex-1 w-full overflow-hidden"><img src={imgPopup} alt="Bem-vindo" className="w-full h-full object-cover" /></div>
-      <div className="p-6 bg-white w-full flex items-center justify-center">
-        <Button variant="secondary" onClick={onClose} className="w-full py-4 text-lg shadow-xl shadow-blue-600/20">Começar Agora</Button>
-      </div>
+      <div className="flex-1 w-full overflow-hidden"><img src={imgPopup} alt="Bem-vindo" className="w-full h-full object-cover"/></div>
+      <div className="p-6 bg-white w-full flex items-center justify-center"><Button variant="secondary" onClick={onClose} className="w-full py-4 text-lg shadow-xl shadow-blue-600/20">Começar Agora</Button></div>
     </div>
   </div>
 );
@@ -1194,19 +1584,17 @@ const GuestModeModal = ({ isOpen, onClose, onSelectGuestMode }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[900] flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm" onClick={onClose} />
+      <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm" onClick={onClose}/>
       <div className="relative bg-white w-full max-w-sm rounded-3xl p-7 shadow-2xl">
         <h2 className="text-xl font-black text-slate-900 mb-1 text-center">Explorar como Convidado</h2>
         <p className="text-xs text-slate-400 text-center mb-7">Escolha como deseja visualizar o app</p>
         <div className="space-y-3">
-          <button onClick={() => onSelectGuestMode('client')}
-            className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40 transition-all active:scale-95 text-left">
-            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200"><User size={22} className="text-white" /></div>
+          <button onClick={()=>onSelectGuestMode('client')} className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40 transition-all active:scale-95 text-left">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200"><User size={22} className="text-white"/></div>
             <div><p className="font-black text-slate-900 text-sm">Ver como Cliente</p><p className="text-[10px] text-slate-400 mt-0.5">Explore serviços, profissionais e agendamentos</p></div>
           </button>
-          <button onClick={() => onSelectGuestMode('barber')}
-            className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-slate-700 transition-all active:scale-95 text-left">
-            <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center flex-shrink-0"><Scissors size={22} className="text-white" /></div>
+          <button onClick={()=>onSelectGuestMode('barber')} className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-slate-700 transition-all active:scale-95 text-left">
+            <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center flex-shrink-0"><Scissors size={22} className="text-white"/></div>
             <div><p className="font-black text-slate-900 text-sm">Ver como Profissional</p><p className="text-[10px] text-slate-400 mt-0.5">Simule o painel, agenda e serviços (sem salvar)</p></div>
           </button>
         </div>
@@ -1218,122 +1606,79 @@ const GuestModeModal = ({ isOpen, onClose, onSelectGuestMode }) => {
 
 // ─── WELCOME SCREEN ───────────────────────────────────────────────────────────
 const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
-  const [showPrivacy, setShowPrivacy] = useState(false);
-  const [showGuestModal, setShowGuestModal] = useState(false);
-  const handleGuestMode = (guestType) => { setShowGuestModal(false); onSelectMode(guestType === 'client' ? 'guest' : 'guest-barber'); };
-
+  const [showPrivacy,setShowPrivacy]=useState(false), [showGuestModal,setShowGuestModal]=useState(false);
+  const handleGuestMode=(guestType)=>{ setShowGuestModal(false); onSelectMode(guestType==='client'?'guest':'guest-barber'); };
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
-      style={{ backgroundImage: `url('/backgr.png')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
-      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0" />
-      <div className="absolute top-6 right-6 z-20"><DarkModeToggle isDark={isDark} onToggle={onToggleDark} /></div>
+      style={{backgroundImage:`url('/backgr.png')`,backgroundSize:'cover',backgroundPosition:'center'}}>
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"/>
+      <div className="absolute top-6 right-6 z-20"><DarkModeToggle isDark={isDark} onToggle={onToggleDark}/></div>
       <div className="relative z-10 flex flex-col items-center">
-        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50">
-          <Scissors size={40} className="text-white" />
-        </div>
+        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50"><Scissors size={40} className="text-white"/></div>
         <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
         <div className="w-full max-w-xs space-y-3 mt-10">
-          <Button variant="secondary" onClick={() => onSelectMode('client')}><User size={16} /> Sou Cliente</Button>
-          <Button variant="primary" onClick={() => setShowGuestModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white border-none shadow-lg">
-            <Eye size={16} /> Explorar como Convidado
-          </Button>
-          <div className="py-2 flex items-center gap-4">
-            <div className="h-[1px] bg-white/20 flex-1" />
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
-            <div className="h-[1px] bg-white/20 flex-1" />
-          </div>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-900/40" onClick={() => onSelectMode('barber')}>
-            <Scissors size={16} /> Sou Profissional
-          </Button>
-          <button onClick={() => setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">
-            Política de Privacidade
-          </button>
+          <Button variant="secondary" onClick={()=>onSelectMode('client')}><User size={16}/> Sou Cliente</Button>
+          <Button variant="primary" onClick={()=>setShowGuestModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white border-none shadow-lg"><Eye size={16}/> Explorar como Convidado</Button>
+          <div className="py-2 flex items-center gap-4"><div className="h-[1px] bg-white/20 flex-1"/><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span><div className="h-[1px] bg-white/20 flex-1"/></div>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-900/40" onClick={()=>onSelectMode('barber')}><Scissors size={16}/> Sou Profissional</Button>
+          <button onClick={()=>setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">Política de Privacidade</button>
         </div>
       </div>
-      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
-      <GuestModeModal isOpen={showGuestModal} onClose={() => setShowGuestModal(false)} onSelectGuestMode={handleGuestMode} />
+      <PrivacyModal isOpen={showPrivacy} onClose={()=>setShowPrivacy(false)}/>
+      <GuestModeModal isOpen={showGuestModal} onClose={()=>setShowGuestModal(false)} onSelectGuestMode={handleGuestMode}/>
     </div>
   );
 };
 
-// ─── AUTH SCREEN — com validação 11 dígitos + nome mín. 3 + máscara ───────────
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
-  const [mode, setMode] = useState('login');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Campos com validação visual
-  const nameValid = name.trim().length >= 3;
-  const phoneValid = getPhoneDigits(phone).length === 11;
-  const passwordValid = password.length >= 6;
-
-  const handlePhoneChange = (e) => setPhone(applyPhoneMask(e.target.value));
-
-  const handleSubmit = async () => {
+  const [mode,setMode]=useState('login'), [name,setName]=useState(''), [phone,setPhone]=useState(''), [password,setPassword]=useState(''), [loading,setLoading]=useState(false), [error,setError]=useState(''), [showPassword,setShowPassword]=useState(false);
+  const nameValid=name.trim().length>=3, phoneValid=getPhoneDigits(phone).length===11, passwordValid=password.length>=6;
+  const handlePhoneChange=(e)=>setPhone(applyPhoneMask(e.target.value));
+  const handleSubmit=async()=>{
     setError('');
-    if (mode === 'register') {
-      if (name.trim().length < 3) { setError('Nome deve ter pelo menos 3 caracteres.'); return; }
-      const digits = getPhoneDigits(phone);
-      if (digits.length !== 11) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
-      if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
+    if (mode==='register') {
+      if (name.trim().length<3) { setError('Nome deve ter pelo menos 3 caracteres.'); return; }
+      if (getPhoneDigits(phone).length!==11) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
+      if (password.length<6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
     }
     setLoading(true);
-    try {
-      if (mode === 'login') await onLogin(getPhoneDigits(phone) || phone, password);
-      else await onRegister(name.trim(), getPhoneDigits(phone), password);
-    } catch (err) { setError(err.message); }
+    try { if (mode==='login') await onLogin(getPhoneDigits(phone)||phone,password); else await onRegister(name.trim(),getPhoneDigits(phone),password); }
+    catch(err) { setError(err.message); }
     finally { setLoading(false); }
   };
-
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
-      <div className="absolute top-6 left-6">
-        <button onClick={onBack} className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24} /></button>
-      </div>
-      <div className="absolute top-6 right-6"><DarkModeToggle isDark={isDark} onToggle={onToggleDark} /></div>
+      <div className="absolute top-6 left-6"><button onClick={onBack} className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button></div>
+      <div className="absolute top-6 right-6"><DarkModeToggle isDark={isDark} onToggle={onToggleDark}/></div>
       <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
-        <h2 className="text-2xl font-black text-center mb-2">{userType === 'barber' ? 'Área Profissional' : 'Área do Cliente'}</h2>
-        <p className="text-center text-slate-400 mb-6 text-sm">{mode === 'login' ? 'Faça login para continuar' : 'Crie sua conta agora'}</p>
-        {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
+        <h2 className="text-2xl font-black text-center mb-2">{userType==='barber'?'Área Profissional':'Área do Cliente'}</h2>
+        <p className="text-center text-slate-400 mb-6 text-sm">{mode==='login'?'Faça login para continuar':'Crie sua conta agora'}</p>
+        {error&&<div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
         <div className="space-y-4">
-          {mode === 'register' && (
+          {mode==='register'&&(
             <div>
-              <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Nome e sobrenome (mín. 3 letras)"
-                className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${name.length > 0 ? (nameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`} />
-              {name.length > 0 && !nameValid && <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>}
+              <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Nome e sobrenome (mín. 3 letras)"
+                className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${name.length>0?(nameValid?'border-green-400':'border-red-300'):'border-slate-200 focus:border-blue-500'}`}/>
+              {name.length>0&&!nameValid&&<p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>}
             </div>
           )}
           <div>
-            <input type="tel" value={phone} onChange={handlePhoneChange}
-              placeholder="WhatsApp: (41) 99999-9999"
-              className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${phone.length > 0 ? (phoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`} />
-            {phone.length > 0 && (
-              <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid ? 'text-green-600' : 'text-amber-500'}`}>
-                {getPhoneDigits(phone).length}/11 dígitos {phoneValid ? '✓' : ''}
-              </p>
-            )}
+            <input type="tel" value={phone} onChange={handlePhoneChange} placeholder="WhatsApp: (41) 99999-9999"
+              className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${phone.length>0?(phoneValid?'border-green-400':'border-amber-300'):'border-slate-200 focus:border-blue-500'}`}/>
+            {phone.length>0&&<p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid?'text-green-600':'text-amber-500'}`}>{getPhoneDigits(phone).length}/11 dígitos {phoneValid?'✓':''}</p>}
           </div>
           <div className="relative">
-            <input type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
-              placeholder="Senha (mín. 6 caracteres)"
-              className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${password.length > 0 ? (passwordValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`} />
-            <button onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            <input type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
+              className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${password.length>0?(passwordValid?'border-green-400':'border-red-300'):'border-slate-200 focus:border-blue-500'}`}/>
+            <button onClick={()=>setShowPassword(s=>!s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+              {showPassword?<EyeOff size={18}/>:<Eye size={18}/>}
             </button>
           </div>
-          <Button onClick={handleSubmit} loading={loading}>{mode === 'login' ? 'Entrar' : 'Cadastrar'}</Button>
-          <div className="flex items-center gap-2 my-2">
-            <div className="h-[1px] bg-slate-200 flex-1" />
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span>
-            <div className="h-[1px] bg-slate-200 flex-1" />
-          </div>
-          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
-            className="w-full text-blue-600 font-bold text-sm mt-2">
-            {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
+          <Button onClick={handleSubmit} loading={loading}>{mode==='login'?'Entrar':'Cadastrar'}</Button>
+          <div className="flex items-center gap-2 my-2"><div className="h-[1px] bg-slate-200 flex-1"/><span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span><div className="h-[1px] bg-slate-200 flex-1"/></div>
+          <button onClick={()=>{ setMode(mode==='login'?'register':'login'); setError(''); }} className="w-full text-blue-600 font-bold text-sm mt-2">
+            {mode==='login'?'Criar nova conta':'Já tenho conta'}
           </button>
         </div>
       </div>
@@ -1343,174 +1688,154 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
 
 // ─── BARBER ONBOARDING ────────────────────────────────────────────────────────
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
-  const [step, setStep] = useState(1);
-  const [saving, setSaving] = useState(false);
-  const TOTAL_STEPS = 4;
-  const [address, setAddress] = useState(user.address || '');
-  const [selectedServices, setSelectedServices] = useState(user.my_services || []);
-  const [duration, setDuration] = useState(user.appointment_duration || '30min');
-  const [capturedLocation, setCapturedLocation] = useState({ lat: user.latitude, lng: user.longitude });
-
-  const handleCaptureLocation = () => {
-    if (!navigator.geolocation) { alert('Geolocalização não disponível'); return; }
-    navigator.geolocation.getCurrentPosition(
-      pos => { setCapturedLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); alert('Localização capturada!'); },
-      () => alert('Erro ao capturar localização.')
-    );
-  };
-
-  const toggleService = (id, defaultPrice) => {
-    const exists = selectedServices.find(s => s.id === id);
-    if (exists) setSelectedServices(prev => prev.filter(s => s.id !== id));
-    else setSelectedServices(prev => [...prev, { id, price: defaultPrice }]);
-  };
-
-  const handleFinish = async () => {
+  const [step,setStep]=useState(1), [saving,setSaving]=useState(false);
+  const TOTAL_STEPS=4;
+  const [address,setAddress]=useState(user.address||''), [selectedServices,setSelectedServices]=useState(user.my_services||[]), [duration,setDuration]=useState(user.appointment_duration||'30min'), [capturedLocation,setCapturedLocation]=useState({lat:user.latitude,lng:user.longitude});
+  const handleCaptureLocation=()=>{ if (!navigator.geolocation) { alert('Geolocalização não disponível'); return; } navigator.geolocation.getCurrentPosition(pos=>{ setCapturedLocation({lat:pos.coords.latitude,lng:pos.coords.longitude}); alert('Localização capturada!'); },()=>alert('Erro ao capturar localização.')); };
+  const toggleService=(id,defaultPrice)=>{ const exists=selectedServices.find(s=>s.id===id); if (exists) setSelectedServices(prev=>prev.filter(s=>s.id!==id)); else setSelectedServices(prev=>[...prev,{id,price:defaultPrice}]); };
+  const handleFinish=async()=>{
     setSaving(true);
     try {
-      const slug = generateSlug(user.name, user.id);
-      const updateData = { address, latitude: capturedLocation?.lat || null, longitude: capturedLocation?.lng || null, my_services: selectedServices, appointment_duration: duration, onboarding_done: true, slug };
-      await sb.from('profiles').update(updateData).eq('id', user.id);
-      onComplete({ ...user, ...updateData });
-    } catch (e) { alert('Erro ao salvar: ' + e.message); }
-    finally { setSaving(false); }
+      const slug=generateSlug(user.name,user.id);
+      const updateData={address,latitude:capturedLocation?.lat||null,longitude:capturedLocation?.lng||null,my_services:selectedServices,appointment_duration:duration,onboarding_done:true,slug};
+      await sb.from('profiles').update(updateData).eq('id',user.id);
+      onComplete({...user,...updateData});
+    } catch(e) { alert('Erro ao salvar: '+e.message); } finally { setSaving(false); }
   };
-
-  const handleSkip = async () => {
+  const handleSkip=async()=>{
     setSaving(true);
-    try {
-      const slug = generateSlug(user.name, user.id);
-      await sb.from('profiles').update({ onboarding_done: true, slug }).eq('id', user.id);
-      onSkip({ ...user, onboarding_done: true, slug });
-    } catch (e) { onSkip({ ...user, onboarding_done: true }); }
-    finally { setSaving(false); }
+    try { const slug=generateSlug(user.name,user.id); await sb.from('profiles').update({onboarding_done:true,slug}).eq('id',user.id); onSkip({...user,onboarding_done:true,slug}); }
+    catch(e) { onSkip({...user,onboarding_done:true}); } finally { setSaving(false); }
   };
-
-  const progressPct = Math.round((step / TOTAL_STEPS) * 100);
-
+  const progressPct=Math.round((step/TOTAL_STEPS)*100);
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <div className="bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-10">
         <div className="flex items-center justify-between mb-3">
           <div><h1 className="font-black text-slate-900 text-base">Configure seu Perfil</h1><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passo {step} de {TOTAL_STEPS}</p></div>
-          <button onClick={handleSkip} disabled={saving} className="text-slate-400 font-bold text-xs bg-slate-100 px-4 py-2 rounded-full">{saving ? 'Aguarde...' : 'Pular tudo'}</button>
+          <button onClick={handleSkip} disabled={saving} className="text-slate-400 font-bold text-xs bg-slate-100 px-4 py-2 rounded-full">{saving?'Aguarde...':'Pular tudo'}</button>
         </div>
-        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-          <div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} />
-        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{width:`${progressPct}%`}}/></div>
       </div>
       <div className="flex-1 p-6 max-w-md mx-auto w-full pb-32">
-        {step === 1 && (
+        {step===1&&(
           <div className="space-y-5">
-            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><MapPin size={28} className="text-blue-600" /></div>
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><MapPin size={28} className="text-blue-600"/></div>
             <div><h2 className="text-2xl font-black text-slate-900 mb-1">Onde você atende?</h2><p className="text-sm text-slate-500">Clientes vão encontrar você pelo endereço.</p></div>
-            <input type="text" value={address} onChange={e => setAddress(e.target.value)} placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
-              className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors" />
-            <button onClick={handleCaptureLocation}
-              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat ? 'bg-green-50 border-green-500 text-green-700' : 'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}>
-              <MapPin size={18} />{capturedLocation?.lat ? '✓ Localização capturada!' : 'Capturar Minha Localização'}
+            <input type="text" value={address} onChange={e=>setAddress(e.target.value)} placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
+              className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors"/>
+            <button onClick={handleCaptureLocation} className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat?'bg-green-50 border-green-500 text-green-700':'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}>
+              <MapPin size={18}/>{capturedLocation?.lat?'✓ Localização capturada!':'Capturar Minha Localização'}
             </button>
           </div>
         )}
-        {step === 2 && (
+        {step===2&&(
           <div className="space-y-4">
-            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2"><Scissors size={28} className="text-purple-600" /></div>
+            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2"><Scissors size={28} className="text-purple-600"/></div>
             <div><h2 className="text-2xl font-black text-slate-900 mb-1">Quais serviços você oferece?</h2><p className="text-sm text-slate-500">Selecione os serviços. Ajuste os preços depois.</p></div>
-            {MASTER_SERVICES.map(s => {
-              const isActive = selectedServices.some(sv => sv.id === s.id);
+            {MASTER_SERVICES.map(s=>{
+              const isActive=selectedServices.some(sv=>sv.id===s.id);
               return (
-                <button key={s.id} onClick={() => toggleService(s.id, s.defaultPrice)}
-                  className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}>
+                <button key={s.id} onClick={()=>toggleService(s.id,s.defaultPrice)}
+                  className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive?'border-slate-900 bg-slate-900 text-white':'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}>
                   <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive ? 'bg-white/20' : 'bg-slate-100'}`}>{React.cloneElement(s.icon, { size: 16 })}</div>
-                    <div><p className="font-bold text-sm">{s.name}</p><p className={`text-[10px] ${isActive ? 'text-slate-300' : 'text-slate-400'}`}>R$ {s.defaultPrice} · {s.duration}</p></div>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive?'bg-white/20':'bg-slate-100'}`}>{React.cloneElement(s.icon,{size:16})}</div>
+                    <div><p className="font-bold text-sm">{s.name}</p><p className={`text-[10px] ${isActive?'text-slate-300':'text-slate-400'}`}>R$ {s.defaultPrice} · {s.duration}</p></div>
                   </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isActive ? 'bg-green-400 border-green-400' : 'border-slate-300'}`}>
-                    {isActive && <Check size={12} className="text-white" />}
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isActive?'bg-green-400 border-green-400':'border-slate-300'}`}>
+                    {isActive&&<Check size={12} className="text-white"/>}
                   </div>
                 </button>
               );
             })}
           </div>
         )}
-        {step === 3 && (
+        {step===3&&(
           <div className="space-y-5">
-            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2"><Clock size={28} className="text-amber-600" /></div>
+            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2"><Clock size={28} className="text-amber-600"/></div>
             <div><h2 className="text-2xl font-black text-slate-900 mb-1">Duração dos atendimentos</h2><p className="text-sm text-slate-500">Define o intervalo mínimo entre horários.</p></div>
             <div className="grid grid-cols-2 gap-3 mt-4">
-              {[{ value: '30min', label: '30 minutos', icon: '⏱' }, { value: '1h', label: '1 hora', icon: '🕐' }].map(opt => (
-                <button key={opt.value} onClick={() => setDuration(opt.value)}
-                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration === opt.value ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white hover:border-slate-400'}`}>
+              {[{value:'30min',label:'30 minutos',icon:'⏱'},{value:'1h',label:'1 hora',icon:'🕐'}].map(opt=>(
+                <button key={opt.value} onClick={()=>setDuration(opt.value)}
+                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration===opt.value?'border-slate-900 bg-slate-900 text-white':'border-slate-200 bg-white hover:border-slate-400'}`}>
                   <p className="text-2xl mb-2">{opt.icon}</p><p className="font-black text-sm">{opt.label}</p>
                 </button>
               ))}
             </div>
           </div>
         )}
-        {step === 4 && (
+        {step===4&&(
           <div className="space-y-5">
-            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600" /></div>
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600"/></div>
             <div><h2 className="text-2xl font-black text-slate-900 mb-1">Seu link de agendamento</h2><p className="text-sm text-slate-500">Compartilhe com seus clientes!</p></div>
             <div className="bg-slate-900 rounded-2xl p-5 text-center">
               <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 overflow-hidden flex items-center justify-center">
-                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar" /> : <User size={28} className="text-slate-400" />}
+                {user.avatar_url?<img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<User size={28} className="text-slate-400"/>}
               </div>
               <p className="text-white font-black text-lg">{user.name}</p>
-              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name, user.id))}</p>
+              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name,user.id))}</p>
             </div>
             <button onClick={handleFinish} disabled={saving}
               className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50">
-              {saving ? <Loader2 className="animate-spin" size={22} /> : <><CheckCircle size={22} /> Finalizar e Ir ao Painel</>}
+              {saving?<Loader2 className="animate-spin" size={22}/>:<><CheckCircle size={22}/> Finalizar e Ir ao Painel</>}
             </button>
           </div>
         )}
       </div>
       <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-100 z-10">
         <div className="max-w-md mx-auto flex gap-3">
-          {step > 1 && <button onClick={() => setStep(s => s - 1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">← Voltar</button>}
-          {step < TOTAL_STEPS && <button onClick={() => setStep(s => s + 1)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Próximo →</button>}
+          {step>1&&<button onClick={()=>setStep(s=>s-1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">← Voltar</button>}
+          {step<TOTAL_STEPS&&<button onClick={()=>setStep(s=>s+1)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Próximo →</button>}
         </div>
       </div>
     </div>
   );
 };
 
-// ─── TOP PROFESSIONALS ────────────────────────────────────────────────────────
+// ─── TOP PROFESSIONALS (com suporte a featured_rank do admin) ─────────────────
 const TopProfessionalsSection = ({ barbers }) => {
-  const topBarbers = barbers
-    .filter(b => b.is_visible && ((b.my_services || []).length > 0 || b.avatar_url))
-    .sort((a, b) => getBarberRating(b) - getBarberRating(a))
-    .slice(0, 3);
-  if (!topBarbers.length) return null;
+  const visibleBarbers=barbers.filter(b=>b.is_visible&&((b.my_services||[]).length>0||b.avatar_url));
 
+  // Featured first (admin-set), then highest rated
+  const topBarbers=useMemo(()=>{
+    const featured=visibleBarbers.filter(b=>b.featured_rank).sort((a,b)=>a.featured_rank-b.featured_rank);
+    const others=visibleBarbers.filter(b=>!b.featured_rank).sort((a,b)=>getBarberRating(b)-getBarberRating(a));
+    return [...featured,...others].slice(0,3);
+  },[visibleBarbers]);
+
+  if (!topBarbers.length) return null;
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhores Profissionais</h3>
-        <div className="flex items-center gap-1"><Star size={10} className="text-amber-400 fill-amber-400" /><span className="text-[9px] font-bold text-slate-400">Top 3</span></div>
+        <div className="flex items-center gap-1"><Star size={10} className="text-amber-400 fill-amber-400"/><span className="text-[9px] font-bold text-slate-400">Top 3</span></div>
       </div>
-      <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide">
-        {topBarbers.map(barber => {
-          const rating = getBarberRating(barber);
-          const isPro = barber.plano_ativo;
-          const specs = (barber.my_services || []).slice(0, 2).map(s => { const m = MASTER_SERVICES.find(ms => ms.id === s.id); return m?.name || ''; }).filter(Boolean);
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {topBarbers.map(barber=>{
+          const rating=getBarberRating(barber);
+          const specs=(barber.my_services||[]).slice(0,2).map(s=>{ const m=MASTER_SERVICES.find(ms=>ms.id===s.id); return m?.name||''; }).filter(Boolean);
           return (
             <div key={barber.id} className="flex-shrink-0 w-[152px] bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
               <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 pt-5 pb-6 flex justify-center">
-                {isPro && <div className="absolute top-2 right-2 bg-blue-600 rounded-full p-0.5"><Zap size={8} className="text-white" /></div>}
+                {barber.plano_ativo&&<div className="absolute top-2 right-2 bg-blue-600 rounded-full p-0.5"><Zap size={8} className="text-white"/></div>}
+                {barber.featured_rank&&<div className="absolute top-2 left-2 bg-amber-500 rounded-full px-1.5 py-0.5 text-[8px] font-black text-white">★{barber.featured_rank}</div>}
                 <StoryRing rating={rating} size={72} animate>
-                  {barber.avatar_url
-                    ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name} />
-                    : <div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={22} className="text-slate-400" /></div>}
+                  {barber.avatar_url?<img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>:<div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={22} className="text-slate-400"/></div>}
                 </StoryRing>
               </div>
               <div className="px-3 pt-3 pb-3">
                 <p className="font-black text-slate-900 text-xs leading-tight truncate">{barber.name}</p>
-                {/* Bio — exibida se existir */}
-                {barber.bio && <p className="text-[9px] text-blue-500 font-bold italic mt-0.5 truncate">"{barber.bio}"</p>}
-                <div className="flex items-center gap-1.5 mt-1 mb-2"><StarRating rating={rating} /><span className="text-[9px] font-black text-amber-500">{rating}</span></div>
-                {specs.map((s, i) => <span key={i} className="text-[8px] font-bold text-slate-500 bg-slate-50 rounded-md px-1.5 py-0.5 truncate block mb-0.5">{s}</span>)}
-                {barber.distanceLabel && <div className="flex items-center gap-0.5 mt-1"><MapPin size={9} className="text-blue-400" /><span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span></div>}
+                {barber.bio&&<p className="text-[9px] text-blue-500 font-bold italic mt-0.5 truncate">"{barber.bio}"</p>}
+                <div className="flex items-center gap-1.5 mt-1 mb-2"><StarRating rating={rating}/><span className="text-[9px] font-black text-amber-500">{rating}</span></div>
+                {specs.map((s,i)=><span key={i} className="text-[8px] font-bold text-slate-500 bg-slate-50 rounded-md px-1.5 py-0.5 truncate block mb-0.5">{s}</span>)}
+                {barber.distanceLabel&&<div className="flex items-center gap-0.5 mt-1"><MapPin size={9} className="text-blue-400"/><span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span></div>}
+                {(barber.admin_tags||[]).length>0&&(
+                  <div className="flex flex-wrap gap-0.5 mt-1">
+                    {(barber.admin_tags||[]).slice(0,2).map((tag,i)=>(
+                      <span key={i} className="text-[7px] font-bold bg-purple-50 text-purple-500 border border-purple-100 px-1 py-0.5 rounded-full">{tag}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -1522,212 +1847,121 @@ const TopProfessionalsSection = ({ barbers }) => {
 
 // ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
 const PublicBarberPage = ({ barber }) => {
-  const [bookStep, setBookStep] = useState(0);
-  const [selectedService, setSelectedService] = useState(null);
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedTime, setSelectedTime] = useState(null);
-  const [clientName, setClientName] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const rating = getBarberRating(barber);
-  const badges = getBadges(barber);
-  const workPhotos = barber.work_photos || [];
-
-  const masterServices = (barber.my_services || []).map(s => {
-    const master = MASTER_SERVICES.find(m => m.id === s.id);
-    return master ? { ...master, price: s.price } : null;
-  }).filter(Boolean);
-
-  const customServices = (barber.custom_services || []).map(cs => ({ ...cs, icon: <Scissors size={20} />, isCustom: true }));
-  const services = [...masterServices, ...customServices];
-
-  const handleCopyLink = () => { navigator.clipboard.writeText(window.location.href).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
-
-  const handleServiceClick = (service) => { setSelectedService(service); setSelectedDate(null); setSelectedTime(null); setBookStep(2); };
-
-  const handleSubmitBooking = async () => {
-    if (!clientName.trim() || !clientPhone.trim()) { alert('Preencha seu nome e WhatsApp.'); return; }
+  const [bookStep,setBookStep]=useState(0), [selectedService,setSelectedService]=useState(null), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
+  const rating=getBarberRating(barber), badges=getBadges(barber), workPhotos=barber.work_photos||[];
+  const masterServices=(barber.my_services||[]).map(s=>{ const master=MASTER_SERVICES.find(m=>m.id===s.id); return master?{...master,price:s.price}:null; }).filter(Boolean);
+  const customServices=(barber.custom_services||[]).map(cs=>({...cs,icon:<Scissors size={20}/>,isCustom:true}));
+  const services=[...masterServices,...customServices];
+  const handleCopyLink=()=>{ navigator.clipboard.writeText(window.location.href).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
+  const handleServiceClick=(service)=>{ setSelectedService(service); setSelectedDate(null); setSelectedTime(null); setBookStep(2); };
+  const handleSubmitBooking=async()=>{
+    if (!clientName.trim()||!clientPhone.trim()) { alert('Preencha seu nome e WhatsApp.'); return; }
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('appointments').insert([{
-        date: selectedDate, time: selectedTime, barber_id: barber.id, client_id: null,
-        client_name: clientName.trim(), phone: clientPhone.trim(),
-        service_name: selectedService.name, price: selectedService.price, status: 'pending',
-      }]);
+      const {error}=await supabase.from('appointments').insert([{date:selectedDate,time:selectedTime,barber_id:barber.id,client_id:null,client_name:clientName.trim(),phone:clientPhone.trim(),service_name:selectedService.name,price:selectedService.price,status:'pending'}]);
       if (error) throw error;
       setBookStep(4);
-    } catch (e) { alert('Erro ao agendar: ' + e.message); }
-    finally { setSubmitting(false); }
+    } catch(e) { alert('Erro ao agendar: '+e.message); } finally { setSubmitting(false); }
   };
-
-  if (bookStep === 4) {
-    return (
-      <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
-        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600" /></div>
-        <h2 className="text-2xl font-black text-slate-900 mb-2">Agendado!</h2>
-        <p className="text-slate-500 text-sm mb-2">Sua solicitação foi enviada para <b>{barber.name}</b>.</p>
-        <p className="text-slate-500 text-sm mb-8">Aguarde a confirmação pelo WhatsApp.</p>
-        <div className="bg-slate-50 rounded-2xl p-4 w-full max-w-xs text-left space-y-2 mb-8 border border-slate-100">
-          <div className="flex justify-between"><span className="text-xs text-slate-400">Serviço</span><span className="text-xs font-black text-slate-900">{selectedService?.name}</span></div>
-          <div className="flex justify-between"><span className="text-xs text-slate-400">Data</span><span className="text-xs font-black text-slate-900">{selectedDate?.split('-').reverse().join('/')}</span></div>
-          <div className="flex justify-between"><span className="text-xs text-slate-400">Horário</span><span className="text-xs font-black text-slate-900">{selectedTime}</span></div>
-          <div className="flex justify-between"><span className="text-xs text-slate-400">Valor</span><span className="text-xs font-black text-green-600">R$ {selectedService?.price}</span></div>
-        </div>
-        <button onClick={() => { setBookStep(0); setSelectedService(null); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); }} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
+  if (bookStep===4) return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600"/></div>
+      <h2 className="text-2xl font-black text-slate-900 mb-2">Agendado!</h2>
+      <p className="text-slate-500 text-sm mb-2">Sua solicitação foi enviada para <b>{barber.name}</b>.</p>
+      <p className="text-slate-500 text-sm mb-8">Aguarde a confirmação pelo WhatsApp.</p>
+      <div className="bg-slate-50 rounded-2xl p-4 w-full max-w-xs text-left space-y-2 mb-8 border border-slate-100">
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Serviço</span><span className="text-xs font-black text-slate-900">{selectedService?.name}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Data</span><span className="text-xs font-black text-slate-900">{selectedDate?.split('-').reverse().join('/')}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Horário</span><span className="text-xs font-black text-slate-900">{selectedTime}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Valor</span><span className="text-xs font-black text-green-600">R$ {selectedService?.price}</span></div>
       </div>
-    );
-  }
-
+      <button onClick={()=>{ setBookStep(0); setSelectedService(null); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); }} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
+    </div>
+  );
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-slate-900 pb-8 pt-10 px-6 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500 rounded-full blur-3xl" /></div>
+        <div className="absolute inset-0 opacity-10"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500 rounded-full blur-3xl"/></div>
         <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
           <div className="mb-4">
             <StoryRing rating={rating} size={112} animate>
-              {barber.avatar_url
-                ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name} />
-                : <div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={40} className="text-slate-400" /></div>}
+              {barber.avatar_url?<img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>:<div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={40} className="text-slate-400"/></div>}
             </StoryRing>
           </div>
           <h1 className="text-white font-black text-2xl leading-tight mb-1 mt-2">{barber.name}</h1>
-          {/* Bio pública */}
-          {barber.bio && (
-            <p className="text-blue-300 text-sm font-bold italic mb-1">"{barber.bio}"</p>
-          )}
-          {barber.address && <p className="text-slate-400 text-xs flex items-center justify-center gap-1 mb-3"><MapPin size={11} />{barber.address}</p>}
-          {badges.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 justify-center mb-5">
-              {badges.map((b, i) => <span key={i} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}
-            </div>
-          )}
+          {barber.bio&&<p className="text-blue-300 text-sm font-bold italic mb-1">"{barber.bio}"</p>}
+          {barber.address&&<p className="text-slate-400 text-xs flex items-center justify-center gap-1 mb-3"><MapPin size={11}/>{barber.address}</p>}
+          {badges.length>0&&<div className="flex flex-wrap gap-1.5 justify-center mb-5">{badges.map((b,i)=><span key={i} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}</div>}
           <div className="flex gap-2 w-full max-w-xs">
-            <button onClick={() => setBookStep(1)}
-              className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/40">
-              <CalendarDays size={16} /> Agendar
-            </button>
-            <button onClick={handleCopyLink}
-              className={`px-4 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs ${copied ? 'bg-green-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
-              {copied ? <CheckCircle size={15} /> : <Copy size={15} />}{copied ? 'Copiado' : 'Link'}
+            <button onClick={()=>setBookStep(1)} className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/40"><CalendarDays size={16}/> Agendar</button>
+            <button onClick={handleCopyLink} className={`px-4 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs ${copied?'bg-green-500 text-white':'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+              {copied?<CheckCircle size={15}/>:<Copy size={15}/>}{copied?'Copiado':'Link'}
             </button>
           </div>
         </div>
       </div>
-
       <div className="max-w-md mx-auto px-4 pb-10">
-        {bookStep > 0 && bookStep < 4 && (
+        {bookStep>0&&bookStep<4&&(
           <div className="bg-white mt-4 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-black text-slate-900 text-sm">{bookStep === 1 ? 'Escolha o serviço' : bookStep === 2 ? 'Data e horário' : 'Seus dados'}</h3>
-              <button onClick={() => setBookStep(0)} className="text-slate-400 font-bold text-xs">Cancelar</button>
+              <h3 className="font-black text-slate-900 text-sm">{bookStep===1?'Escolha o serviço':bookStep===2?'Data e horário':'Seus dados'}</h3>
+              <button onClick={()=>setBookStep(0)} className="text-slate-400 font-bold text-xs">Cancelar</button>
             </div>
             <div className="p-4">
-              {bookStep === 1 && (
-                <div className="space-y-2">
-                  {services.map(s => (
-                    <button key={s.id} onClick={() => { setSelectedService(s); setBookStep(2); }}
-                      className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-slate-300 transition-all active:scale-95 text-left">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon, { size: 16 })}</div>
-                        <div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div>
-                      </div>
-                      <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {bookStep === 2 && (
+              {bookStep===1&&<div className="space-y-2">{services.map(s=>(
+                <button key={s.id} onClick={()=>{ setSelectedService(s); setBookStep(2); }} className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-slate-300 transition-all active:scale-95 text-left">
+                  <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
+                  <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
+                </button>
+              ))}</div>}
+              {bookStep===2&&(
                 <div>
-                  <button onClick={() => setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1"><ChevronLeft size={14} /> {selectedService?.name} · R$ {selectedService?.price}</button>
-                  <MonthCalendar availableSlots={barber.available_slots} selectedDate={selectedDate} onSelectDate={d => { setSelectedDate(d); setSelectedTime(null); }} />
-                  {selectedDate && (
+                  <button onClick={()=>setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1"><ChevronLeft size={14}/> {selectedService?.name} · R$ {selectedService?.price}</button>
+                  <MonthCalendar availableSlots={barber.available_slots} selectedDate={selectedDate} onSelectDate={d=>{ setSelectedDate(d); setSelectedTime(null); }}/>
+                  {selectedDate&&(
                     <div className="mt-5">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Horários disponíveis</p>
                       <div className="grid grid-cols-4 gap-2">
-                        {GLOBAL_TIME_SLOTS.map(t => {
-                          const avail = barber.available_slots?.[selectedDate]?.includes(t);
-                          return (
-                            <button key={t} disabled={!avail} onClick={() => setSelectedTime(t)}
-                              className={`py-2.5 rounded-lg font-bold text-xs transition-all ${selectedTime === t ? 'bg-slate-900 text-white shadow-lg scale-105' : avail ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
-                              {t}
-                            </button>
-                          );
-                        })}
+                        {GLOBAL_TIME_SLOTS.map(t=>{ const avail=barber.available_slots?.[selectedDate]?.includes(t); return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-lg font-bold text-xs transition-all ${selectedTime===t?'bg-slate-900 text-white shadow-lg scale-105':avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>; })}
                       </div>
                     </div>
                   )}
-                  {selectedTime && selectedDate && (
-                    <button onClick={() => setBookStep(3)} className="w-full mt-5 py-4 bg-blue-600 text-white rounded-xl font-black text-sm active:scale-95 transition-all">
-                      Próximo → {selectedDate.split('-').reverse().join('/')} às {selectedTime}
-                    </button>
-                  )}
+                  {selectedTime&&selectedDate&&<button onClick={()=>setBookStep(3)} className="w-full mt-5 py-4 bg-blue-600 text-white rounded-xl font-black text-sm active:scale-95 transition-all">Próximo → {selectedDate.split('-').reverse().join('/')} às {selectedTime}</button>}
                 </div>
               )}
-              {bookStep === 3 && (
+              {bookStep===3&&(
                 <div className="space-y-4">
-                  <button onClick={() => setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><ChevronLeft size={14} /> {selectedDate?.split('-').reverse().join('/')} às {selectedTime}</button>
+                  <button onClick={()=>setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><ChevronLeft size={14}/> {selectedDate?.split('-').reverse().join('/')} às {selectedTime}</button>
                   <div className="bg-blue-50 rounded-xl p-3 flex justify-between items-center">
                     <div><p className="font-black text-slate-900 text-sm">{selectedService?.name}</p><p className="text-[10px] text-slate-500">{selectedDate?.split('-').reverse().join('/')} às {selectedTime}</p></div>
                     <p className="font-black text-green-600">R$ {selectedService?.price}</p>
                   </div>
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label>
-                    <input type="text" value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Nome e sobrenome"
-                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label>
-                    <input type="tel" value={clientPhone} onChange={e => setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999"
-                      className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors" />
-                  </div>
-                  <button onClick={handleSubmitBooking} disabled={submitting}
-                    className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                    {submitting ? <Loader2 className="animate-spin" size={18} /> : <><CheckCircle size={18} /> Confirmar Agendamento</>}
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
+                  <button onClick={handleSubmitBooking} disabled={submitting} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                    {submitting?<Loader2 className="animate-spin" size={18}/>:<><CheckCircle size={18}/> Confirmar Agendamento</>}
                   </button>
                 </div>
               )}
             </div>
           </div>
         )}
-
-        {workPhotos.length > 0 && (
+        {workPhotos.length>0&&(
           <div className="mt-5">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Trabalhos</p>
-            <div className="grid grid-cols-3 gap-2">
-              {workPhotos.map((url, i) => (
-                <div key={i} className="aspect-square rounded-2xl overflow-hidden bg-slate-200">
-                  <img src={url} alt={`Trabalho ${i + 1}`} className="w-full h-full object-cover" />
-                </div>
-              ))}
-            </div>
+            <div className="grid grid-cols-3 gap-2">{workPhotos.map((url,i)=><div key={i} className="aspect-square rounded-2xl overflow-hidden bg-slate-200"><img src={url} alt={`Trabalho ${i+1}`} className="w-full h-full object-cover"/></div>)}</div>
           </div>
         )}
-
         <div className="mt-5">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Serviços · <span className="text-blue-500 normal-case font-bold">toque para agendar</span></p>
-          <div className="space-y-2">
-            {services.map(s => (
-              <button key={s.id} onClick={() => handleServiceClick(s)}
-                className="w-full bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between active:scale-[0.98] transition-all hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon, { size: 16 })}</div>
-                  <div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
-                  <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center"><CalendarDays size={11} className="text-white" /></div>
-                </div>
-              </button>
-            ))}
-          </div>
+          <div className="space-y-2">{services.map(s=>(
+            <button key={s.id} onClick={()=>handleServiceClick(s)} className="w-full bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between active:scale-[0.98] transition-all hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer">
+              <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
+              <div className="flex items-center gap-2"><p className="font-black text-green-600 text-sm">R$ {s.price}</p><div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center"><CalendarDays size={11} className="text-white"/></div></div>
+            </button>
+          ))}</div>
         </div>
-
-        <div className="mt-8 text-center">
-          <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Agendamento via</p>
-          <p className="font-black text-slate-400 italic text-sm">SALÃO<span className="text-blue-500">DIGITAL</span></p>
-        </div>
+        <div className="mt-8 text-center"><p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Agendamento via</p><p className="font-black text-slate-400 italic text-sm">SALÃO<span className="text-blue-500">DIGITAL</span></p></div>
       </div>
     </div>
   );
@@ -1735,232 +1969,127 @@ const PublicBarberPage = ({ barber }) => {
 
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES: MS, isDark, onToggleDark }) => {
-  const [view, setView] = useState('home');
-  const [step, setStep] = useState(1);
-  const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
-  const [userCoords, setUserCoords] = useState(null);
-
-  const handleDeleteAccount = async () => {
+  const [view,setView]=useState('home'), [step,setStep]=useState(1), [bookingData,setBookingData]=useState({service:null,barber:null,price:null,date:null,time:null}), [userCoords,setUserCoords]=useState(null);
+  const handleDeleteAccount=async()=>{
     if (!window.confirm("Deseja realmente excluir sua conta? Todos os seus dados serão apagados permanentemente.")) return;
-    try {
-      await supabase.from('appointments').delete().eq('client_id', user.id);
-      await supabase.from('profiles').delete().eq('id', user.id);
-      alert("Conta removida."); onLogout();
-    } catch (error) { alert("Erro ao excluir. Tente novamente."); }
+    try { await supabase.from('appointments').delete().eq('client_id',user.id); await supabase.from('profiles').delete().eq('id',user.id); alert("Conta removida."); onLogout(); }
+    catch(error) { alert("Erro ao excluir. Tente novamente."); }
   };
-
-  useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        pos => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        err => console.error(err.message), { enableHighAccuracy: true }
-      );
-    }
-  }, []);
-
-  const processedBarbers = useMemo(() => (barbers || [])
-    .filter(b => b.is_visible)
-    .map(b => {
-      const dist = calculateDistance(userCoords?.lat, userCoords?.lng, b.latitude, b.longitude);
-      const label = dist !== null ? (dist < 1 ? `${Math.floor(dist * 1000)} m` : `${dist.toFixed(1)} km`) : null;
-      return { ...b, distance: dist, distanceLabel: label };
-    })
-    .sort((a, b) => {
-      if (a.distance === null) return 1;
-      if (b.distance === null) return -1;
-      return a.distance - b.distance;
-    }), [barbers, userCoords]);
-
-  const handleFinish = async () => {
+  useEffect(()=>{ if ("geolocation" in navigator) navigator.geolocation.getCurrentPosition(pos=>setUserCoords({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>console.error(err.message),{enableHighAccuracy:true}); },[]);
+  const processedBarbers=useMemo(()=>(barbers||[]).filter(b=>b.is_visible).map(b=>{ const dist=calculateDistance(userCoords?.lat,userCoords?.lng,b.latitude,b.longitude); const label=dist!==null?(dist<1?`${Math.floor(dist*1000)} m`:`${dist.toFixed(1)} km`):null; return {...b,distance:dist,distanceLabel:label}; }).sort((a,b)=>{ if (a.distance===null) return 1; if (b.distance===null) return -1; return a.distance-b.distance; }),[barbers,userCoords]);
+  const handleFinish=async()=>{
     try {
       if (user?.isGuest) { alert("Para realizar um agendamento real, por favor crie sua conta!"); onLogout(); return; }
-      if (!bookingData.date || !bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
-      const payload = {
-        date: bookingData.date, time: bookingData.time, barber_id: bookingData.barber?.id,
-        client_id: user?.id, client_name: user?.name || "Cliente", phone: user?.phone || "Sem telefone",
-        service_name: bookingData.service?.name || "Serviço", price: Number(bookingData.price) || 0, status: 'pending'
-      };
+      if (!bookingData.date||!bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
+      const payload={date:bookingData.date,time:bookingData.time,barber_id:bookingData.barber?.id,client_id:user?.id,client_name:user?.name||"Cliente",phone:user?.phone||"Sem telefone",service_name:bookingData.service?.name||"Serviço",price:Number(bookingData.price)||0,status:'pending'};
       if (!payload.barber_id) { alert("Erro: profissional não encontrado."); return; }
-      const { error } = await supabase.from('appointments').insert([payload]);
+      const {error}=await supabase.from('appointments').insert([payload]);
       if (error) throw error;
       setView('success');
-    } catch (error) { alert("Falha ao agendar: " + error.message); }
+    } catch(error) { alert("Falha ao agendar: "+error.message); }
   };
-
-  if (view === 'success') return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white">
-      <Check size={60} className="text-green-500 mb-4" />
-      <h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2>
-      <Button onClick={() => { setView('home'); setStep(1); }}>Voltar ao Início</Button>
-    </div>
-  );
-
+  if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
         <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
         <div className="flex items-center gap-3">
-          <DarkModeToggle isDark={isDark} onToggle={onToggleDark} />
-          <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1"><LogOut size={14} /> {user?.isGuest ? 'Entrar' : 'Sair'}</button>
+          <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
+          <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1"><LogOut size={14}/> {user?.isGuest?'Entrar':'Sair'}</button>
         </div>
       </header>
       <main className="p-6 max-w-md mx-auto">
-        {view === 'home' && (
+        {view==='home'&&(
           <div className="space-y-1">
             <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl mb-2">
               <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setView('booking')}>Novo Agendamento</Button>
-                <Button variant="outline" className="text-white border-white/20" onClick={() => setView('history')}>Histórico</Button>
-              </div>
+              <div className="flex gap-2"><Button variant="secondary" onClick={()=>setView('booking')}>Novo Agendamento</Button><Button variant="outline" className="text-white border-white/20" onClick={()=>setView('history')}>Histórico</Button></div>
             </div>
             <div className="mt-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
-              <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-                {[imgMp, imgMao, imgTes].map((img, i) => (
-                  <div key={i} className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-                    <img src={img} alt="Galeria" className="w-full h-full object-cover" />
-                  </div>
-                ))}
+              <div className="flex gap-2 overflow-x-auto pb-4">
+                {[imgMp,imgMao,imgTes].map((img,i)=><div key={i} className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100"><img src={img} alt="Galeria" className="w-full h-full object-cover"/></div>)}
               </div>
             </div>
-            <TopProfessionalsSection barbers={processedBarbers} />
+            <TopProfessionalsSection barbers={processedBarbers}/>
           </div>
         )}
-
-        {view === 'history' && (
+        {view==='history'&&(
           <div className="space-y-4">
-            <button onClick={() => setView('home')} className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1"><ArrowLeft size={16} /> Voltar</button>
+            <button onClick={()=>setView('home')} className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1"><ArrowLeft size={16}/> Voltar</button>
             <div className="flex justify-between items-end mb-4">
               <h3 className="font-bold text-lg text-slate-900">Meus Agendamentos</h3>
               <button onClick={handleDeleteAccount} className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5">Excluir Conta</button>
             </div>
-            {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0
+            {(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).length===0
               ? <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">Ainda não tem agendamentos.</div>
-              : <div className="space-y-3">{(appointments || []).filter(a => String(a.client_id) === String(user.id)).sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`)).map(app => {
-                  const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
+              : <div className="space-y-3">{(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).sort((a,b)=>new Date(`${b.date}T${b.time}`)-new Date(`${a.date}T${a.time}`)).map(app=>{
+                  const professional=(barbers||[]).find(b=>String(b.id)===String(app.barber_id));
                   return (
                     <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
                       <div className="flex gap-3 items-center">
-                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"><User size={18} /></div>
-                        <div>
-                          <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
-                          <p className="text-[10px] text-blue-600 font-bold">Profissional: {professional?.name || "Profissional"}</p>
-                          <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10} />{app.date?.split('-').reverse().join('/')} às {app.time}</p>
-                        </div>
+                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"><User size={18}/></div>
+                        <div><p className="font-bold text-slate-900 text-sm">{app.service_name}</p><p className="text-[10px] text-blue-600 font-bold">Profissional: {professional?.name||"Profissional"}</p><p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10}/>{app.date?.split('-').reverse().join('/')} às {app.time}</p></div>
                       </div>
-                      <button onClick={() => {
-                        if (window.confirm("Reagendar? O horário atual será cancelado.")) {
-                          const serviceObj = MS.find(s => s.name === app.service_name);
-                          setBookingData({ service: serviceObj, barber: professional, price: app.price });
-                          if (typeof onUpdateStatus === 'function') onUpdateStatus(app.id, 'rejected');
-                          setView('booking'); setStep(3);
-                        }
-                      }} className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all">
-                        <CalendarDays size={20} /><span className="text-[9px] font-bold uppercase">Reagendar</span>
-                      </button>
+                      <button onClick={()=>{ if (window.confirm("Reagendar? O horário atual será cancelado.")) { const serviceObj=MS.find(s=>s.name===app.service_name); setBookingData({service:serviceObj,barber:professional,price:app.price}); if (typeof onUpdateStatus==='function') onUpdateStatus(app.id,'rejected'); setView('booking'); setStep(3); } }} className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><CalendarDays size={20}/><span className="text-[9px] font-bold uppercase">Reagendar</span></button>
                     </div>
                   );
                 })}</div>}
           </div>
         )}
-
-        {view === 'booking' && (
+        {view==='booking'&&(
           <div className="space-y-4">
-            <button onClick={() => setStep(step - 1)} className={`${step === 1 ? 'hidden' : 'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
-            {step === 1 && (
+            <button onClick={()=>setStep(step-1)} className={`${step===1?'hidden':'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
+            {step===1&&(
               <div className="flex flex-col h-full relative">
                 <div className="flex-1 pb-24">
                   <h3 className="font-bold text-lg mb-4 text-slate-900">Escolha o Serviço</h3>
-                  <div className="space-y-3">
-                    {MS.map(s => (
-                      <Card key={s.id} selected={bookingData.service?.id === s.id} onClick={() => setBookingData({ ...bookingData, service: s })}>
-                        <div className="flex items-center justify-between w-full">
-                          <div className="flex items-center gap-3">
-                            <div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id === s.id ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>{s.icon}</div>
-                            <div><p className="font-bold text-slate-900">{s.name}</p><p className="text-xs text-slate-400 font-medium">{s.duration}</p></div>
-                          </div>
-                          {bookingData.service?.id === s.id && <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />}
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
+                  <div className="space-y-3">{MS.map(s=>(
+                    <Card key={s.id} selected={bookingData.service?.id===s.id} onClick={()=>setBookingData({...bookingData,service:s})}>
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3"><div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id===s.id?'bg-blue-600 text-white':'bg-slate-100'}`}>{s.icon}</div><div><p className="font-bold text-slate-900">{s.name}</p><p className="text-xs text-slate-400 font-medium">{s.duration}</p></div></div>
+                        {bookingData.service?.id===s.id&&<div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"/>}
+                      </div>
+                    </Card>
+                  ))}</div>
                 </div>
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
-                  <div className="max-w-md mx-auto">
-                    <Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.service ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-blue-600 text-white active:scale-95'}`}
-                      onClick={() => setStep(2)} disabled={!bookingData.service}>
-                      {bookingData.service ? `Próximo: ${bookingData.service.name}` : 'Selecione um serviço'}
-                    </Button>
-                  </div>
+                  <div className="max-w-md mx-auto"><Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.service?'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none':'bg-blue-600 text-white active:scale-95'}`} onClick={()=>setStep(2)} disabled={!bookingData.service}>{bookingData.service?`Próximo: ${bookingData.service.name}`:'Selecione um serviço'}</Button></div>
                 </div>
               </div>
             )}
-            {step === 2 && (
+            {step===2&&(
               <>
                 <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {processedBarbers.filter(b => b.my_services?.some(s => s.id === bookingData.service?.id)).map(b => {
-                    const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
-                    const isSelected = bookingData.barber?.id === b.id;
-                    const rating = getBarberRating(b);
-                    return (
-                      <div key={b.id} onClick={() => setBookingData({ ...bookingData, barber: b, price: displayPrice })}
-                        className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'}`}>
-                        <div className="mb-2">
-                          <StoryRing rating={rating} size={64}>
-                            {b.avatar_url ? <img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar" /> : <div className="w-full h-full flex items-center justify-center bg-slate-200"><User size={20} className="text-slate-400" /></div>}
-                          </StoryRing>
-                        </div>
-                        <p className="font-bold text-sm truncate w-full text-center text-slate-900 mt-1">{b.name}</p>
-                        {b.bio && <p className="text-[8px] text-blue-500 font-bold italic text-center truncate w-full">"{b.bio}"</p>}
-                        <BadgeList barber={b} small />
-                        {b.distanceLabel && <p className="text-[10px] text-blue-600 font-black flex items-center gap-1 mt-1"><MapPin size={10} />{b.distanceLabel}</p>}
-                        <p className="mt-2 text-green-600 font-black text-sm">R$ {displayPrice}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-                <Button className="mt-6 w-full" onClick={() => setStep(3)} disabled={!bookingData.barber}>Próximo</Button>
+                <div className="grid grid-cols-2 gap-3">{processedBarbers.filter(b=>b.my_services?.some(s=>s.id===bookingData.service?.id)).map(b=>{
+                  const displayPrice=b.my_services?.find(s=>s.id===bookingData.service?.id)?.price||0, isSelected=bookingData.barber?.id===b.id, rating=getBarberRating(b);
+                  return (
+                    <div key={b.id} onClick={()=>setBookingData({...bookingData,barber:b,price:displayPrice})} className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected?'border-slate-900 bg-slate-50':'border-white bg-white shadow-sm'}`}>
+                      <div className="mb-2"><StoryRing rating={rating} size={64}>{b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<div className="w-full h-full flex items-center justify-center bg-slate-200"><User size={20} className="text-slate-400"/></div>}</StoryRing></div>
+                      <p className="font-bold text-sm truncate w-full text-center text-slate-900 mt-1">{b.name}</p>
+                      {b.bio&&<p className="text-[8px] text-blue-500 font-bold italic text-center truncate w-full">"{b.bio}"</p>}
+                      <BadgeList barber={b} small/>
+                      {b.distanceLabel&&<p className="text-[10px] text-blue-600 font-black flex items-center gap-1 mt-1"><MapPin size={10}/>{b.distanceLabel}</p>}
+                      <p className="mt-2 text-green-600 font-black text-sm">R$ {displayPrice}</p>
+                    </div>
+                  );
+                })}</div>
+                <Button className="mt-6 w-full" onClick={()=>setStep(3)} disabled={!bookingData.barber}>Próximo</Button>
               </>
             )}
-            {step === 3 && (
+            {step===3&&(
               <>
                 <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
-                <MonthCalendar availableSlots={bookingData.barber?.available_slots} selectedDate={bookingData.date}
-                  onSelectDate={dateStr => setBookingData({ ...bookingData, date: dateStr, time: null })} />
+                <MonthCalendar availableSlots={bookingData.barber?.available_slots} selectedDate={bookingData.date} onSelectDate={dateStr=>setBookingData({...bookingData,date:dateStr,time:null})}/>
                 <div className="mt-6">
-                  {bookingData.date
-                    ? <>
-                        <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Horários para {bookingData.date.split('-').reverse().join('/')}</label>
-                        <div className="grid grid-cols-4 gap-2">
-                          {GLOBAL_TIME_SLOTS.map(t => {
-                            const isAvail = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t);
-                            return (
-                              <button key={t} disabled={!isAvail} onClick={() => setBookingData({ ...bookingData, time: t })}
-                                className={`py-2 rounded-lg font-bold text-xs transition-all ${bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' : isAvail ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
-                                {t}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    : <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center">
-                        <Calendar size={24} className="mx-auto text-slate-300 mb-2" />
-                        <p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p>
-                      </div>}
-                </div>
-                {bookingData.time && bookingData.date && (
-                  <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100">
-                    <p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p>
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-900">{bookingData.service?.name}</span>
-                      <span className="font-bold text-slate-900">R$ {bookingData.price}</span>
+                  {bookingData.date?<>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Horários para {bookingData.date.split('-').reverse().join('/')}</label>
+                    <div className="grid grid-cols-4 gap-2">{GLOBAL_TIME_SLOTS.map(t=>{ const isAvail=bookingData.barber?.available_slots?.[bookingData.date]?.includes(t); return <button key={t} disabled={!isAvail} onClick={()=>setBookingData({...bookingData,time:t})} className={`py-2 rounded-lg font-bold text-xs transition-all ${bookingData.time===t?'bg-slate-900 text-white shadow-lg scale-105':isAvail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>; })}
                     </div>
-                    <p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p>
-                  </div>
-                )}
-                <Button className="mt-6 w-full py-4 text-lg" onClick={handleFinish} disabled={!bookingData.time || !bookingData.date}>Confirmar Agendamento</Button>
+                  </>:<div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center"><Calendar size={24} className="mx-auto text-slate-300 mb-2"/><p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p></div>}
+                </div>
+                {bookingData.time&&bookingData.date&&<div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100"><p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p><div className="flex justify-between items-center"><span className="font-bold text-slate-900">{bookingData.service?.name}</span><span className="font-bold text-slate-900">R$ {bookingData.price}</span></div><p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p></div>}
+                <Button className="mt-6 w-full py-4 text-lg" onClick={handleFinish} disabled={!bookingData.time||!bookingData.date}>Confirmar Agendamento</Button>
               </>
             )}
           </div>
@@ -2314,12 +2443,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-            {/* META DOS 30 ATENDIMENTOS */}
-            <GoalCard
-              totalAppointments={totalAppointmentsForGoal}
-              slug={effectiveUser.slug}
-              isGuest={isGuestBarber}
-            />
+            
 
             <section>
               <div className="flex items-center justify-between mb-4">
