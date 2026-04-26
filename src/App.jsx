@@ -2099,6 +2099,156 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
   );
 };
 
+// ══════════════════════════════════════════════════════════════════════════════
+// COLE ESTE TRECHO A PARTIR DE "// ─── REPORTS SECTION" NO SEU App.jsx
+// Substitui tudo de ReportsSection até o final do arquivo
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ─── FIX OCR — substitua a função captureAndScan dentro de WebcamScanner ─────
+// Localize a linha:  const { createWorker } = TesseractModule;
+// Substitua por:
+//
+//   const createWorker =
+//     typeof TesseractModule?.createWorker === 'function'
+//       ? TesseractModule.createWorker
+//       : typeof TesseractModule?.default?.createWorker === 'function'
+//         ? TesseractModule.default.createWorker
+//         : null;
+//
+//   if (!createWorker) {
+//     setRawText('⚠️ Instale tesseract.js v4+:\nnpm install tesseract.js');
+//     const fakeText = 'João Silva\n14/06/2025\n14:30\nCorte Degradê\n(41) 99999-1234';
+//     setParsedData(parseOCRResult(fakeText));
+//     setProgress(100); setScanning(false); return;
+//   }
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── REPORTS SECTION ──────────────────────────────────────────────────────────
+const ReportsSection = ({ appointments, user, onDeleteAccount, isGuest, onUpdateProfile, supabase: sb }) => {
+  const [hourlyRate, setHourlyRate] = useState(user.hourly_rate || 50);
+  const [savingRate, setSavingRate] = useState(false);
+
+  const confirmedApps = (appointments || []).filter(a =>
+    String(a.barber_id || a.barberId) === String(user.id) && a.status === 'confirmed'
+  );
+  const manualApps = user.manual_appointments || [];
+  const allApps = [...confirmedApps, ...manualApps];
+
+  const dayNames = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const appsByDay = Array(7).fill(0);
+  allApps.forEach(app => {
+    if (app.date) { const dow = new Date(app.date + 'T00:00:00').getDay(); appsByDay[dow]++; }
+  });
+  const dayData = dayNames.map((label, i) => ({ label, value: appsByDay[i] }));
+
+  const recentRevenue = confirmedApps.slice(-6).map((a, i) => ({ label: `#${i + 1}`, value: Number(a.price) || 0 }));
+
+  const slots = user.available_slots || {};
+  const totalOpen = Object.values(slots).reduce((acc, s) => acc + (s?.length || 0), 0);
+  const totalBooked = allApps.length;
+  const occupancy = totalOpen + totalBooked > 0 ? Math.round((totalBooked / (totalOpen + totalBooked)) * 100) : 0;
+
+  const avgMinPerApp = 45;
+  const totalMinWorked = allApps.length * avgMinPerApp;
+  const totalHrsWorked = (totalMinWorked / 60).toFixed(1);
+  const earnedAtRate = ((totalMinWorked / 60) * hourlyRate).toFixed(2);
+  const totalRevenue = confirmedApps.reduce((acc, a) => acc + (Number(a.price) || 0), 0);
+  const daysWithSlots = Object.keys(slots).filter(d => slots[d]?.length > 0).length;
+  const idleHrs = Math.max(0, daysWithSlots * 8 - totalMinWorked / 60).toFixed(1);
+
+  const saveHourlyRate = async (rate) => {
+    if (isGuest) return;
+    setSavingRate(true);
+    try { await sb.from('profiles').update({ hourly_rate: rate }).eq('id', user.id); onUpdateProfile({ ...user, hourly_rate: rate }); }
+    catch (_) { }
+    setSavingRate(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Atendimentos</p>
+          <p className="text-2xl font-black text-slate-900">{allApps.length}</p>
+          <p className="text-[10px] text-green-600 font-bold mt-0.5">↑ {confirmedApps.length} confirmados</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Faturado</p>
+          <p className="text-2xl font-black text-slate-900">R$ {totalRevenue}</p>
+          <p className="text-[10px] text-slate-400 font-bold mt-0.5">{totalHrsWorked}h trabalhadas</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Aproveitamento da Agenda</p>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-1000"
+              style={{ width: `${occupancy}%`, background: occupancy >= 70 ? '#22c55e' : occupancy >= 40 ? '#3b82f6' : '#f59e0b' }} />
+          </div>
+          <span className="font-black text-sm text-slate-900 w-10 text-right">{occupancy}%</span>
+        </div>
+        <div className="flex gap-4 mt-3">
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-green-500" /><span className="text-[10px] font-bold text-slate-500">Trabalhando: {totalHrsWorked}h</span></div>
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-200" /><span className="text-[10px] font-bold text-slate-500">Ocioso: {idleHrs}h</span></div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Atendimentos por Dia da Semana</p>
+        <SimpleBarChart data={dayData} color="#3b82f6" height={72} />
+      </div>
+
+      {recentRevenue.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Valores Últimos Atendimentos</p>
+          <SimpleBarChart data={recentRevenue} color="#10b981" height={72} />
+        </div>
+      )}
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp size={16} className="text-blue-500" />
+          <p className="font-bold text-slate-900 text-sm">Análise de Valor de Tempo</p>
+        </div>
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Minha hora vale:</label>
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
+            <input type="number" value={hourlyRate} onChange={e => setHourlyRate(Number(e.target.value))}
+              className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-blue-400" />
+          </div>
+          <button onClick={() => saveHourlyRate(hourlyRate)} disabled={savingRate || isGuest}
+            className="px-3 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold active:scale-95 disabled:opacity-50">
+            {savingRate ? '...' : 'Salvar'}
+          </button>
+        </div>
+        <div className="space-y-2">
+          {[{ label: '30 minutos', mins: 30 }, { label: '1 hora', mins: 60 }, { label: '2 horas', mins: 120 }, { label: 'Dia de trabalho (8h)', mins: 480 }].map(({ label, mins }) => (
+            <div key={mins} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-xs font-bold text-slate-600">{label}</span>
+              <span className="text-xs font-black text-green-600">R$ {((mins / 60) * hourlyRate).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Total trabalhado (estimado)</p>
+          <p className="text-lg font-black text-blue-800">{totalHrsWorked}h → R$ {earnedAtRate}</p>
+          <p className="text-[9px] text-blue-500 mt-0.5">Baseado em {allApps.length} atendimentos × 45 min médios</p>
+        </div>
+      </div>
+
+      {!isGuest && (
+        <div className="text-center pt-2 pb-2">
+          <button onClick={onDeleteAccount} className="text-[10px] text-red-300 font-bold underline underline-offset-2 hover:text-red-500 transition-colors">
+            Excluir minha conta
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase: sb, isGuestBarber, isDark, onToggleDark }) => {
   const [activeTab, setActiveTab] = useState('home');
@@ -2119,6 +2269,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcPrice, setNewSvcPrice] = useState('');
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
+  const [showClientHistory, setShowClientHistory] = useState(false);
 
   const [guestBarberState, setGuestBarberState] = useState({
     ...user, name: 'Profissional Demo', plano_ativo: false, is_visible: false,
@@ -2143,6 +2294,23 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   // Total de atendimentos para a meta
   const totalAppointmentsForGoal = confirmed.length + manualAppointments.length;
+
+  // ── Histórico de clientes únicos ──
+  const uniqueClients = useMemo(() => {
+    const map = {};
+    [...confirmed, ...manualAppointments].forEach(a => {
+      const phone = (a.phone || '').replace(/\D/g, '');
+      const name = a.client_name || a.client || '';
+      const key = phone || name;
+      if (!key) return;
+      if (!map[key]) map[key] = { name, phone, count: 0, lastDate: '', services: [] };
+      map[key].count++;
+      if (!map[key].lastDate || a.date > map[key].lastDate) map[key].lastDate = a.date;
+      const svcName = a.service_name || a.service || '';
+      if (svcName && !map[key].services.includes(svcName)) map[key].services.push(svcName);
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [confirmed, manualAppointments]);
 
   const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
   const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
@@ -2316,8 +2484,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     } catch (e) { alert("Erro ao excluir: " + e.message); }
   };
 
-  // Salva bio com debounce
-  const handleBioChange = async (value) => {
+  const handleBioChange = (value) => {
     const trimmed = value.slice(0, 15);
     effectiveOnUpdateProfile({ ...effectiveUser, bio: trimmed });
   };
@@ -2340,7 +2507,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         </div>
       )}
 
-      {/* Manual booking modal */}
+      {/* Modal reserva manual */}
       {showManualModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowManualModal(false)} />
@@ -2368,7 +2535,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         </div>
       )}
 
-      {/* Pay modal */}
+      {/* Modal pagamento */}
       {showPayModal && (
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
@@ -2409,7 +2576,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
         </div>
       </header>
 
-      {/* Nav tabs */}
+      {/* Tabs */}
       <nav className="px-4 py-3 flex gap-1.5 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10 scrollbar-hide">
         {tabs.map(tab => (
           <button key={tab} onClick={() => setActiveTab(tab)}
@@ -2424,11 +2591,12 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
       <main className="p-6 max-w-md mx-auto">
 
-        {/* ── HOME TAB ── */}
+        {/* ══════════════════════════════════ HOME TAB ══════════════════════════════ */}
         {activeTab === 'home' && (
           <div className="space-y-6">
             {!isGuestBarber && <CopyLinkButton barber={effectiveUser} />}
 
+            {/* Métricas */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
                 <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
@@ -2443,8 +2611,77 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </div>
 
-            
+            {/* ── HISTÓRICO DE CLIENTES ── */}
+            <section>
+              <button
+                onClick={() => setShowClientHistory(!showClientHistory)}
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
+                    <History size={18} className="text-purple-500" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-black text-slate-900 text-sm">Meus Clientes</p>
+                    <p className="text-[10px] text-slate-400">
+                      {uniqueClients.length} pessoa{uniqueClients.length !== 1 ? 's' : ''} atendida{uniqueClients.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {uniqueClients.length}
+                  </span>
+                  <ChevronRight size={16} className={`text-slate-400 transition-transform ${showClientHistory ? 'rotate-90' : ''}`} />
+                </div>
+              </button>
 
+              {showClientHistory && (
+                <div className="mt-2 space-y-2">
+                  {uniqueClients.length === 0 ? (
+                    <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                      <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
+                    </div>
+                  ) : (
+                    uniqueClients.map((c, i) => (
+                      <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-black text-purple-600">{c.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-black text-slate-900 text-sm truncate">{c.name || 'Cliente'}</p>
+                            <p className="text-[10px] text-slate-400">
+                              {c.count} visita{c.count !== 1 ? 's' : ''} · último: {c.lastDate ? c.lastDate.split('-').reverse().join('/') : '—'}
+                            </p>
+                            {c.services.length > 0 && (
+                              <p className="text-[9px] text-blue-500 font-bold truncate mt-0.5">
+                                {c.services.slice(0, 2).join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {c.phone ? (
+                          <a
+                            href={`https://wa.me/55${c.phone}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-[10px] active:scale-95 transition-all"
+                          >
+                            <Phone size={11} />
+                            {c.phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}
+                          </a>
+                        ) : (
+                          <span className="flex-shrink-0 text-[9px] text-slate-300 font-bold">Sem tel.</span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </section>
+
+            {/* Novas Solicitações */}
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-900 flex items-center gap-2">
@@ -2496,6 +2733,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   </>}
             </section>
 
+            {/* Próximos na Agenda */}
             <section className="mt-8">
               <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2"><Calendar size={18} className="text-blue-500" /> Próximos na Agenda</h3>
               {allAppointments.length === 0
@@ -2533,7 +2771,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           </div>
         )}
 
-        {/* ── SERVICES TAB ── */}
+        {/* ══════════════════════════════ SERVICES TAB ══════════════════════════════ */}
         {activeTab === 'services' && (
           <div className="space-y-4">
             <div className="p-4 bg-blue-50 rounded-2xl mb-4">
@@ -2565,6 +2803,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               );
             })}
+            {/* Serviços personalizados */}
             <div className="mt-6 pt-6 border-t-2 border-dashed border-slate-200">
               <div className="flex items-center justify-between mb-3">
                 <div>
@@ -2610,10 +2849,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           </div>
         )}
 
-        {/* ── CONFIG TAB ── */}
+        {/* ══════════════════════════════ CONFIG TAB ════════════════════════════════ */}
         {activeTab === 'config' && (
           <div className="space-y-6">
-            {/* Work photos */}
+            {/* Fotos do trabalho */}
             <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div><h3 className="font-bold text-slate-900">Fotos do Trabalho</h3><p className="text-[10px] text-slate-400 mt-0.5">Máx. 3 fotos · exibidas no link público</p></div>
@@ -2635,7 +2874,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </section>
 
-            {/* Profile config */}
+            {/* Configurações do perfil */}
             <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
               <div className="flex flex-col items-center mb-6">
@@ -2647,9 +2886,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar} />
                 </div>
               </div>
-
               <div className="space-y-4">
-                {/* BIO — nova funcionalidade, max 15 chars */}
+                {/* Bio */}
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
                     <span className="flex items-center gap-1"><Type size={11} /> Bio (tagline)</span>
@@ -2657,15 +2895,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       {effectiveUser.bio?.length || 0}/15
                     </span>
                   </label>
-                  <input
-                    type="text"
-                    maxLength={15}
-                    value={effectiveUser.bio || ''}
-                    onChange={e => handleBioChange(e.target.value)}
-                    onBlur={saveBio}
-                    placeholder="Ex: Especialista em..."
-                    className="w-full bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
-                  />
+                  <input type="text" maxLength={15} value={effectiveUser.bio || ''} onChange={e => handleBioChange(e.target.value)} onBlur={saveBio}
+                    placeholder="Ex: Especialista em..." className="w-full bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors" />
                   <p className="text-[9px] text-slate-400 mt-1">Aparece no seu perfil, link público e no app. Máx. 15 caracteres.</p>
                   {effectiveUser.bio && (
                     <div className="mt-1.5 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
@@ -2674,7 +2905,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     </div>
                   )}
                 </div>
-
+                {/* Endereço */}
                 <div>
                   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
                   <input type="text" value={effectiveUser.address || ''} onChange={e => effectiveOnUpdateProfile({ ...effectiveUser, address: e.target.value })}
@@ -2693,6 +2924,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </button>
               </div>
 
+              {/* Toggle visibilidade */}
               <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
                 <div>
                   <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
@@ -2706,6 +2938,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               </div>
 
+              {/* Duração */}
               <div className="mt-6 pt-6 border-t border-slate-100">
                 <p className="font-bold text-slate-900 text-sm mb-1">Duração do Atendimento</p>
                 <div className="flex gap-2">
@@ -2792,15 +3025,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 <h3 className="font-bold text-sm text-slate-900">Scanner de Caderno</h3>
               </div>
               <WebcamScanner onScanResult={(parsedData) => {
-                // Aqui você pode usar os dados para criar um agendamento manual
-                console.log('Agendamento extraído do caderno:', parsedData);
                 if (parsedData.date && parsedData.time) {
-                  // Converter data DD/MM/AAAA para YYYY-MM-DD para salvar no slot
                   const parts = parsedData.date.split('/');
                   if (parts.length >= 2) {
                     const year = parts[2] || new Date().getFullYear().toString();
                     const isoDate = `${year}-${parts[1]}-${parts[0]}`;
-                    // Criar agendamento manual com os dados extraídos
                     const newApp = {
                       id: `manual-scan-${Date.now()}`,
                       client: parsedData.clientName || 'Cliente (scanner)',
@@ -2812,7 +3041,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       service_name: parsedData.service || 'Serviço',
                     };
                     const updatedManual = [...(effectiveUser.manual_appointments || []), newApp];
-                    // Fechar o slot na agenda
                     const currentSlots = { ...(effectiveUser.available_slots || {}) };
                     const daySlots = (currentSlots[isoDate] || []).filter(s => s !== parsedData.time);
                     const updatedSlots = { ...currentSlots, [isoDate]: daySlots };
@@ -2825,7 +3053,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               }} />
             </section>
 
-            {/* Plan status */}
+            {/* Status do plano */}
             <div className="pt-2 text-center">
               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
                 <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
@@ -2837,13 +3065,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 )}
               </div>
             </div>
-
-            {!isGuestBarber && (
-              <section>
-                <div className="flex items-center gap-2 mb-3"><Headphones size={16} className="text-slate-500" /><h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3></div>
-                <SupportChat user={effectiveUser} />
-              </section>
-            )}
 
             {isGuestBarber && (
               <section className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center">
@@ -2858,17 +3079,50 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           </div>
         )}
 
-        {/* ── REPORTS TAB ── */}
+        {/* ══════════════════════════════ REPORTS TAB ═══════════════════════════════ */}
         {activeTab === 'reports' && (
-          <div className="space-y-2">
-            <div className="mb-4">
+          <div className="space-y-4">
+            <div className="mb-2">
               <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2"><BarChart2 size={20} className="text-blue-500" /> Relatórios</h2>
               <p className="text-xs text-slate-400">Análise do seu desempenho e tempo de trabalho</p>
             </div>
             {isGuestBarber && (
               <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">⚠️ Modo demo — os dados são simulados.</div>
             )}
-            <ReportsSection appointments={appointments} user={effectiveUser} onDeleteAccount={handleDeleteAccount} isGuest={isGuestBarber} onUpdateProfile={effectiveOnUpdateProfile} supabase={sb} />
+
+            {/* Relatórios principais */}
+            <ReportsSection
+              appointments={appointments}
+              user={effectiveUser}
+              onDeleteAccount={handleDeleteAccount}
+              isGuest={isGuestBarber}
+              onUpdateProfile={effectiveOnUpdateProfile}
+              supabase={sb}
+            />
+
+            {/* ── META DOS 30 ATENDIMENTOS — final dos relatórios ── */}
+            <GoalCard
+              totalAppointments={totalAppointmentsForGoal}
+              slug={effectiveUser.slug}
+              isGuest={isGuestBarber}
+            />
+
+            {/* ── SUPORTE — final dos relatórios ── */}
+            {!isGuestBarber && (
+              <section className="pb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Headphones size={16} className="text-slate-500" />
+                  <h3 className="font-bold text-sm text-slate-900">Falar com Suporte</h3>
+                </div>
+                <SupportChat user={effectiveUser} />
+              </section>
+            )}
+
+            {isGuestBarber && (
+              <div className="pb-6 p-3 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                <p className="text-xs text-amber-700 font-bold">Faça login para acessar o suporte.</p>
+              </div>
+            )}
           </div>
         )}
       </main>
@@ -2887,7 +3141,6 @@ export default function App() {
   const [isGuestBarber, setIsGuestBarber] = useState(false);
   const [publicBarber, setPublicBarber] = useState(null);
   const [isDark, setIsDark] = useState(() => {
-    // Detecta preferência do sistema na primeira visita
     const saved = localStorage.getItem('salao_dark_mode');
     if (saved !== null) return saved === 'true';
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -2899,13 +3152,10 @@ export default function App() {
     localStorage.setItem('salao_dark_mode', isDark);
   }, [isDark]);
 
-  // Observa mudanças no tema do sistema
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
-      if (localStorage.getItem('salao_dark_mode') === null) {
-        setIsDark(e.matches);
-      }
+      if (localStorage.getItem('salao_dark_mode') === null) setIsDark(e.matches);
     };
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
