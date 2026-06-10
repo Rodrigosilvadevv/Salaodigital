@@ -1912,6 +1912,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
 
+  // Estados do suporte direto para o Painel Admin
+  const [supportMessage, setSupportMessage] = useState('');
+  const [sendingSupport, setSendingSupport] = useState(false);
+
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
   const [showHiddenDelete, setShowHiddenDelete] = useState(false);
@@ -1926,6 +1930,37 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
 
   const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
+
+  // ✉️ LÓGICA DE ENVIO DIRETO AO ADMIN (Declarada no topo para evitar ReferenceError)
+  const handleSendSupport = async (e) => {
+    e.preventDefault();
+    if (!supportMessage.trim() || isGuestBarber) return;
+
+    setSendingSupport(true);
+    try {
+      const { error } = await sb
+        .from('support_messages')
+        .insert([
+          {
+            barber_id: effectiveUser.id,
+            barber_name: effectiveUser.name || 'Nome não informado',
+            message: supportMessage.trim(),
+            created_at: new Date().toISOString(),
+            status: 'pending'
+          }
+        ]);
+
+      if (error) throw error;
+
+      alert('Mensagem enviada com sucesso ao administrador!');
+      setSupportMessage('');
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao enviar mensagem.');
+    } finally {
+      setSendingSupport(false);
+    }
+  };
 
   const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
@@ -1970,7 +2005,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     else { if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot); else return; }
     const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedAvailableSlots });
-    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id);
+      if (error) console.error("Erro ao salvar horários:", error.message);
+    }
   };
 
   const toggleSlotForDate = async (date, slot) => {
@@ -1983,7 +2022,11 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       const updatedDaySlots = [...slotsForDay, slot];
       const filteredManual = (effectiveUser.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
-      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', effectiveUser.id).catch(console.error);
+      
+      if (!isGuestBarber) {
+        const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', effectiveUser.id);
+        if (error) console.error("Erro ao salvar slots de data:", error.message);
+      }
     }
   };
 
@@ -1997,11 +2040,19 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       const newManualApp = { id: `manual-${Date.now()}`, client: manualName.trim(), date, time: slot, price: Number(manualValue) || 0, status: 'confirmed', isManual: true };
       const updatedManualApps = [...(effectiveUser.manual_appointments || []), newManualApp];
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
-      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', effectiveUser.id).catch(console.error);
+      
+      if (!isGuestBarber) {
+        const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', effectiveUser.id);
+        if (error) console.error("Erro no agendamento manual:", error.message);
+      }
     } else {
       const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: finalSlots });
-      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: finalSlots }).eq('id', effectiveUser.id).catch(console.error);
+      
+      if (!isGuestBarber) {
+        const { error } = await sb.from('profiles').update({ available_slots: finalSlots }).eq('id', effectiveUser.id);
+        if (error) console.error("Erro ao fechar horário:", error.message);
+      }
     }
     setShowManualModal(false); setManualSlotTarget(null); setManualName(''); setManualValue('');
   };
@@ -2010,28 +2061,44 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [...filteredTimeSlots] };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
-    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
   };
 
   const deselectAllSlotsForDay = async (date) => {
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [] };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
-    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
   };
 
   const markAllDaysInMonth = async () => {
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = [...filteredTimeSlots]; }
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
-    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
   };
 
   const unmarkAllDaysInMonth = async () => {
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = []; }
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
-    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
   };
 
   const addCustomService = async () => {
@@ -2039,14 +2106,22 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const newSvc = { id: `custom-${Date.now()}`, name: newSvcName.trim(), price: Number(newSvcPrice), duration: newSvcDuration, isCustom: true };
     const updatedCustom = [...(effectiveUser.custom_services || []), newSvc];
     effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
-    if (!isGuestBarber) await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
     setNewSvcName(''); setNewSvcPrice(''); setNewSvcDuration('45min'); setShowAddCustomSvc(false);
   };
 
   const removeCustomService = async (id) => {
     const updatedCustom = (effectiveUser.custom_services || []).filter(cs => cs.id !== id);
     effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
-    if (!isGuestBarber) await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id).catch(console.error);
+    
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id);
+      if (error) console.error(error.message);
+    }
   };
 
   const handlePayment = async () => {
@@ -2200,20 +2275,55 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             </div>
             <div className="flex flex-col gap-2">
               <button onClick={() => handleManualBookingConfirm(true)}
-              className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">
-              {manualName.trim() ? '✓ Reservar com Cliente' : '✓ Apenas Fechar Horário'}
-            </button>
-            <button onClick={() => handleManualBookingConfirm(false)}
-              className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm active:scale-95">
-              Fechar sem Cliente
-            </button>
-            <button onClick={() => setShowManualModal(false)} className="w-full py-2 text-slate-400 font-bold text-xs">
-              Cancelar
+                className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">
+                {manualName.trim() ? '✓ Reservar com Cliente' : '✓ Apenas Fechar Horário'}
+              </button>
+              <button onClick={() => handleManualBookingConfirm(false)}
+                className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm active:scale-95">
+                Fechar sem Cliente
+              </button>
+              <button onClick={() => setShowManualModal(false)} className="w-full py-2 text-slate-400 font-bold text-xs">
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal pagamento ── */}
+      {showPayModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Lock size={32}/>
+            </div>
+            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
+            {isGuestBarber ? (
+              <>
+                <p className="text-slate-500 text-sm mb-6">Para ativar o plano, crie uma conta de profissional.</p>
+                <button className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold"
+                  onClick={() => { setShowPayModal(false); onLogout(); }}>
+                  Criar conta / Fazer Login
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-500 text-sm mb-6">
+                  Você atingiu o limite de <b>3 serviços gratuitos</b>.
+                </p>
+                <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold"
+                  onClick={handlePayment} disabled={isPaying}>
+                  {isPaying ? 'Processando...' : 'Liberar Tudo (R$ 29,90/mês)'}
+                </button>
+              </>
+            )}
+            <button onClick={() => setShowPayModal(false)}
+              className="text-slate-400 text-sm font-bold block w-full mt-3">
+              Agora não
             </button>
           </div>
         </div>
-      </div>
-    )}
+      )}
  
     {/* ── Modal pagamento ── */}
     {showPayModal && (
