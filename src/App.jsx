@@ -1896,8 +1896,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
-  const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
   const today = new Date();
+  const [selectedDateConfig, setSelectedDateConfig] = useState(today.toISOString().split('T')[0]);
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
   const [showAllPending, setShowAllPending] = useState(false);
@@ -1911,7 +1911,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
-  const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
 
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
