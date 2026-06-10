@@ -1911,6 +1911,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
+  const [tempBio, setTempBio] = useState(user?.bio || '');
 
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
