@@ -1,93 +1,1359 @@
-import React, { useState, useEffect, useMemo } from 'react';
-
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
-import imgPopup from './img/popup.png'; 
-import imgTes from './img/tes.jpg';
+import imgPopup from './img/popup.png';
 
-import { 
-  Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign, 
-  ChevronLeft, ChevronRight, Check, Trash2, KeyRound, UserPlus, Eye, EyeOff, 
-  CreditCard, Lock, Clock, CalendarDays, Sparkles, Palette, Briefcase, Edit3, 
+import {
+  Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign,
+  ChevronLeft, ChevronRight, Check, Trash2, KeyRound, UserPlus, Eye, EyeOff,
+  CreditCard, Lock, Clock, CalendarDays, Sparkles, Palette, Briefcase, Edit3,
   MessageCircle, Phone, XCircle, History, Loader2,
   Home, Plus, Camera,
-  CheckCircle, ArrowLeft 
+  CheckCircle, ArrowLeft, Send, Headphones, Copy, Link, Image, Shield, Award, Zap, ExternalLink,
+  BarChart2, TrendingUp, Moon, Sun, Video, VideoOff, RefreshCw, PlusCircle, X,
+  Gift, QrCode, Type, FileText, Users, Tag, Settings, Activity, MessageSquare,
+  ChevronDown, ChevronUp, Search, Filter, Reply, MoreVertical, Circle, TrendingDown,
+  Percent, Target, AlertCircle, CheckSquare, Bot
 } from 'lucide-react';
 
-const supabaseUrl = process.env.SUPABASE_URL;
-const supabaseKey = process.env.SUPABASE_KEY;
+const APP_VERSION = 'v6.2';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-
-const MASTER_SERVICES = [
-  { id: 1, name: 'Corte Degradê', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'hair' },
-  { id: 2, name: 'Barba Terapia', defaultPrice: 40, duration: '30min', icon: <User size={20}/>, category: 'beard' },
-  { id: 3, name: 'Combo Completo', defaultPrice: 80, duration: '1h 15min', icon: <Star size={20}/>, category: 'combo' },
-  { id: 4, name: 'Luzes / Platinado', defaultPrice: 120, duration: '2h', icon: <Sparkles size={20}/>, category: 'chemical' },
-  { id: 6, name: 'Design Sobrancelhas', defaultPrice: 35, duration: '30min', icon: <Eye size={20}/>, category: 'eyebrow' },
-  { id: 7, name: 'Nail design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'nail' },
-  { id: 8, name: 'Manicure/Pedicure', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'foot' },
-  { id: 9, name: 'Limpeza facial', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-  { id: 10, name: 'Massagem e drenagem', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'dren' },
-  { id: 12, name: 'Lash design', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'lash' },
-  { id: 13, name: 'Micro Pig Sobrancelha', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-  { id: 14, name: 'Designer com Henna', defaultPrice: 50, duration: '45min', icon: <Scissors size={20}/>, category: 'face' },
-];
-
-const GLOBAL_TIME_SLOTS = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', 
-  '12:00', '12:30', '13:00', '13:30', '14:00', '14:30', '15:00', '15:30', 
-  '16:00', '16:30', '17:00', '17:30', '18:00', '18:30', '19:00', '19:30', 
-  '20:00', '20:30', '21:00', '21:30', '22:00'];
-
-const calculateDistance = (lat1, lon1, lat2, lon2) => {
-  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
-  
-  const R = 6371; 
-  const dLat = (lat2 - lat1) * (Math.PI / 180);
-  const dLon = (lon2 - lon1) * (Math.PI / 180);
-  const a = 
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return parseFloat((R * c).toFixed(1)); 
+// ─── DARK MODE CSS ────────────────────────────────────────────────────────────
+const injectDarkModeCSS = (isDark) => {
+  document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+  let styleEl = document.getElementById('dm-override');
+  if (!styleEl) { styleEl = document.createElement('style'); styleEl.id = 'dm-override'; document.head.appendChild(styleEl); }
+  styleEl.textContent = `
+    *, *::before, *::after { transition: background-color 0.25s ease, border-color 0.25s ease, color 0.2s ease, box-shadow 0.25s ease !important; }
+    :root { --c-bg:#f8fafc;--c-surface:#ffffff;--c-surface2:#f1f5f9;--c-border:#e2e8f0;--c-border2:#cbd5e1;--c-text:#0f172a;--c-text2:#475569;--c-muted:#94a3b8;--c-shadow:rgba(0,0,0,0.08);--c-shadow-xl:rgba(0,0,0,0.15); }
+    [data-theme="dark"] { --c-bg:#0f172a;--c-surface:#1e293b;--c-surface2:#273548;--c-border:#334155;--c-border2:#475569;--c-text:#f1f5f9;--c-text2:#cbd5e1;--c-muted:#64748b;--c-shadow:rgba(0,0,0,0.4);--c-shadow-xl:rgba(0,0,0,0.6); }
+    [data-theme="dark"] body{background-color:#0f172a!important}
+    [data-theme="dark"] .bg-white{background-color:#1e293b!important}
+    [data-theme="dark"] .bg-slate-50{background-color:#0f172a!important}
+    [data-theme="dark"] .bg-slate-100{background-color:#1e293b!important}
+    [data-theme="dark"] .bg-slate-200{background-color:#273548!important}
+    [data-theme="dark"] .text-slate-900{color:#f1f5f9!important}
+    [data-theme="dark"] .text-slate-800{color:#e2e8f0!important}
+    [data-theme="dark"] .text-slate-700{color:#cbd5e1!important}
+    [data-theme="dark"] .text-slate-600{color:#94a3b8!important}
+    [data-theme="dark"] .text-slate-500{color:#64748b!important}
+    [data-theme="dark"] .border-slate-100{border-color:#334155!important}
+    [data-theme="dark"] .border-slate-200{border-color:#334155!important}
+    [data-theme="dark"] .shadow-sm{box-shadow:0 1px 3px rgba(0,0,0,0.5)!important}
+    [data-theme="dark"] .shadow-xl{box-shadow:0 20px 40px rgba(0,0,0,0.6)!important}
+    [data-theme="dark"] .bg-amber-50{background-color:#1c1a0e!important}
+    [data-theme="dark"] .bg-blue-50{background-color:#0c1929!important}
+    [data-theme="dark"] .bg-green-50{background-color:#0a1f12!important}
+    [data-theme="dark"] .bg-purple-50{background-color:#150d1f!important}
+    [data-theme="dark"] .bg-red-50{background-color:#1f0d0d!important}
+    [data-theme="dark"] input,[data-theme="dark"] select,[data-theme="dark"] textarea{background-color:#273548!important;color:#f1f5f9!important;border-color:#334155!important}
+    [data-theme="dark"] input::placeholder{color:#64748b!important}
+    @keyframes storyPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
+    .story-ring-animated{animation:storyPulse 3s ease-in-out infinite}
+    @keyframes goalPulse{0%,100%{box-shadow:0 0 0 0 rgba(251,191,36,0.4)}70%{box-shadow:0 0 0 12px rgba(251,191,36,0)}}
+    .goal-pulse{animation:goalPulse 2s ease-in-out infinite}
+  `;
 };
 
-const Button = ({ children, onClick, variant = 'primary', className = '', disabled, loading }) => {
-  const variants = {
-    primary: "bg-slate-900 text-white hover:bg-black shadow-lg",
-    secondary: "bg-blue-600 text-white hover:bg-blue-700",
-    outline: "border-2 border-slate-200 text-slate-600 hover:border-slate-900",
-    success: "bg-green-600 text-white hover:bg-green-700",
-  };
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const generateSlug = (name, id) => {
+  const normalized = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'-');
+  return `${normalized}-${String(id).slice(-4)}`;
+};
+const getPublicUrl = (slug) => `${window.location.origin}/${slug}`;
+const applyPhoneMask = (value) => {
+  const digits = value.replace(/\D/g,'').slice(0,11);
+  if (digits.length<=2) return digits;
+  if (digits.length<=7) return `(${digits.slice(0,2)}) ${digits.slice(2)}`;
+  if (digits.length<=11) return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7)}`;
+  return `(${digits.slice(0,2)}) ${digits.slice(2,7)}-${digits.slice(7,11)}`;
+};
+const getPhoneDigits = (phone) => phone.replace(/\D/g,'');
+
+// ─── MASTER SERVICES ──────────────────────────────────────────────────────────
+const MASTER_SERVICES = [
+  { id:1,name:'Corte Degradê',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'hair' },
+  { id:2,name:'Barba Terapia',defaultPrice:40,duration:'30min',icon:<User size={20}/>,category:'beard' },
+  { id:3,name:'Combo Completo',defaultPrice:80,duration:'1h 15min',icon:<Star size={20}/>,category:'combo' },
+  { id:4,name:'Luzes / Platinado',defaultPrice:120,duration:'2h',icon:<Sparkles size={20}/>,category:'chemical' },
+  { id:6,name:'Design Sobrancelhas',defaultPrice:35,duration:'30min',icon:<Eye size={20}/>,category:'eyebrow' },
+  { id:7,name:'Nail design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'nail' },
+  { id:8,name:'Manicure/Pedicure',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'foot' },
+  { id:9,name:'Limpeza facial',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+  { id:10,name:'Massagem e drenagem',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'dren' },
+  { id:12,name:'Lash design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'lash' },
+  { id:13,name:'Micro Pig Sobrancelha',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+  { id:14,name:'Designer com Henna',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+];
+
+const GLOBAL_TIME_SLOTS = [
+  '08:00','08:30','09:00','09:30','10:00','10:30','11:00','11:30',
+  '12:00','12:30','13:00','13:30','14:00','14:30','15:00','15:30',
+  '16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30',
+  '20:00','20:30','21:00','21:30','22:00'
+];
+const MONTH_NAMES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const getDaysInMonth = (year,month) => new Date(year,month+1,0).getDate();
+const formatDate = (year,month,day) => `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+const calculateDistance = (lat1,lon1,lat2,lon2) => {
+  if (!lat1||!lon1||!lat2||!lon2) return null;
+  const R=6371,dLat=(lat2-lat1)*(Math.PI/180),dLon=(lon2-lon1)*(Math.PI/180);
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*(Math.PI/180))*Math.cos(lat2*(Math.PI/180))*Math.sin(dLon/2)**2;
+  return parseFloat((R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a))).toFixed(1));
+};
+
+// ─── BADGES & RATINGS ─────────────────────────────────────────────────────────
+const getBadges = (barber) => {
+  const badges=[], services=barber.my_services||[], slots=barber.available_slots||{};
+  const totalSlots=Object.values(slots).reduce((acc,arr)=>acc+(arr?.length||0),0);
+  if (barber.plano_ativo) badges.push({label:'Pro',color:'bg-blue-600 text-white',icon:<Zap size={9}/>});
+  if (services.length>=5) badges.push({label:'Especialista',color:'bg-purple-600 text-white',icon:<Award size={9}/>});
+  if (totalSlots>=20) badges.push({label:'Vaga na agenda',color:'bg-green-600 text-white',icon:<Calendar size={9}/>});
+  if (barber.avatar_url&&barber.address) badges.push({label:'Verificado',color:'bg-slate-900 text-white',icon:<Shield size={9}/>});
+  return badges;
+};
+
+const BadgeList = ({ barber, small }) => {
+  const badges=getBadges(barber);
+  if (!badges.length) return null;
   return (
-    <button onClick={onClick} disabled={disabled || loading} className={`w-full py-3.5 rounded-xl font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}>
-      {loading ? <Loader2 className="animate-spin" size={20}/> : children}
+    <div className="flex flex-wrap gap-1 mt-1">
+      {badges.map((b,i)=>(
+        <span key={i} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full font-bold ${small?'text-[8px]':'text-[9px]'} ${b.color}`}>
+          {b.icon} {b.label}
+        </span>
+      ))}
+    </div>
+  );
+};
+
+const getBarberRating = (barber) => {
+  const badges=getBadges(barber);
+  let score=3.5;
+  if (barber.plano_ativo) score+=0.5;
+  if (barber.avatar_url) score+=0.3;
+  if (barber.address) score+=0.2;
+  if ((barber.my_services||[]).length>=5) score+=0.3;
+  if (badges.find(b=>b.label==='Verificado')) score+=0.2;
+  return Math.min(5,parseFloat(score.toFixed(1)));
+};
+
+const StarRating = ({ rating }) => {
+  const full=Math.floor(rating), half=rating%1>=0.5;
+  return (
+    <div className="flex items-center gap-0.5">
+      {Array.from({length:5},(_,i)=>(
+        <svg key={i} width="10" height="10" viewBox="0 0 10 10" fill="none">
+          <path d="M5 1l1.12 2.27 2.51.36-1.82 1.77.43 2.5L5 6.77l-2.24 1.13.43-2.5L1.37 3.63l2.51-.36z"
+            fill={i<full?'#f59e0b':(i===full&&half?'url(#half)':'#e2e8f0')}
+            stroke={i<full||(i===full&&half)?'#f59e0b':'#cbd5e1'} strokeWidth="0.5"/>
+          {i===full&&half&&<defs><linearGradient id="half"><stop offset="50%" stopColor="#f59e0b"/><stop offset="50%" stopColor="#e2e8f0"/></linearGradient></defs>}
+        </svg>
+      ))}
+    </div>
+  );
+};
+
+const StoryRing = ({ rating, size=72, children, animate=false }) => {
+  const pct=Math.min(1,rating/5), strokeW=3, r=(size-strokeW*2)/2, circ=2*Math.PI*r, offset=circ*(1-pct);
+  const ringColor=rating>=4.5?'#f59e0b':rating>=4.0?'#3b82f6':rating>=3.5?'#10b981':'#94a3b8';
+  const ratingBg=rating>=4.5?'bg-amber-500':rating>=4.0?'bg-blue-600':rating>=3.5?'bg-green-600':'bg-slate-500';
+  return (
+    <div className={`relative inline-flex items-center justify-center ${animate?'story-ring-animated':''}`} style={{width:size,height:size}}>
+      <svg className="absolute inset-0" width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="#e2e8f0" strokeWidth={strokeW} opacity="0.4"/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={ringColor} strokeWidth={strokeW}
+          strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+          transform={`rotate(-90 ${size/2} ${size/2})`} style={{filter:`drop-shadow(0 0 4px ${ringColor}88)`}}/>
+      </svg>
+      <div style={{width:size-strokeW*4,height:size-strokeW*4}} className="rounded-full overflow-hidden">{children}</div>
+      <div className={`absolute -bottom-1 left-1/2 -translate-x-1/2 ${ratingBg} text-white rounded-full text-[8px] font-black px-1.5 py-0.5 shadow-lg border border-white leading-none whitespace-nowrap`}>
+        ★ {rating}
+      </div>
+    </div>
+  );
+};
+
+const DarkModeToggle = ({ isDark, onToggle }) => (
+  <button onClick={onToggle} title={isDark?'Modo Claro':'Modo Escuro'} className="relative flex-shrink-0 transition-all active:scale-90" style={{width:34,height:34}}>
+    <div className={`w-full h-full rounded-full border-2 flex items-center justify-center transition-all duration-500 shadow-md ${isDark?'bg-slate-800 border-slate-600':'bg-gradient-to-br from-yellow-100 to-amber-100 border-yellow-300 shadow-yellow-200'}`}>
+      {isDark?<Moon size={15} className="text-blue-300"/>:<Sun size={15} className="text-yellow-500"/>}
+    </div>
+    <span className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white transition-all duration-500 ${isDark?'bg-blue-400':'bg-yellow-400'}`}/>
+  </button>
+);
+
+// ─── GOAL CARD ────────────────────────────────────────────────────────────────
+const GoalCard = ({ totalAppointments, slug, isGuest }) => {
+  const META_GOAL=30, progress=Math.min(100,Math.round((totalAppointments/META_GOAL)*100)), achieved=totalAppointments>=META_GOAL, remaining=META_GOAL-totalAppointments;
+  const publicUrl=getPublicUrl(slug||'profissional');
+  const qrCodeUrl=`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(publicUrl)}&bgcolor=fffbeb&color=92400e&margin=4&qzone=1`;
+  const SUPPORT_WHATSAPP='5541992931394';
+  return (
+    <div className={`rounded-3xl border-2 overflow-hidden transition-all ${achieved?'border-amber-400 shadow-xl shadow-amber-100':'border-slate-200 bg-white shadow-sm'}`}>
+      <div className={`p-4 flex items-center gap-3 ${achieved?'bg-gradient-to-r from-amber-400 to-orange-400':'bg-white'}`}>
+        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 ${achieved?'bg-white/20':'bg-amber-100'}`}>
+          {achieved?<Gift size={20} className="text-white"/>:<Award size={20} className="text-amber-500"/>}
+        </div>
+        <div className="flex-1">
+          <p className={`font-black text-sm ${achieved?'text-white':'text-slate-900'}`}>Meta dos {META_GOAL} Atendimentos</p>
+          <p className={`text-[10px] font-bold ${achieved?'text-white/80':'text-slate-400'}`}>{achieved?'🎉 Parabéns! Você desbloqueou recompensas!':'Complete e ganhe prêmios exclusivos!'}</p>
+        </div>
+        {achieved&&<span className="text-white text-xl">🏆</span>}
+      </div>
+      <div className="p-4 bg-white space-y-3">
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[10px] font-bold text-slate-500">Progresso</span>
+            <span className="text-[10px] font-black text-slate-900">{totalAppointments}/{META_GOAL}</span>
+          </div>
+          <div className="h-3 bg-slate-100 rounded-full overflow-hidden relative">
+            <div className={`h-full rounded-full transition-all duration-1000 ${achieved?'bg-gradient-to-r from-amber-400 to-orange-400':'bg-gradient-to-r from-blue-400 to-blue-600'} ${achieved?'goal-pulse':''}`} style={{width:`${progress}%`}}/>
+            {[25,50,75].map(pct=><div key={pct} className="absolute top-0 bottom-0 w-0.5 bg-white/50" style={{left:`${pct}%`}}/>)}
+          </div>
+          {!achieved&&<p className="text-[9px] text-slate-400 mt-1 text-center">Faltam {remaining} atendimento{remaining!==1?'s':''} para desbloquear!</p>}
+        </div>
+        <div className={`rounded-2xl p-3 border ${achieved?'bg-amber-50 border-amber-200':'bg-slate-50 border-slate-100'}`}>
+          <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${achieved?'text-amber-600':'text-slate-400'}`}>Recompensas ao atingir</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[{icon:'📱',title:'3 Cabos de Carregamento',sub:'Tipo-C ou iPhone'},{icon:'🖨️',title:'QR Code Personalizado',sub:'Com seu link'}].map((r,i)=>(
+              <div key={i} className={`rounded-xl p-2.5 text-center border ${achieved?'bg-white border-amber-200':'bg-white border-slate-200 opacity-50'}`}>
+                <p className="text-xl mb-1">{r.icon}</p>
+                <p className="text-[9px] font-black text-slate-700 leading-tight">{r.title}</p>
+                <p className="text-[8px] text-slate-400 mt-0.5">{r.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        {achieved&&!isGuest&&(
+          <div className="space-y-3">
+            <div className="flex flex-col items-center bg-amber-50 border border-amber-200 rounded-2xl p-4">
+              <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-3">Seu QR Code Exclusivo</p>
+              <img src={qrCodeUrl} alt="QR Code" className="w-36 h-36 rounded-2xl border-4 border-amber-200 shadow-lg" onError={e=>{e.target.style.display='none'}}/>
+              <p className="text-[9px] text-amber-600 font-bold mt-2 text-center break-all">{publicUrl}</p>
+            </div>
+            <a href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Atingi a meta de ${META_GOAL} atendimentos no Salão Digital! Gostaria de resgatar minhas recompensas.\n\nMeu link: ${publicUrl}`)}`}
+              target="_blank" rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3.5 bg-green-500 text-white rounded-xl font-black text-sm active:scale-95 transition-all shadow-lg shadow-green-100">
+              <Phone size={15}/> Resgatar Prêmio no WhatsApp
+            </a>
+          </div>
+        )}
+        {achieved&&isGuest&&<div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-center"><p className="text-xs text-amber-700 font-bold">Faça login para resgatar seus prêmios!</p></div>}
+      </div>
+    </div>
+  );
+};
+
+// ─── AI SUPPORT CHAT (substitui SupportChat) ──────────────────────────────────
+// Configure VITE_ANTHROPIC_KEY no seu arquivo .env
+const AISupportChat = ({ user }) => {
+  const SUPPORT_WHATSAPP = '5541992931394';
+  const [messages, setMessages] = useState([{
+    id: 1, from: 'ai',
+    text: `Olá ${user?.name?.split(' ')[0] || 'profissional'}! 👋 Sou a assistente virtual do Salão Digital. Como posso te ajudar? Tiro dúvidas sobre agenda, serviços, link de agendamento, relatórios e muito mais!`,
+    time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+  }]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showHuman, setShowHuman] = useState(false);
+  const historyRef = useRef([]);
+  const endRef = useRef(null);
+
+  useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const text = input.trim();
+    setInput('');
+
+    const userMsg = {
+      id: Date.now(), from: 'user', text,
+      time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    };
+    setMessages(prev => [...prev, userMsg]);
+    historyRef.current = [...historyRef.current, { role: 'user', content: text }];
+    setLoading(true);
+
+    // Salva no banco silenciosamente
+    supabase.from('support_messages').insert([{
+      barber_id: user?.id, barber_name: user?.name,
+      barber_phone: user?.phone, message: text,
+      created_at: new Date().toISOString()
+    }]).catch(() => {});
+
+    try {
+      const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY || '';
+      if (!ANTHROPIC_KEY) throw new Error('key_missing');
+
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': ANTHROPIC_KEY,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 400,
+          system: `Você é a assistente virtual do Salão Digital, plataforma de agendamentos para profissionais de beleza no Brasil. Responda SEMPRE em português brasileiro, de forma amigável, direta e concisa (máx. 3 frases). Ajude com: configurar agenda, horários disponíveis, serviços e preços, compartilhar link público de agendamento, entender relatórios e faturamento, aceitar ou recusar agendamentos, atualizar perfil e foto, plano Pro, fotos de trabalho, e funcionalidades gerais do app. Se a dúvida for complexa ou técnica demais, sugira gentilmente falar com o suporte humano. Nome do profissional: ${user?.name || 'Profissional'}.`,
+          messages: historyRef.current
+        })
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message || 'api_error');
+
+      const aiText = data.content?.[0]?.text || 'Não consegui processar. Tente novamente.';
+      historyRef.current = [...historyRef.current, { role: 'assistant', content: aiText }];
+
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1, from: 'ai', text: aiText,
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+      }]);
+
+      // Mostra opção de humano após 2 trocas
+      if (historyRef.current.filter(m => m.role === 'assistant').length >= 2) setShowHuman(true);
+
+    } catch (err) {
+      const isKeyMissing = err.message === 'key_missing';
+      const fallbackText = isKeyMissing
+        ? 'Configure a variável VITE_ANTHROPIC_KEY no seu .env para ativar a IA. Por enquanto, fale com nossa equipe pelo WhatsApp!'
+        : 'Tive um problema técnico. Fale com nossa equipe pelo WhatsApp! 💬';
+
+      setMessages(prev => [...prev, {
+        id: Date.now() + 1, from: 'ai', text: fallbackText,
+        time: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        whatsapp: true
+      }]);
+      setShowHuman(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+      {/* Header */}
+      <div className="p-4 bg-slate-900 flex items-center gap-3">
+        <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 bg-gradient-to-br from-blue-500 to-purple-600">
+          <Bot size={18} className="text-white"/>
+        </div>
+        <div className="flex-1">
+          <p className="font-bold text-white text-sm">Assistente IA — Salão Digital</p>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"/>
+            <p className="text-[10px] text-slate-400">Resposta instantânea</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="h-60 overflow-y-auto p-4 space-y-3 bg-slate-50">
+        {messages.map(msg => (
+          <div key={msg.id} className={`flex ${msg.from === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[82%] flex flex-col gap-1 ${msg.from === 'user' ? 'items-end' : 'items-start'}`}>
+              {msg.from === 'ai' && (
+                <div className="flex items-center gap-1 mb-0.5">
+                  <Bot size={10} className="text-purple-400"/>
+                  <span className="text-[8px] font-bold text-purple-400 uppercase">IA</span>
+                </div>
+              )}
+              <div className={`px-3 py-2 rounded-2xl text-xs leading-relaxed ${
+                msg.from === 'user'
+                  ? 'bg-blue-600 text-white rounded-br-sm'
+                  : 'bg-white text-slate-800 border border-slate-100 rounded-bl-sm shadow-sm'
+              }`}>
+                {msg.text}
+              </div>
+              {msg.whatsapp && (
+                <a
+                  href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Sou ${user?.name || 'profissional'} do Salão Digital e preciso de ajuda.`)}`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 text-[10px] font-bold text-green-700 bg-green-50 border border-green-100 px-3 py-1.5 rounded-xl mt-1 active:scale-95 transition-all"
+                >
+                  <Phone size={11}/> Falar com Humano no WhatsApp
+                </a>
+              )}
+              <span className="text-[9px] text-slate-400">{msg.time}</span>
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-slate-100 rounded-2xl rounded-bl-sm px-3 py-2 shadow-sm">
+              <div className="flex gap-1">
+                {[0,150,300].map(d=><span key={d} className="w-1.5 h-1.5 bg-purple-300 rounded-full animate-bounce" style={{animationDelay:`${d}ms`}}/>)}
+              </div>
+            </div>
+          </div>
+        )}
+        <div ref={endRef}/>
+      </div>
+
+      {/* Escalate to human */}
+      {showHuman && (
+        <div className="px-4 py-2.5 bg-gradient-to-r from-green-50 to-emerald-50 border-t border-green-100 flex items-center justify-between gap-3">
+          <p className="text-[10px] text-green-700 font-bold flex-1">Prefere falar com uma pessoa real?</p>
+          <a
+            href={`https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(`Olá! Sou ${user?.name || 'profissional'} do Salão Digital e preciso de ajuda.`)}`}
+            target="_blank" rel="noopener noreferrer"
+            className="flex-shrink-0 flex items-center gap-1.5 bg-green-600 text-white text-[10px] font-black px-3 py-2 rounded-xl active:scale-95 transition-all shadow-md"
+          >
+            <Phone size={11}/> WhatsApp
+          </a>
+        </div>
+      )}
+
+      {/* Input */}
+      <div className="p-3 border-t border-slate-100 bg-white flex gap-2">
+        <input
+          type="text" value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && sendMessage()}
+          placeholder="Digite sua dúvida..." disabled={loading}
+          className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-400 transition-colors disabled:opacity-50"
+        />
+        <button
+          onClick={sendMessage} disabled={!input.trim() || loading}
+          className="w-9 h-9 bg-blue-600 text-white rounded-xl flex items-center justify-center disabled:opacity-40 flex-shrink-0 active:scale-95 transition-all"
+        >
+          <Send size={14}/>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ─── SIMPLE BAR CHART ─────────────────────────────────────────────────────────
+const SimpleBarChart = ({ data, color='#3b82f6', height=80 }) => {
+  const max=Math.max(...data.map(d=>d.value),1);
+  return (
+    <div>
+      <div className="flex items-end gap-1.5" style={{height}}>
+        {data.map((d,i)=>(
+          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-0.5">
+            <span className="text-[8px] font-black text-slate-500">{d.value>0?d.value:''}</span>
+            <div className="w-full rounded-t-lg transition-all duration-700"
+              style={{height:`${Math.max((d.value/max)*(height-20),d.value>0?4:0)}px`,backgroundColor:color,opacity:0.7+0.3*(d.value/max)}}/>
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-1.5 mt-1">
+        {data.map((d,i)=><div key={i} className="flex-1 text-center text-[8px] text-slate-400 font-bold truncate">{d.label}</div>)}
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN PIE CHART ──────────────────────────────────────────────────────────
+const AdminPieChart = ({ data = [] }) => {
+  const COLORS = ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#84cc16','#f97316','#ec4899','#6366f1'];
+  const total = data.reduce((acc,d)=>acc+d.value,0);
+  if (!data.length||total===0) return <div className="text-center text-slate-400 text-xs py-8">Sem dados suficientes</div>;
+  const cx=80, cy=80, r=65, innerR=30;
+  const toRad=(deg)=>(deg-90)*Math.PI/180;
+  const polar=(angle)=>({x:cx+r*Math.cos(toRad(angle)),y:cy+r*Math.sin(toRad(angle))});
+  let cur=0;
+  const slices=data.map((d,i)=>{
+    const angle=(d.value/total)*360;
+    const start=polar(cur), end=polar(cur+angle);
+    const large=angle>180?1:0;
+    const path=angle>=359.99
+      ? `M ${cx} ${cy-r} A ${r} ${r} 0 1 1 ${cx-0.01} ${cy-r} Z`
+      : `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${large} 1 ${end.x} ${end.y} Z`;
+    cur+=angle;
+    return {...d,path,pct:Math.round((d.value/total)*100),color:d.color||COLORS[i%COLORS.length]};
+  });
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <svg viewBox="0 0 160 160" width={160} height={160}>
+        {slices.map((s,i)=><path key={i} d={s.path} fill={s.color} stroke="white" strokeWidth={2}/>)}
+        <circle cx={cx} cy={cy} r={innerR} fill="white"/>
+        <text x={cx} y={cy-4} textAnchor="middle" fontSize={9} fontWeight="bold" fill="#64748b">TOTAL</text>
+        <text x={cx} y={cy+10} textAnchor="middle" fontSize={13} fontWeight="900" fill="#0f172a">{total}</text>
+      </svg>
+      <div className="grid grid-cols-2 gap-1.5 w-full max-w-xs">
+        {slices.map((s,i)=>(
+          <div key={i} className="flex items-center gap-1.5 min-w-0">
+            <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{backgroundColor:s.color}}/>
+            <span className="text-[9px] font-bold text-slate-600 truncate">{s.label}</span>
+            <span className="text-[9px] font-black text-slate-900 ml-auto flex-shrink-0">{s.pct}%</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
+const AdminDashboard = () => {
+  useEffect(()=>{
+    let meta=document.querySelector('meta[name="robots"]');
+    if (!meta) { meta=document.createElement('meta'); meta.name='robots'; document.head.appendChild(meta); }
+    meta.content='noindex, nofollow';
+    document.title='Admin — Salão Digital';
+    return()=>{ meta.content='index, follow'; };
+  },[]);
+
+  const [isLoggedIn,setIsLoggedIn]=useState(()=>localStorage.getItem('sd_admin_session')==='true');
+  const [loginUser,setLoginUser]=useState('');
+  const [loginPass,setLoginPass]=useState('');
+  const [loginError,setLoginError]=useState('');
+  const [loginLoading,setLoginLoading]=useState(false);
+  const [activeSection,setActiveSection]=useState('financial');
+  const [allProfiles,setAllProfiles]=useState([]);
+  const [allAppointments,setAllAppointments]=useState([]);
+  const [supportMessages,setSupportMessages]=useState([]);
+  const [dataLoading,setDataLoading]=useState(false);
+  const [replyTexts,setReplyTexts]=useState({});
+  const [sendingReply,setSendingReply]=useState({});
+  const [tagInputs,setTagInputs]=useState({});
+  const [savingTags,setSavingTags]=useState({});
+  const [selectedMsg,setSelectedMsg]=useState(null);
+
+  const fetchAllData=useCallback(async()=>{
+    setDataLoading(true);
+    try {
+      const [pRes,aRes,sRes]=await Promise.all([
+        supabase.from('profiles').select('*'),
+        supabase.from('appointments').select('*').order('created_at',{ascending:false}).limit(500),
+        supabase.from('support_messages').select('*').order('created_at',{ascending:false}).limit(200),
+      ]);
+      if (pRes.data) setAllProfiles(pRes.data);
+      if (aRes.data) setAllAppointments(aRes.data);
+      if (sRes.data) setSupportMessages(sRes.data);
+    } catch(e) { console.error(e); }
+    setDataLoading(false);
+  },[]);
+
+  useEffect(()=>{
+    if (!isLoggedIn) return;
+    fetchAllData();
+    const channel=supabase.channel('admin-rt')
+      .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},()=>fetchAllData())
+      .on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>fetchAllData())
+      .subscribe();
+    return()=>supabase.removeChannel(channel);
+  },[isLoggedIn,fetchAllData]);
+
+  const handleLogin=async()=>{
+    if (!loginUser.trim()||!loginPass.trim()) { setLoginError('Preencha usuário e senha.'); return; }
+    setLoginLoading(true); setLoginError('');
+    try {
+      const {data,error}=await supabase.from('admin_users').select('*').eq('username',loginUser.trim()).eq('password',loginPass.trim()).maybeSingle();
+      if (data&&!error) { localStorage.setItem('sd_admin_session','true'); setIsLoggedIn(true); }
+      else setLoginError('Usuário ou senha incorretos.');
+    } catch(e) { setLoginError('Erro de conexão: '+e.message); }
+    setLoginLoading(false);
+  };
+
+  const handleLogout=()=>{ localStorage.removeItem('sd_admin_session'); setIsLoggedIn(false); };
+
+  const handleSendReply=async(msgId)=>{
+    const reply=replyTexts[msgId]||'';
+    if (!reply.trim()) return;
+    setSendingReply(p=>({...p,[msgId]:true}));
+    try {
+      await supabase.from('support_messages').update({reply:reply.trim(),replied_at:new Date().toISOString()}).eq('id',msgId);
+      setSupportMessages(prev=>prev.map(m=>m.id===msgId?{...m,reply:reply.trim(),replied_at:new Date().toISOString()}:m));
+      setReplyTexts(p=>({...p,[msgId]:''}));
+    } catch(e) { alert('Erro: '+e.message); }
+    setSendingReply(p=>({...p,[msgId]:false}));
+  };
+
+  const handleSaveTags=async(profileId,tags)=>{
+    setSavingTags(p=>({...p,[profileId]:true}));
+    try {
+      const tagsArray=tags.split(',').map(t=>t.trim()).filter(Boolean);
+      await supabase.from('profiles').update({admin_tags:tagsArray}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,admin_tags:tagsArray}:p));
+    } catch(e) { alert('Erro: '+e.message); }
+    setSavingTags(p=>({...p,[profileId]:false}));
+  };
+
+  const handleSetFeatured=async(profileId,rank)=>{
+    try {
+      if (rank!==null) {
+        const existing=allProfiles.find(p=>p.featured_rank===rank&&p.id!==profileId);
+        if (existing) await supabase.from('profiles').update({featured_rank:null}).eq('id',existing.id);
+      }
+      await supabase.from('profiles').update({featured_rank:rank}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>{
+        if (p.id===profileId) return {...p,featured_rank:rank};
+        if (rank!==null&&p.featured_rank===rank) return {...p,featured_rank:null};
+        return p;
+      }));
+    } catch(e) { alert('Erro: '+e.message); }
+  };
+
+  const handleToggleVisibility=async(profileId,currentValue)=>{
+    try {
+      await supabase.from('profiles').update({is_visible:!currentValue}).eq('id',profileId);
+      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,is_visible:!currentValue}:p));
+    } catch(e) { alert('Erro: '+e.message); }
+  };
+
+  const handleDeleteProfile=async(profileId,profileName)=>{
+    if (!window.confirm(`Excluir a conta de "${profileName}"? Esta ação é irreversível.`)) return;
+    try {
+      await supabase.from('appointments').delete().or(`barber_id.eq.${profileId},client_id.eq.${profileId}`);
+      await supabase.from('profiles').delete().eq('id',profileId);
+      setAllProfiles(prev=>prev.filter(p=>p.id!==profileId));
+      alert('Conta excluída com sucesso.');
+    } catch(e) { alert('Erro ao excluir: '+e.message); }
+  };
+
+  // ── DERIVED DATA ──
+  const barbers=allProfiles.filter(p=>p.role==='barber');
+  const clients=allProfiles.filter(p=>p.role==='client');
+  const confirmedApps=allAppointments.filter(a=>a.status==='confirmed');
+  const pendingApps=allAppointments.filter(a=>a.status==='pending');
+  const totalRevenue=confirmedApps.reduce((acc,a)=>acc+(Number(a.price)||0),0);
+  const avgTicket=confirmedApps.length>0?(totalRevenue/confirmedApps.length).toFixed(2):0;
+
+  const monthlyRevenue=useMemo(()=>{
+    const months={};
+    confirmedApps.forEach(a=>{
+      if (!a.date) return;
+      const [y,m]=a.date.split('-');
+      const key=`${y}-${m}`;
+      months[key]=(months[key]||0)+(Number(a.price)||0);
+    });
+    return Object.entries(months).sort(([a],[b])=>a.localeCompare(b)).slice(-6).map(([k,v])=>({
+      label:MONTH_NAMES[parseInt(k.split('-')[1])-1]?.slice(0,3)||k,value:v
+    }));
+  },[confirmedApps]);
+
+  const revenuePerBarber=useMemo(()=>{
+    const map={};
+    confirmedApps.forEach(a=>{
+      const b=barbers.find(br=>String(br.id)===String(a.barber_id));
+      if (!b) return;
+      if (!map[b.id]) map[b.id]={name:b.name,revenue:0,count:0};
+      map[b.id].revenue+=(Number(a.price)||0);
+      map[b.id].count++;
+    });
+    return Object.values(map).sort((a,b)=>b.revenue-a.revenue);
+  },[confirmedApps,barbers]);
+
+  const serviceDistribution=useMemo(()=>{
+    const map={};
+    allAppointments.forEach(a=>{
+      if (!a.service_name) return;
+      map[a.service_name]=(map[a.service_name]||0)+1;
+    });
+    return Object.entries(map).sort(([,a],[,b])=>b-a).slice(0,8).map(([label,value])=>({label,value}));
+  },[allAppointments]);
+
+  const appsByDay=useMemo(()=>{
+    const days=Array(7).fill(0);
+    allAppointments.forEach(a=>{ if (a.date) days[new Date(a.date+'T00:00:00').getDay()]++; });
+    return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>({label,value:days[i]}));
+  },[allAppointments]);
+
+  const sevenDaysAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
+  const inactiveBarbers=useMemo(()=>barbers.filter(b=>{
+    const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
+    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
+  }),[barbers,allAppointments,sevenDaysAgo]);
+
+  const inactiveClients=useMemo(()=>clients.filter(c=>{
+    const lastApp=allAppointments.filter(a=>String(a.client_id)===String(c.id)).sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
+    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
+  }),[clients,allAppointments,sevenDaysAgo]);
+
+  const newThisWeek=allProfiles.filter(p=>p.created_at&&p.created_at>new Date(Date.now()-7*24*60*60*1000).toISOString());
+  const unreadSupport=supportMessages.filter(m=>!m.reply&&!m.read_at).length;
+
+  if (!isLoggedIn) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-6">
+        <div className="w-full max-w-sm">
+          <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 rotate-3 shadow-2xl">
+              <Settings size={32} className="text-white"/>
+            </div>
+            <h1 className="text-2xl font-black text-white italic">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
+            <p className="text-slate-400 text-sm mt-1 font-bold">Painel Administrativo</p>
+          </div>
+          <div className="bg-slate-800 rounded-3xl p-8 shadow-2xl border border-slate-700">
+            <h2 className="text-white font-black text-lg mb-6 text-center">Acesso Restrito</h2>
+            {loginError&&<div className="mb-4 p-3 bg-red-900/50 border border-red-700 text-red-300 text-xs font-bold rounded-xl">{loginError}</div>}
+            <div className="space-y-3">
+              <input type="text" value={loginUser} onChange={e=>setLoginUser(e.target.value)} placeholder="Usuário"
+                className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
+              <input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} placeholder="Senha"
+                onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+                className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
+              <button onClick={handleLogin} disabled={loginLoading}
+                className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
+                {loginLoading?<Loader2 size={18} className="animate-spin"/>:'Entrar'}
+              </button>
+            </div>
+          </div>
+          <p className="text-center text-slate-600 text-[10px] mt-6 font-bold uppercase tracking-widest">Acesso não autorizado é proibido</p>
+        </div>
+      </div>
+    );
+  }
+
+  const NAV=[
+    {id:'financial',label:'Financeiro',icon:<DollarSign size={16}/>},
+    {id:'operations',label:'Operações',icon:<BarChart2 size={16}/>},
+    {id:'crm',label:'CRM',icon:<Users size={16}/>},
+    {id:'realtime',label:'Tempo Real',icon:<Activity size={16}/>},
+    {id:'support',label:'Suporte',icon:<MessageSquare size={16}/>},
+    {id:'professionals',label:'Profissionais',icon:<Tag size={16}/>},
+  ];
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Settings size={16} className="text-white"/></div>
+          <div>
+            <h1 className="font-black text-white text-sm">Painel Admin</h1>
+            <p className="text-[10px] text-slate-400 font-bold">SALÃO DIGITAL {APP_VERSION}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          {dataLoading&&<Loader2 size={16} className="text-blue-400 animate-spin"/>}
+          <button onClick={fetchAllData} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><RefreshCw size={15}/></button>
+          <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/30 text-red-400 rounded-lg text-xs font-bold hover:bg-red-900/50 transition-colors"><LogOut size={14}/> Sair</button>
+        </div>
+      </header>
+
+      <nav className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex gap-1 overflow-x-auto">
+        {NAV.map(n=>(
+          <button key={n.id} onClick={()=>setActiveSection(n.id)}
+            className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all relative ${activeSection===n.id?'bg-blue-600 text-white':'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+            {n.icon} {n.label}
+            {n.id==='support'&&unreadSupport>0&&(
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">{unreadSupport}</span>
+            )}
+            {n.id==='realtime'&&pendingApps.length>0&&(
+              <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"/>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <main className="p-4 md:p-6 max-w-5xl mx-auto pb-16">
+
+        {/* ── FINANCIAL ── */}
+        {activeSection==='financial'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><DollarSign size={20} className="text-green-400"/> Visão Financeira</h2>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                {label:'Faturamento Total',value:`R$ ${totalRevenue.toFixed(2)}`,icon:<DollarSign size={18}/>,color:'bg-green-600',sub:`${confirmedApps.length} confirmados`},
+                {label:'Ticket Médio',value:`R$ ${avgTicket}`,icon:<TrendingUp size={18}/>,color:'bg-blue-600',sub:'por atendimento'},
+                {label:'Profissionais',value:barbers.length,icon:<Scissors size={18}/>,color:'bg-purple-600',sub:`${barbers.filter(b=>b.is_visible).length} ativos`},
+                {label:'Clientes',value:clients.length,icon:<Users size={18}/>,color:'bg-amber-600',sub:`+${newThisWeek.length} esta semana`},
+              ].map((c,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+                  <div className={`w-8 h-8 ${c.color} rounded-lg flex items-center justify-center mb-3`}>{c.icon}</div>
+                  <p className="text-xl font-black text-white">{c.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{c.label}</p>
+                  <p className="text-[10px] text-slate-500 mt-1">{c.sub}</p>
+                </div>
+              ))}
+            </div>
+            {monthlyRevenue.length>0&&(
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-green-400"/> Faturamento Mensal</h3>
+                <SimpleBarChart data={monthlyRevenue} color="#22c55e" height={80}/>
+              </div>
+            )}
+            {revenuePerBarber.length>0&&(
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Award size={16} className="text-amber-400"/> Faturamento por Profissional</h3>
+                <div className="space-y-2">
+                  {revenuePerBarber.map((b,i)=>(
+                    <div key={i} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                      <span className="text-[10px] font-black text-slate-500 w-4">{i+1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-white truncate">{b.name}</p>
+                        <p className="text-[10px] text-slate-400">{b.count} atendimentos</p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="font-black text-green-400">R$ {b.revenue.toFixed(2)}</p>
+                        <p className="text-[9px] text-slate-400">avg R$ {b.count>0?(b.revenue/b.count).toFixed(2):0}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── OPERATIONS ── */}
+        {activeSection==='operations'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><BarChart2 size={20} className="text-blue-400"/> Controle de Operação</h2>
+            <div className="grid md:grid-cols-2 gap-5">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Percent size={16} className="text-blue-400"/> Serviços Mais Solicitados</h3>
+                <AdminPieChart data={serviceDistribution}/>
+              </div>
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Calendar size={16} className="text-purple-400"/> Agendamentos por Dia da Semana</h3>
+                <SimpleBarChart data={appsByDay} color="#8b5cf6" height={80}/>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {label:'Total agendamentos',value:allAppointments.length,icon:'📅'},
+                {label:'Taxa de confirmação',value:`${allAppointments.length>0?Math.round((confirmedApps.length/allAppointments.length)*100):0}%`,icon:'✅'},
+                {label:'Pendentes',value:pendingApps.length,icon:'⏳'},
+              ].map((s,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+                  <p className="text-2xl mb-1">{s.icon}</p>
+                  <p className="text-xl font-black text-white">{s.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-4">Top Serviços em Detalhe</h3>
+              <div className="space-y-2">
+                {serviceDistribution.slice(0,6).map((s,i)=>{
+                  const pct=Math.round((s.value/allAppointments.length)*100)||0;
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <span className="text-[10px] text-slate-500 w-3 font-black">{i+1}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] font-bold text-white truncate">{s.label}</span>
+                          <span className="text-[11px] font-black text-slate-300 flex-shrink-0 ml-2">{s.value}×</span>
+                        </div>
+                        <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-blue-500" style={{width:`${pct}%`}}/>
+                        </div>
+                      </div>
+                      <span className="text-[9px] font-black text-blue-400 w-8 text-right flex-shrink-0">{pct}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── CRM ── */}
+        {activeSection==='crm'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><Users size={20} className="text-amber-400"/> Gestão de CRM</h2>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                {label:'Profissionais inativos (7d)',value:inactiveBarbers.length,color:'text-red-400'},
+                {label:'Clientes inativos (7d)',value:inactiveClients.length,color:'text-orange-400'},
+                {label:'Novos esta semana',value:newThisWeek.length,color:'text-green-400'},
+              ].map((s,i)=>(
+                <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
+                  <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1 leading-tight">{s.label}</p>
+                </div>
+              ))}
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-red-400"/> Profissionais sem movimento (&gt;7 dias)</h3>
+              {inactiveBarbers.length===0
+                ? <p className="text-slate-400 text-sm text-center py-4">Todos os profissionais estão ativos 🎉</p>
+                : <div className="space-y-2">{inactiveBarbers.map(b=>{
+                    const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)).sort((a,c)=>c.date?.localeCompare(a.date)||0)[0];
+                    return (
+                      <div key={b.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                        <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
+                          {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover rounded-full" alt=""/>:<User size={14} className="text-slate-400"/>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{b.name}</p>
+                          <p className="text-[10px] text-slate-400">{lastApp?`Último: ${lastApp.date?.split('-').reverse().join('/')}`:'Nunca teve agendamento'}</p>
+                        </div>
+                        <span className="flex-shrink-0 text-[9px] font-black bg-red-900/50 text-red-400 px-2 py-1 rounded-lg uppercase">Inativo</span>
+                      </div>
+                    );
+                  })}</div>}
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-orange-400"/> Clientes sem agendamento (&gt;7 dias)</h3>
+              {inactiveClients.length===0
+                ? <p className="text-slate-400 text-sm text-center py-4">Todos os clientes estão engajados 🎉</p>
+                : <div className="space-y-2 max-h-64 overflow-y-auto">
+                    {inactiveClients.slice(0,20).map(c=>(
+                      <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                        <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0"><User size={14} className="text-slate-400"/></div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-white truncate">{c.name}</p>
+                          <p className="text-[10px] text-slate-400 font-mono">{c.phone}</p>
+                        </div>
+                        {c.phone&&(
+                          <a href={`https://wa.me/55${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent('Olá! Sentimos sua falta no Salão Digital 💙 Que tal agendar um horário?')}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex-shrink-0 p-2 bg-green-900/30 text-green-400 rounded-lg hover:bg-green-900/50 transition-colors">
+                            <Phone size={13}/>
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>}
+            </div>
+          </div>
+        )}
+
+        {/* ── REAL TIME ── */}
+        {activeSection==='realtime'&&(
+          <div className="space-y-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-black text-white flex items-center gap-2"><Activity size={20} className="text-green-400"/> Agendamentos em Tempo Real</h2>
+              <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/><span className="text-[10px] text-green-400 font-bold">Ao vivo</span></div>
+            </div>
+            {pendingApps.length>0&&(
+              <div className="bg-orange-950/40 border border-orange-800 rounded-2xl p-4">
+                <h3 className="text-sm font-black text-orange-300 mb-3 flex items-center gap-2"><Bell size={16}/> Pendentes ({pendingApps.length})</h3>
+                <div className="space-y-2">
+                  {pendingApps.slice(0,5).map(a=>{
+                    const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
+                    return (
+                      <div key={a.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-white text-sm">{a.client_name}</p>
+                          <p className="text-[10px] text-slate-400">{a.service_name} • com {barber?.name||'Profissional'}</p>
+                          <p className="text-[10px] text-blue-400 font-bold">{a.date?.split('-').reverse().join('/')} às {a.time}</p>
+                        </div>
+                        <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3">Últimos Agendamentos</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {allAppointments.slice(0,30).map(a=>{
+                  const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
+                  const statusColor={confirmed:'bg-green-900/50 text-green-400 border-green-800',pending:'bg-orange-900/50 text-orange-400 border-orange-800',rejected:'bg-red-900/50 text-red-400 border-red-800'};
+                  return (
+                    <div key={a.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="text-sm font-bold text-white">{a.client_name}</p>
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${statusColor[a.status]||'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                            {a.status==='confirmed'?'CONFIRMADO':a.status==='pending'?'PENDENTE':'REJEITADO'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400">{a.service_name} • {barber?.name}</p>
+                        <p className="text-[10px] text-slate-500">{a.date?.split('-').reverse().join('/')} {a.time}</p>
+                      </div>
+                      <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price||0}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── SUPPORT ── */}
+        {activeSection==='support'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><MessageSquare size={20} className="text-blue-400"/> Central de Suporte</h2>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+              <p className="text-[10px] text-slate-400 font-bold">As mensagens abaixo foram enviadas pelos profissionais via chat IA. Use o WhatsApp para responder diretamente.</p>
+            </div>
+            {supportMessages.length===0
+              ? <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center"><p className="text-slate-400">Nenhuma mensagem de suporte ainda.</p></div>
+              : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                    <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                      <h3 className="font-black text-white text-sm">Mensagens ({supportMessages.length})</h3>
+                      {unreadSupport>0&&<span className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">{unreadSupport} novas</span>}
+                    </div>
+                    <div className="overflow-y-auto max-h-[500px]">
+                      {supportMessages.map(msg=>(
+                        <button key={msg.id} onClick={()=>setSelectedMsg(msg)}
+                          className={`w-full text-left p-4 border-b border-slate-800 hover:bg-slate-800 transition-colors ${selectedMsg?.id===msg.id?'bg-slate-800':''}`}>
+                          <div className="flex items-start gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-white text-sm truncate">{msg.barber_name||'Profissional'}</p>
+                                {!msg.reply&&<span className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0"/>}
+                              </div>
+                              <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{msg.message}</p>
+                              <p className="text-[9px] text-slate-600 mt-1">{new Date(msg.created_at).toLocaleString('pt-BR')}</p>
+                            </div>
+                            {msg.reply&&<CheckSquare size={14} className="text-green-400 flex-shrink-0 mt-1"/>}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                    {selectedMsg?(
+                      <>
+                        <div className="p-4 border-b border-slate-800">
+                          <p className="font-black text-white text-sm">{selectedMsg.barber_name}</p>
+                          <p className="text-[10px] text-slate-400">{new Date(selectedMsg.created_at).toLocaleString('pt-BR')}</p>
+                        </div>
+                        <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+                          <div className="bg-slate-800 rounded-xl p-3">
+                            <p className="text-[10px] text-slate-400 font-bold mb-1">MENSAGEM DO PROFISSIONAL</p>
+                            <p className="text-sm text-white">{selectedMsg.message}</p>
+                          </div>
+                          {selectedMsg.reply&&(
+                            <div className="bg-blue-900/30 border border-blue-800 rounded-xl p-3">
+                              <p className="text-[10px] text-blue-400 font-bold mb-1">SUA NOTA INTERNA</p>
+                              <p className="text-sm text-white">{selectedMsg.reply}</p>
+                              <p className="text-[9px] text-slate-500 mt-1">{selectedMsg.replied_at&&new Date(selectedMsg.replied_at).toLocaleString('pt-BR')}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-4 border-t border-slate-800 space-y-2">
+                          <textarea
+                            value={replyTexts[selectedMsg.id]||''}
+                            onChange={e=>setReplyTexts(p=>({...p,[selectedMsg.id]:e.target.value}))}
+                            placeholder="Anotação interna ou resposta..."
+                            rows={3}
+                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-colors resize-none placeholder-slate-500"/>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={()=>handleSendReply(selectedMsg.id)}
+                              disabled={!replyTexts[selectedMsg.id]?.trim()||sendingReply[selectedMsg.id]}
+                              className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all">
+                              {sendingReply[selectedMsg.id]?<Loader2 size={14} className="animate-spin"/>:<><Reply size={14}/> Salvar Nota</>}
+                            </button>
+                            {selectedMsg.barber_phone&&(
+                              <a href={`https://wa.me/55${String(selectedMsg.barber_phone).replace(/\D/g,'')}?text=${encodeURIComponent(`Olá ${selectedMsg.barber_name}! Equipe Salão Digital aqui. `)}`}
+                                target="_blank" rel="noopener noreferrer"
+                                className="p-2.5 bg-green-700 text-white rounded-xl flex items-center justify-center hover:bg-green-600 transition-colors">
+                                <Phone size={16}/>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    ):(
+                      <div className="flex-1 flex items-center justify-center p-8 text-center">
+                        <div><MessageSquare size={32} className="text-slate-600 mx-auto mb-3"/><p className="text-slate-400 text-sm">Selecione uma mensagem para ver detalhes</p></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+          </div>
+        )}
+
+        {/* ── PROFESSIONALS ── */}
+        {activeSection==='professionals'&&(
+          <div className="space-y-5">
+            <h2 className="text-lg font-black text-white flex items-center gap-2"><Tag size={20} className="text-purple-400"/> Gestão de Profissionais</h2>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-1 flex items-center gap-2"><Star size={16} className="text-amber-400"/> Top 3 em Destaque</h3>
+              <p className="text-[10px] text-slate-400 mb-4">Estes profissionais aparecem no topo da lista de clientes, independente de localização.</p>
+              <div className="grid grid-cols-3 gap-3">
+                {[1,2,3].map(rank=>{
+                  const featured=allProfiles.find(p=>p.featured_rank===rank);
+                  return (
+                    <div key={rank} className={`rounded-xl border p-3 text-center ${featured?'border-amber-600 bg-amber-950/30':'border-slate-700 bg-slate-800'}`}>
+                      <p className="text-[10px] font-black text-amber-400 mb-2">#{rank}</p>
+                      {featured?(
+                        <>
+                          <div className="w-10 h-10 rounded-full bg-slate-700 mx-auto mb-1.5 overflow-hidden">
+                            {featured.avatar_url?<img src={featured.avatar_url} className="w-full h-full object-cover" alt=""/>:<User size={18} className="text-slate-400 mx-auto mt-1"/>}
+                          </div>
+                          <p className="text-[10px] font-bold text-white truncate">{featured.name}</p>
+                          <button onClick={()=>handleSetFeatured(featured.id,null)} className="mt-2 text-[9px] text-red-400 font-bold">Remover</button>
+                        </>
+                      ):(
+                        <div className="text-slate-500"><p className="text-2xl mb-1">＋</p><p className="text-[9px]">Vaga livre</p></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 className="font-black text-white text-sm">Todos os Profissionais ({barbers.length})</h3>
+              </div>
+              <div className="divide-y divide-slate-800 max-h-[600px] overflow-y-auto">
+                {barbers.map(b=>{
+                  const currentTags=(b.admin_tags||[]).join(', ');
+                  const tagInput=tagInputs[b.id]!==undefined?tagInputs[b.id]:currentTags;
+                  const rating=getBarberRating(b);
+                  const appCount=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').length;
+                  const revenue=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').reduce((acc,a)=>acc+(Number(a.price)||0),0);
+                  return (
+                    <div key={b.id} className="p-4">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-700 flex-shrink-0 overflow-hidden">
+                          {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt=""/>:<div className="w-full h-full flex items-center justify-center"><User size={16} className="text-slate-400"/></div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-black text-white text-sm">{b.name}</p>
+                            <StarRating rating={rating}/>
+                            <span className="text-[9px] font-bold text-amber-400">{rating}</span>
+                            {b.featured_rank&&<span className="text-[9px] font-black bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded-full">★ Top #{b.featured_rank}</span>}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-mono">{b.phone}</p>
+                          <div className="flex items-center gap-3 mt-1 flex-wrap">
+                            <span className="text-[9px] text-slate-500">{appCount} atend. · R$ {revenue}</span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${b.is_visible?'bg-green-900/50 text-green-400':'bg-red-900/50 text-red-400'}`}>
+                              {b.is_visible?'Visível':'Oculto'}
+                            </span>
+                          </div>
+                          {(b.admin_tags||[]).length>0&&(
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {(b.admin_tags||[]).map((tag,i)=>(
+                                <span key={i} className="text-[9px] font-bold bg-purple-900/40 text-purple-400 border border-purple-800 px-2 py-0.5 rounded-full">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex gap-2">
+                          <input type="text" value={tagInput}
+                            onChange={e=>setTagInputs(p=>({...p,[b.id]:e.target.value}))}
+                            placeholder="Tags separadas por vírgula (ex: destaque, vip)"
+                            className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-purple-500 transition-colors placeholder-slate-500"/>
+                          <button onClick={()=>handleSaveTags(b.id,tagInput)} disabled={savingTags[b.id]}
+                            className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap">
+                            {savingTags[b.id]?<Loader2 size={10} className="animate-spin"/>:<Tag size={10}/>} Salvar
+                          </button>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                          {[1,2,3].map(rank=>(
+                            <button key={rank} onClick={()=>handleSetFeatured(b.id,b.featured_rank===rank?null:rank)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.featured_rank===rank?'bg-amber-500 text-white':'bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700'}`}>
+                              ★ #{rank}
+                            </button>
+                          ))}
+                          <button onClick={()=>handleToggleVisibility(b.id,b.is_visible)}
+                            className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.is_visible?'bg-red-900/40 text-red-400 border border-red-800':'bg-green-900/40 text-green-400 border border-green-800'}`}>
+                            {b.is_visible?'Ocultar':'Mostrar'}
+                          </button>
+                          <button onClick={()=>handleDeleteProfile(b.id,b.name)}
+                            className="px-2.5 py-1 rounded-lg text-[9px] font-black transition-all bg-red-900/60 text-red-300 border border-red-800 hover:bg-red-800 ml-auto">
+                            <Trash2 size={10}/>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+// ─── REPORTS SECTION ──────────────────────────────────────────────────────────
+const ReportsSection = ({ appointments, user, isGuest, onUpdateProfile, supabase: sb }) => {
+  const [hourlyRate,setHourlyRate]=useState(user.hourly_rate||50);
+  const [savingRate,setSavingRate]=useState(false);
+
+  const confirmedApps=(appointments||[]).filter(a=>String(a.barber_id||a.barberId)===String(user.id)&&a.status==='confirmed');
+  const manualApps=user.manual_appointments||[];
+  const allApps=[...confirmedApps,...manualApps];
+  const dayNames=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  const appsByDay=Array(7).fill(0);
+  allApps.forEach(app=>{ if (app.date) { const dow=new Date(app.date+'T00:00:00').getDay(); appsByDay[dow]++; } });
+  const dayData=dayNames.map((label,i)=>({label,value:appsByDay[i]}));
+  const recentRevenue=confirmedApps.slice(-6).map((a,i)=>({label:`#${i+1}`,value:Number(a.price)||0}));
+  const slots=user.available_slots||{};
+  const totalOpen=Object.values(slots).reduce((acc,s)=>acc+(s?.length||0),0);
+  const totalBooked=allApps.length;
+  const occupancy=totalOpen+totalBooked>0?Math.round((totalBooked/(totalOpen+totalBooked))*100):0;
+  const avgMinPerApp=45, totalMinWorked=allApps.length*avgMinPerApp, totalHrsWorked=(totalMinWorked/60).toFixed(1);
+  const earnedAtRate=((totalMinWorked/60)*hourlyRate).toFixed(2);
+  const totalRevenue=confirmedApps.reduce((acc,a)=>acc+(Number(a.price)||0),0);
+  const daysWithSlots=Object.keys(slots).filter(d=>slots[d]?.length>0).length;
+  const idleHrs=Math.max(0,daysWithSlots*8-totalMinWorked/60).toFixed(1);
+
+  const saveHourlyRate=async(rate)=>{
+    if (isGuest) return;
+    setSavingRate(true);
+    try { await sb.from('profiles').update({hourly_rate:rate}).eq('id',user.id); onUpdateProfile({...user,hourly_rate:rate}); }
+    catch(_){}
+    setSavingRate(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Atendimentos</p>
+          <p className="text-2xl font-black text-slate-900">{allApps.length}</p>
+          <p className="text-[10px] text-green-600 font-bold mt-0.5">↑ {confirmedApps.length} confirmados</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Faturado</p>
+          <p className="text-2xl font-black text-slate-900">R$ {totalRevenue}</p>
+          <p className="text-[10px] text-slate-400 font-bold mt-0.5">{totalHrsWorked}h trabalhadas</p>
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Aproveitamento da Agenda</p>
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
+            <div className="h-full rounded-full transition-all duration-1000"
+              style={{width:`${occupancy}%`,background:occupancy>=70?'#22c55e':occupancy>=40?'#3b82f6':'#f59e0b'}}/>
+          </div>
+          <span className="font-black text-sm text-slate-900 w-10 text-right">{occupancy}%</span>
+        </div>
+        <div className="flex gap-4 mt-3">
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-green-500"/><span className="text-[10px] font-bold text-slate-500">Trabalhando: {totalHrsWorked}h</span></div>
+          <div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full bg-slate-200"/><span className="text-[10px] font-bold text-slate-500">Ocioso: {idleHrs}h</span></div>
+        </div>
+      </div>
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Atendimentos por Dia da Semana</p>
+        <SimpleBarChart data={dayData} color="#3b82f6" height={72}/>
+      </div>
+      {recentRevenue.length>0&&(
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Valores Últimos Atendimentos</p>
+          <SimpleBarChart data={recentRevenue} color="#10b981" height={72}/>
+        </div>
+      )}
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+        <div className="flex items-center gap-2 mb-3"><TrendingUp size={16} className="text-blue-500"/><p className="font-bold text-slate-900 text-sm">Análise de Valor de Tempo</p></div>
+        <div className="flex items-center gap-3 mb-4">
+          <label className="text-xs font-bold text-slate-500 whitespace-nowrap">Minha hora vale:</label>
+          <div className="flex-1 relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
+            <input type="number" value={hourlyRate} onChange={e=>setHourlyRate(Number(e.target.value))}
+              className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-black outline-none focus:border-blue-400"/>
+          </div>
+          <button onClick={()=>saveHourlyRate(hourlyRate)} disabled={savingRate||isGuest}
+            className="px-3 py-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold active:scale-95 disabled:opacity-50">
+            {savingRate?'...':'Salvar'}
+          </button>
+        </div>
+        <div className="space-y-2">
+          {[{label:'30 minutos',mins:30},{label:'1 hora',mins:60},{label:'2 horas',mins:120},{label:'Dia de trabalho (8h)',mins:480}].map(({label,mins})=>(
+            <div key={mins} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <span className="text-xs font-bold text-slate-600">{label}</span>
+              <span className="text-xs font-black text-green-600">R$ {((mins/60)*hourlyRate).toFixed(2)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+          <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1">Total trabalhado (estimado)</p>
+          <p className="text-lg font-black text-blue-800">{totalHrsWorked}h → R$ {earnedAtRate}</p>
+          <p className="text-[9px] text-blue-500 mt-0.5">Baseado em {allApps.length} atendimentos × 45 min médios</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── COPY LINK BUTTON ─────────────────────────────────────────────────────────
+const CopyLinkButton = ({ barber }) => {
+  const [copied,setCopied]=useState(false);
+  const slug=barber.slug||generateSlug(barber.name||'profissional',barber.id);
+  const url=getPublicUrl(slug);
+  const handleCopy=()=>{ navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
+  return (
+    <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+      <Link size={14} className="text-slate-400 flex-shrink-0"/>
+      <p className="text-[10px] text-slate-400 font-mono truncate flex-1">{url}</p>
+      <button onClick={handleCopy}
+        className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${copied?'bg-green-100 text-green-700':'bg-slate-900 text-white hover:bg-slate-700'}`}>
+        {copied?<><CheckCircle size={12}/> Copiado</>:<><Copy size={12}/> Copiar</>}
+      </button>
+    </div>
+  );
+};
+
+// ─── BASE COMPONENTS ──────────────────────────────────────────────────────────
+const Button = ({ children, onClick, variant='primary', className='', disabled, loading }) => {
+  const variants={ primary:"bg-slate-900 text-white hover:bg-black shadow-lg", secondary:"bg-blue-600 text-white hover:bg-blue-700 shadow-lg shadow-blue-600/20", outline:"border-2 border-slate-200 text-slate-600 hover:border-slate-900", success:"bg-green-600 text-white hover:bg-green-700" };
+  return (
+    <button onClick={onClick} disabled={disabled||loading}
+      className={`w-full py-3.5 rounded-xl font-bold transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}>
+      {loading?<Loader2 className="animate-spin" size={20}/>:children}
     </button>
   );
 };
 
 const Card = ({ children, selected, onClick }) => (
-  <div onClick={onClick} className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${selected ? 'border-blue-600 bg-blue-50/50' : 'border-transparent bg-white shadow-sm hover:border-slate-200'}`}>
-    {selected && <div className="absolute top-3 right-3 text-blue-600"><CheckCircle2 size={18} fill="currentColor" className="text-white"/></div>}
+  <div onClick={onClick} className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer ${selected?'border-blue-600 bg-blue-50/50':'border-transparent bg-white shadow-sm hover:border-slate-200'}`}>
+    {selected&&<div className="absolute top-3 right-3 text-blue-600"><CheckCircle2 size={18} fill="currentColor" className="text-white"/></div>}
     {children}
   </div>
 );
 
-// --- COMPONENTE DE POLÍTICA DE PRIVACIDADE ---
+const MonthCalendar = ({ availableSlots, selectedDate, onSelectDate, onMonthChange }) => {
+  const today=new Date();
+  const [calYear,setCalYear]=useState(today.getFullYear());
+  const [calMonth,setCalMonth]=useState(today.getMonth());
+  const daysInMonth=getDaysInMonth(calYear,calMonth);
+  const firstDayOfMonth=new Date(calYear,calMonth,1).getDay();
+  const goPrev=()=>{ const d=new Date(calYear,calMonth-1,1); if (d>=new Date(today.getFullYear(),today.getMonth(),1)) { setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); if (onMonthChange) onMonthChange(d.getFullYear(),d.getMonth()); } };
+  const goNext=()=>{ const d=new Date(calYear,calMonth+1,1); setCalYear(d.getFullYear()); setCalMonth(d.getMonth()); if (onMonthChange) onMonthChange(d.getFullYear(),d.getMonth()); };
+  const isPrevDisabled=calYear===today.getFullYear()&&calMonth===today.getMonth();
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={goPrev} disabled={isPrevDisabled} className={`p-2 rounded-full transition-all ${isPrevDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}><ChevronLeft size={18}/></button>
+        <span className="font-black text-sm text-slate-900">{MONTH_NAMES[calMonth]} {calYear}</span>
+        <button onClick={goNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all"><ChevronRight size={18}/></button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 mb-1">
+        {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {Array.from({length:firstDayOfMonth},(_,i)=><div key={`e-${i}`}/>)}
+        {Array.from({length:daysInMonth},(_,i)=>{
+          const day=i+1, dateStr=formatDate(calYear,calMonth,day);
+          const daySlots=availableSlots?.[dateStr]||[], isAvailable=daySlots.length>0;
+          const isSelected=selectedDate===dateStr;
+          const isPast=new Date(dateStr)<new Date(today.getFullYear(),today.getMonth(),today.getDate());
+          return (
+            <button key={i} disabled={!isAvailable||isPast} onClick={()=>onSelectDate(dateStr)}
+              className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
+                ${isSelected?'bg-slate-900 text-white border-slate-900 shadow-lg scale-105':isAvailable&&!isPast?'bg-white text-slate-600 border-slate-200 hover:border-slate-400':'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}>
+              {day}
+              {isAvailable&&!isSelected&&!isPast&&<div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"/>}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── PRIVACY MODAL ────────────────────────────────────────────────────────────
 const PrivacyModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm" onClick={onClose}></div>
+      <div className="absolute inset-0 bg-slate-900/90 backdrop-blur-sm" onClick={onClose}/>
       <div className="relative bg-white w-full max-w-md max-h-[80vh] rounded-3xl p-8 overflow-y-auto shadow-2xl">
         <h2 className="text-xl font-black mb-4">Política de Privacidade</h2>
         <div className="text-xs text-slate-600 space-y-4 leading-relaxed">
-          <p><strong>1. Coleta de Dados:</strong> Coletamos seu nome, telefone e localização para facilitar o agendamento de serviços de beleza e calcular a distância até o profissional.</p>
-          <p><strong>2. Uso de Localização:</strong> Sua localização é utilizada apenas enquanto o app está em uso para mostrar os profissionais mais próximos.</p>
-          <p><strong>3. Exclusão de Conta:</strong> Conforme as normas da App Store, você pode excluir sua conta e todos os seus dados a qualquer momento na aba "Histórico" dentro do seu perfil de cliente.</p>
-          <p><strong>4. Compartilhamento:</strong> Seus dados de contato são compartilhados apenas com o profissional escolhido no momento do agendamento.</p>
+          <p><strong>1. Coleta de Dados:</strong> Coletamos seu nome, telefone e localização para facilitar o agendamento de serviços de beleza.</p>
+          <p><strong>2. Uso de Localização:</strong> Sua localização é utilizada apenas enquanto o app está em uso.</p>
+          <p><strong>3. Exclusão de Conta:</strong> Você pode excluir sua conta e todos os seus dados a qualquer momento.</p>
+          <p><strong>4. Compartilhamento:</strong> Seus dados são compartilhados apenas com o profissional escolhido.</p>
         </div>
         <Button onClick={onClose} className="mt-8">Entendi</Button>
       </div>
@@ -95,1538 +1361,1910 @@ const PrivacyModal = ({ isOpen, onClose }) => {
   );
 };
 
+// ─── WELCOME POPUP ────────────────────────────────────────────────────────────
 const WelcomePopup = ({ onClose }) => (
   <div className="fixed inset-0 z-[999] flex items-center justify-center p-4">
-    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}></div>
-    
-    <div className="relative bg-white w-full max-w-[360px] h-[70vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
-      
-      <div className="flex-1 w-full overflow-hidden">
-        <img 
-          src={imgPopup} 
-          alt="Bem-vindo" 
-          className="w-full h-full object-cover"
-        />
-      </div>
-
-      <div className="p-6 bg-white w-full flex items-center justify-center">
-        <Button 
-          variant="secondary" 
-          onClick={onClose} 
-          className="w-full py-4 text-lg shadow-xl shadow-blue-600/20"
-        >
-          Começar Agora
-        </Button>
-      </div>
+    <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" onClick={onClose}/>
+    <div className="relative bg-white w-full max-w-[360px] h-[70vh] rounded-[3rem] overflow-hidden shadow-2xl flex flex-col">
+      <div className="flex-1 w-full overflow-hidden"><img src={imgPopup} alt="Bem-vindo" className="w-full h-full object-cover"/></div>
+      <div className="p-6 bg-white w-full flex items-center justify-center"><Button variant="secondary" onClick={onClose} className="w-full py-4 text-lg shadow-xl shadow-blue-600/20">Começar Agora</Button></div>
     </div>
   </div>
 );
 
-const WelcomeScreen = ({ onSelectMode }) => {
-  const [showPrivacy, setShowPrivacy] = useState(false);
-
+// ─── GUEST MODE MODAL ─────────────────────────────────────────────────────────
+const GuestModeModal = ({ isOpen, onClose, onSelectGuestMode }) => {
+  if (!isOpen) return null;
   return (
-    <div 
-      className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
-      style={{
-        backgroundImage: `url('/backgr.png')`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"></div>
-      
-      <div className="relative z-10 flex flex-col items-center">
-        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50">
-          <Scissors size={40} className="text-white" />
-        </div>
-        
-        <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">
-          SALÃO<span className="text-blue-500">DIGITAL</span>
-        </h1>
-        
-        <div className="w-full max-w-xs space-y-3 mt-10">
-          <Button variant="secondary" onClick={() => onSelectMode('client')}>
-            Sou Cliente
-          </Button>
-
-          <Button 
-            variant="outline" 
-            className="text-white border-white/40 bg-white/5 hover:bg-white/10 backdrop-blur-md" 
-            onClick={() => onSelectMode('guest')}
-          >
-            Explorar como Convidado
-          </Button>
-
-          <div className="py-2 flex items-center gap-4">
-            <div className="h-[1px] bg-white/20 flex-1"></div>
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span>
-            <div className="h-[1px] bg-white/20 flex-1"></div>
-          </div>
-
-          <Button 
-    className="bg-blue-600 hover:bg-blue-700 text-white border-none" 
-    onClick={() => onSelectMode('barber')}
-  >
-    Sou Profissional
-  </Button>
-
-          <button 
-            onClick={() => setShowPrivacy(true)}
-            className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100"
-          >
-            Política de Privacidade
-          </button>
-        </div>
-      </div>
-
-      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)} />
-    </div>
-  );
-};
-
-const AuthScreen = ({ userType, onBack, onLogin, onRegister }) => {
-  const [mode, setMode] = useState('login');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const handleSubmit = async () => {
-    setError('');
-    setLoading(true);
-    try {
-      if (mode === 'login') await onLogin(phone, password);
-      else await onRegister(name, phone, password);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Função para Login Social (Google/Apple)
-  const handleSocialLogin = async (provider) => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
-        options: {
-          redirectTo: window.location.origin,
-        }
-      });
-      if (error) throw error;
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6">
-      <button onClick={onBack} className="absolute top-6 left-6 p-2 bg-white rounded-full shadow-sm">
-        <ChevronLeft size={24} />
-      </button>
-      
-      <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
-        <h2 className="text-2xl font-black text-center mb-2">
-          {userType === 'barber' ? 'Área Profissional' : 'Área do Cliente'}
-        </h2>
-        <p className="text-center text-slate-400 mb-6 text-sm">
-          {mode === 'login' ? 'Faça login para continuar' : 'Crie sua conta agora'}
-        </p>
-        
-        {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg">{error}</div>}
-
-        <div className="space-y-4">
-          {mode === 'register' && (
-            <input 
-              type="text" 
-              value={name} 
-              onChange={(e) => setName(e.target.value)} 
-              placeholder="Nome Completo" 
-              className="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-blue-500" 
-            />
-          )}
-          
-          <input 
-            type="tel" 
-            value={phone} 
-            onChange={(e) => setPhone(e.target.value)} 
-            placeholder="WhatsApp (DDD + Número)" 
-            className="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-blue-500" 
-          />
-          
-          <input 
-            type="password" 
-            value={password} 
-            onChange={(e) => setPassword(e.target.value)} 
-            placeholder="Senha" 
-            className="w-full p-3 bg-slate-50 border rounded-xl outline-none focus:border-blue-500" 
-          />
-          
-          <Button onClick={handleSubmit} loading={loading}>
-            {mode === 'login' ? 'Entrar' : 'Cadastrar'}
-          </Button>
-
-          {/* Divisor Visual */}
-          <div className="flex items-center gap-2 my-2">
-            <div className="h-[1px] bg-slate-200 flex-1"></div>
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou entre com</span>
-            <div className="h-[1px] bg-slate-200 flex-1"></div>
-          </div>
-
-         
-          
-          <button 
-            onClick={() => {setMode(mode === 'login' ? 'register' : 'login'); setError('')}} 
-            className="w-full text-blue-600 font-bold text-sm mt-2"
-          >
-            {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-};
-const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES }) => {
-  const [view, setView] = useState('home');
-  const [step, setStep] = useState(1);
-  const [bookingData, setBookingData] = useState({ service: null, barber: null, price: null, date: null, time: null });
-  const [userCoords, setUserCoords] = useState(null);
-
-
-
-  useEffect(() => {
-  const restaurarSessao = async () => {
-    // 1. O Supabase checa sozinho se o token ainda vale no celular
-    const { data: { session } } = await supabase.auth.getSession();
-
-    if (session) {
-      // 2. Se achou o token, busca o perfil (Barbeiro ou Cliente) no seu banco
-      const { data: perfil } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
-
-      if (perfil) {
-        setUser(perfil); // Aqui o app "lembra" quem é o usuário
-        setUserMode(perfil.type); 
-      }
-    }
-    // 3. Importante: crie um estado [carregando, setCarregando] e mude para false aqui
-    // Isso evita que a tela de login apareça enquanto ele busca os dados
-    setLoading(false); 
-  };
-
-  restaurarSessao();
-
-  // 4. Se o usuário deslogar, o Supabase avisa e você limpa o estado
-  const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-    if (event === 'SIGNED_OUT') {
-      setUser(null);
-    }
-  });
-
-  return () => authListener.subscription.unsubscribe();
-}, []);
-
-
-
-
-  // --- NOVA FUNÇÃO PARA EXCLUSÃO DE CONTA (REQUISITO APPLE) ---
-  const handleDeleteAccount = async () => {
-    const confirmacao = window.confirm(
-      "Deseja realmente excluir sua conta? Todos os seus dados e agendamentos serão apagados permanentemente conforme as diretrizes da App Store."
-    );
-
-    if (confirmacao) {
-      try {
-        // Deleta agendamentos do cliente
-        const { error: errorApp } = await supabase
-          .from('appointments')
-          .delete()
-          .eq('client_id', user.id);
-
-        if (errorApp) throw errorApp;
-
-        // Deleta perfil do cliente
-        const { error: errorProf } = await supabase
-          .from('profiles')
-          .delete()
-          .eq('id', user.id);
-
-        if (errorProf) throw errorProf;
-
-        alert("Sua conta e seus dados foram removidos.");
-        onLogout(); 
-      } catch (error) {
-        console.error("Erro ao excluir:", error.message);
-        alert("Erro ao processar exclusão. Tente novamente.");
-      }
-    }
-  };
-  const handleSocialLogin = async (provider) => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: provider,
-        options: {
-          // Garante que o redirecionamento seja para a URL base atual
-          redirectTo: `${window.location.origin}`,
-          // Garante que o Google peça a conta sempre, evitando sessões "presas"
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'consent',
-          },
-        }
-      });
-      if (error) throw error;
-    } catch (err) {
-      setError(err.message);
-    }
-  };
-
-  useEffect(() => {
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setUserCoords({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude
-          });
-          console.log("📍 Localização do cliente capturada com sucesso!");
-        },
-        (err) => {
-          console.error("❌ Erro ao obter localização:", err.message);
-        },
-        { enableHighAccuracy: true }
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (typeof fetchBarbers === 'function') fetchBarbers(); 
-      if (typeof fetchAppointments === 'function') fetchAppointments();
-      console.log("Dados atualizados silenciosamente!");
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const processedBarbers = useMemo(() => {
-    return (barbers || [])
-      .filter(b => b.is_visible)
-      .map(b => {
-        const dist = calculateDistance(
-          userCoords?.lat, 
-          userCoords?.lng, 
-          b.latitude, 
-          b.longitude
-        );
-        
-        let label = null;
-        if (dist !== null) {
-          if (dist < 1) {
-            label = `${Math.floor(dist * 1000)} m`;
-          } else {
-            label = `${dist.toFixed(1)} km`; 
-          }
-        }
-
-        return {
-          ...b,
-          distance: dist,     
-          distanceLabel: label 
-        };
-      })
-      .sort((a, b) => {
-        if (a.distance === null) return 1;
-        if (b.distance === null) return -1;
-        return a.distance - b.distance;
-      });
-  }, [barbers, userCoords]);
-
-  const handleFinish = async () => {
-    try {
-      if (user?.isGuest) {
-        alert("Para realizar um agendamento real, por favor crie sua conta!");
-        onLogout(); 
-        return;
-      }
-      if (!bookingData.date || !bookingData.time) {
-        alert("Por favor, selecione o dia e o horário antes de confirmar.");
-        return;
-      }
-      const payload = {
-        date: bookingData.date,
-        time: bookingData.time,
-        barber_id: bookingData.barber?.id, 
-        client_id: user?.id, 
-        client_name: user?.name || "Cliente",
-        phone: user?.phone || "Sem telefone",
-        service_name: bookingData.service?.name || "Serviço",
-        price: Number(bookingData.price) || 0,
-        status: 'pending'
-      };
-      if (!payload.barber_id) {
-        alert("Erro: O profissional selecionado não foi encontrado. Tente selecioná-lo novamente.");
-        return;
-      }
-
-      console.log("Enviando horário para o banco...", payload);
-
-      const { error } = await supabase
-        .from('appointments')
-        .insert([payload]);
-
-      if (error) throw error;
-      setView('success');
-
-    } catch (error) {
-      console.error("Erro real ao salvar no banco:", error);
-      alert("Falha ao agendar: " + error.message);
-    }
-  };
-
-  if (view === 'success') return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white">
-      <Check size={60} className="text-green-500 mb-4" />
-      <h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2>
-      <Button onClick={() => {setView('home'); setStep(1);}}>Voltar ao Início</Button>
-    </div>
-  );
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
-        <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
-        <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1">
-          <LogOut size={14}/> {user?.isGuest ? 'Entrar' : 'Sair'}
-        </button>
-      </header>
-
-      <main className="p-6 max-w-md mx-auto">
-        {view === 'home' && (
-          <div className="space-y-6 animate-in fade-in">
-            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl">
-              <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setView('booking')}>Novo Agendamento</Button>
-                <Button variant="outline" className="text-white border-white/20" onClick={() => setView('history')}>Histórico</Button>
-              </div>
-            </div>
-
-            <div className="mt-2">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
-              <div className="flex gap-2 overflow-x-auto pb-4 scrollbar-hide">
-                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-                  <img src={imgMp} alt="Material" className="w-full h-full object-cover" />
-                </div>
-                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-                  <img src={imgMao} alt="Mão" className="w-full h-full object-cover" />
-                </div>
-                <div className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100">
-                  <img src={imgTes} alt="Tesoura" className="w-full h-full object-cover" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {view === 'history' && (
-  <div className="space-y-4 animate-in slide-in-from-right">
-    <button 
-      onClick={() => setView('home')} 
-      className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1 hover:text-slate-600 transition-colors"
-    >
-      <ArrowLeft size={16} /> Voltar
-    </button>
-
-    {/* TÍTULO E BOTÃO DE EXCLUIR ALINHADOS */}
-    <div className="flex justify-between items-end mb-4">
-      <h3 className="font-bold text-lg text-slate-900">Meus Agendamentos</h3>
-      <button 
-        onClick={handleDeleteAccount}
-        className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5 hover:text-red-600 transition-colors"
-      >
-        Excluir Conta
-      </button>
-    </div>
-    
-    {(appointments || []).filter(a => String(a.client_id) === String(user.id)).length === 0 ? (
-      <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">
-        Ainda não tem agendamentos.
-      </div>
-    ) : (
-      <div className="space-y-3">
-        {(appointments || [])
-          .filter(a => String(a.client_id) === String(user.id))
-          .sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`))
-          .map(app => {
-            const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
-            
-            return (
-              <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                <div className="flex gap-3 items-center">
-                  <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400">
-                    <User size={18} />
-                  </div>
-                  <div>
-                    <p className="font-bold text-slate-900 text-sm">{app.service_name}</p>
-                    <p className="text-[10px] text-blue-600 font-bold uppercase">
-                      Profissional: {professional?.name || app.barber_name || "Profissional"}
-                    </p>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Clock size={10} />
-                      {app.date ? app.date.split('-').reverse().join('/') : '--/--/--'} às {app.time || '--:--'}
-                    </p>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => {
-                    if(window.confirm("Deseja reagendar este serviço? O horário atual será cancelado.")) {
-                      const serviceObj = MASTER_SERVICES.find(s => s.name === app.service_name);
-                      setBookingData({
-                        service: serviceObj,
-                        barber: professional,
-                        price: app.price
-                      });
-                      
-                      if (typeof onUpdateStatus === 'function') {
-                        onUpdateStatus(app.id, 'rejected');
-                      }
-                      
-                      setView('booking');
-                      setStep(3);
-                    }
-                  }}
-                  className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
-                >
-                  <CalendarDays size={20} />
-                  <span className="text-[9px] font-bold uppercase">Reagendar</span>
-                </button>
-              </div>
-            );
-          })}
-      </div>
-    )}
-  </div>
-)}
-        {view === 'booking' && (
-          <div className="space-y-4 animate-in slide-in-from-right">
-             <button onClick={() => setStep(step - 1)} className={`${step === 1 ? 'hidden' : 'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
-          
-           {step === 1 && (
-  <div className="flex flex-col h-full relative">
-    {/* Título e Lista de Serviços */}
-    <div className="flex-1 pb-24"> {/* pb-24 dá espaço para o botão não cobrir o último item */}
-      <h3 className="font-bold text-lg mb-4 text-slate-900">Escolha o Serviço</h3>
-      <div className="space-y-3">
-        {MASTER_SERVICES.map(s => (
-          <Card 
-            key={s.id} 
-            selected={bookingData.service?.id === s.id} 
-            onClick={() => setBookingData({...bookingData, service: s})}
-            className="transition-all active:scale-[0.98]"
-          >
-            <div className="flex items-center justify-between w-full">
-              <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id === s.id ? 'bg-blue-600 text-white' : 'bg-slate-100'}`}>
-                  {s.icon}
-                </div>
-                <div>
-                  <p className="font-bold text-slate-900">{s.name}</p>
-                  <p className="text-xs text-slate-400 font-medium">{s.duration}</p>
-                </div>
-              </div>
-              {/* Indicador visual de seleção opcional */}
-              {bookingData.service?.id === s.id && (
-                <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
-              )}
-            </div>
-          </Card>
-        ))}
-      </div>
-    </div>
-
-    {/* Botão Próximo Fixo na Base */}
-    <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
-      <div className="max-w-md mx-auto"> {/* Mantém o botão centralizado se a tela for larga */}
-        <Button 
-          className={`w-full py-4 rounded-2xl font-bold text-sm transition-all duration-300 shadow-lg ${
-            !bookingData.service 
-            ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' 
-            : 'bg-blue-600 text-white shadow-blue-200 active:scale-95'
-          }`} 
-          onClick={() => setStep(2)} 
-          disabled={!bookingData.service}
-        >
-          {bookingData.service ? `Próximo: Agendar ${bookingData.service.name}` : 'Selecione um serviço'}
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
-
-            {step === 2 && (
-              <>
-                <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
-                <p className="text-xs text-slate-400 mb-4">Mostrando preço para: <b>{bookingData.service?.name}</b></p>
-                
-                <div className="grid grid-cols-2 gap-3">
-                  {processedBarbers
-                    .filter(b => b.my_services?.some(s => s.id === bookingData.service?.id))
-                    .map((b, index) => {
-                      const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
-                      const isSelected = bookingData.barber?.id === b.id;
-                      
-                      return (
-                        <div 
-                          key={b.id} 
-                          onClick={() => setBookingData({...bookingData, barber: b, price: displayPrice})}
-                          className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${
-                            isSelected ? 'border-slate-900 bg-slate-50' : 'border-white bg-white shadow-sm'
-                          }`}
-                        >
-                          <div className="w-16 h-16 rounded-full bg-slate-200 mb-2 overflow-hidden border border-slate-100">
-                            {b.avatar_url ? (
-                              <img src={b.avatar_url} className="w-full h-full object-cover" />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center text-slate-400">
-                                <User size={24} />
-                              </div>
-                            )}
-                          </div>
-                          
-                          <p className="font-bold text-sm truncate w-full text-center text-slate-900">{b.name}</p>
-                          <div className="flex flex-col items-center mt-1 w-full">
-                            {b.address && (
-                              <p className="text-[9px] text-slate-400 line-clamp-1 text-center px-1 mb-0.5">
-                                {b.address}
-                              </p>
-                            )}
-                            
-                            {b.distanceLabel ? (
-                              <p className="text-[10px] text-blue-600 font-black flex items-center gap-1">
-                                <MapPin size={10}/> {b.distanceLabel}
-                              </p>
-                            ) : (
-                              <p className="text-[10px] text-slate-300 italic">Distância indisponível</p>
-                            )}
-                          </div>
-
-                          <p className="mt-3 text-green-600 font-black text-sm">$ {displayPrice}</p>
-                        </div>
-                      );
-                    })}
-                </div>
-                <Button className="mt-6 w-full" onClick={() => setStep(3)} disabled={!bookingData.barber}>
-                  Próximo
-                </Button>
-              </>
-            )}
-
-            {step === 3 && (
-              <>
-                <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
-                
-                <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Selecione um dia disponível</label>
-                
-                <div className="grid grid-cols-7 gap-2 mb-6">
-                  {['D','S','T','Q','Q','S','S'].map(d => (
-                    <div key={d} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
-                  ))}
-
-                  {Array.from({ length: 31 }, (_, i) => {
-                   const dia = (i + 1).toString().padStart(2, '0');
-                   const dataFormatada = `2026-03-${dia}`; 
-                   const daySlots = bookingData.barber?.available_slots?.[dataFormatada] || [];
-                   const isAvailable = daySlots.length > 0;
-                   const isSelected = bookingData.date === dataFormatada;
-
-                    return (
-                      <button
-                        key={i}
-                        disabled={!isAvailable}
-                        onClick={() => setBookingData({...bookingData, date: dataFormatada, time: null})}
-                        className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
-                          ${isSelected 
-                            ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' 
-                            : isAvailable 
-                              ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400' 
-                              : 'bg-slate-50 text-slate-200 border-transparent opacity-50 cursor-not-allowed'}`}
-                      >
-                        {i + 1}
-                        {isAvailable && !isSelected && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"></div>}
-                      </button>
-                    );
-                  })}
-                </div>
-                
-                {bookingData.date ? (
-                  <>
-                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">
-                      Horários para {bookingData.date.split('-').reverse().join('/')}
-                    </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {GLOBAL_TIME_SLOTS.map(t => {
-                        const isSlotAvailable = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t);
-                        
-                        return (
-                          <button 
-                            key={t} 
-                            disabled={!isSlotAvailable}
-                            onClick={() => setBookingData({...bookingData, time: t})} 
-                            className={`py-2 rounded-lg font-bold text-xs transition-all ${
-                              bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105' : 
-                              isSlotAvailable ? 'bg-white text-slate-600 border border-slate-200 hover:border-slate-400' : 
-                              'bg-slate-100 text-slate-300 cursor-not-allowed'
-                            }`}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center">
-                    <Calendar size={24} className="mx-auto text-slate-300 mb-2" />
-                    <p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p>
-                  </div>
-                )}
-
-                {bookingData.time && bookingData.date && (
-                  <div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100 animate-in fade-in zoom-in duration-300">
-                    <p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p>
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-slate-900">{bookingData.service?.name}</span>
-                      <span className="font-bold text-slate-900">R$ {bookingData.price}</span>
-                    </div>
-                    <p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p>
-                  </div>
-                )}
-
-                <Button 
-                  className="mt-6 w-full py-4 text-lg" 
-                  onClick={handleFinish} 
-                  disabled={!bookingData.time || !bookingData.date}
-                >
-                  Confirmar Agendamento
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-};
-
-const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase }) => {
-  const [activeTab, setActiveTab] = useState('home');
-  const [isPaying, setIsPaying] = useState(false);
-  const [showPayModal, setShowPayModal] = useState(false);
-  const [showCalendar, setShowCalendar] = useState(true);
-  const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
-
-  // Filtros de agendamentos
-  const myAppointments = (appointments || []).filter(a => 
-    String(a.barber_id || a.barberId) === String(user.id) && a.status !== 'rejected'
-  );
-
-  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => {
-    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
-  });
-
-  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
-  
-  // Combina agendamentos confirmados com as reservas manuais do perfil
-  const manualAppointments = user.manual_appointments || [];
-  const allAppointments = [...confirmed, ...manualAppointments];
-
-  const agendaOrdenada = allAppointments.sort((a, b) => {
-    return new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`);
-  });
-
-  const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
-
-  // Sincronização e Verificação de Pagamento
-  useEffect(() => {
-    const interval = setInterval(() => {
-      console.log("Sincronizando dados...");
-    }, 30000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
-    const queryParams = new URLSearchParams(window.location.search);
-    const status = queryParams.get('status');
-    if (status === 'approved' && !user.plano_ativo) {
-        alert('Pagamento confirmado! Você agora tem serviços ilimitados.');
-        onUpdateProfile({ 
-          ...user, 
-          plano_ativo: true, 
-          is_visible: true,
-          plano_expiracao: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString() 
-        });
-        window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, [user, onUpdateProfile]);
-
-  // Gerenciamento de Slots
-  const setSlotAvailability = async (date, slot, makeAvailable) => {
-    const currentSlots = user.available_slots || {};
-    const slotsForDay = currentSlots[date] || [];
-
-    let newSlots;
-    if (makeAvailable) {
-      if (!slotsForDay.includes(slot)) {
-        newSlots = [...slotsForDay, slot].sort();
-      } else return;
-    } else {
-      if (slotsForDay.includes(slot)) {
-        newSlots = slotsForDay.filter(s => s !== slot);
-      } else return;
-    }
-
-    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
-    onUpdateProfile({ ...user, available_slots: updatedAvailableSlots });
-
-    try {
-      const { error } = await supabase
-        .from('profiles')
-        .update({ available_slots: updatedAvailableSlots })
-        .eq('id', user.id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Erro ao salvar no Supabase:", err.message);
-    }
-  };
-
-  const toggleSlotForDate = async (date, slot) => {
-  const currentSlots = { ...(user.available_slots || {}) };
-  const slotsForDay = [...(currentSlots[date] || [])];
-  const isAvailable = slotsForDay.includes(slot);
-  
-  let updatedDaySlots;
-  
-  if (isAvailable) {
-    // Tenta fechar o horário
-    const clientName = window.prompt("Reservar este horário?\n\nDigite o nome ou deixe em branco para apenas fechar:");
-    if (clientName === null) return; // Cancelou o prompt
-    
-    updatedDaySlots = slotsForDay.filter(s => s !== slot);
-    
-    if (clientName.trim() !== "") {
-      const newManualApp = {
-        id: `manual-${Date.now()}`,
-        client: clientName,
-        date,
-        time: slot,
-        status: 'confirmed',
-        isManual: true
-      };
-      const updatedManualApps = [...(user.manual_appointments || []), newManualApp];
-      // Atualiza localmente as reservas
-      onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
-      
-      // Salva no banco (Ambas as colunas)
-      await supabase.from('profiles').update({ 
-        available_slots: { ...currentSlots, [date]: updatedDaySlots },
-        manual_appointments: updatedManualApps 
-      }).eq('id', user.id);
-      return;
-    }
-  } else {
-    // Abre o horário
-    updatedDaySlots = [...slotsForDay, slot];
-    
-    // Remove reserva manual se existir
-    const filteredManual = (user.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
-    
-    onUpdateProfile({ ...user, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
-    
-    await supabase.from('profiles').update({ 
-      available_slots: { ...currentSlots, [date]: updatedDaySlots },
-      manual_appointments: filteredManual
-    }).eq('id', user.id);
-    return;
-  }
-
-  // Fallback para apenas abrir/fechar sem nome de cliente
-  const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
-  onUpdateProfile({ ...user, available_slots: finalSlots });
-  await supabase.from('profiles').update({ available_slots: finalSlots }).eq('id', user.id);
-};
-
-  const handlePayment = async () => {
-    setIsPaying(true);
-    try {
-      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
-      const response = await fetch(`${API_BASE_URL}/criar-pagamento`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barberId: user.id, price: 29.90, title: "Plano Profissional - Ilimitado" })
-      });
-      const data = await response.json();
-      if (data.init_point) window.location.href = data.init_point;
-      else alert("Erro ao gerar link.");
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao conectar ao pagamento.");
-    } finally {
-      setIsPaying(false);
-    }
-  };
-
-  const toggleService = (serviceId, defaultPrice) => {
-    const currentServices = user.my_services || [];
-    const exists = currentServices.find(s => s.id === serviceId);
-    
-    if (!exists && !user.plano_ativo && currentServices.length >= 3) {
-        setShowPayModal(true); 
-        return; 
-    }
-
-    let newServices = exists 
-      ? currentServices.filter(s => s.id !== serviceId) 
-      : [...currentServices, { id: serviceId, price: defaultPrice }];
-    onUpdateProfile({ ...user, my_services: newServices });
-  };
-
-  const updateServicePrice = (serviceId, newPrice) => {
-    const newServices = (user.my_services || []).map(s => 
-      s.id === serviceId ? { ...s, price: Number(newPrice) } : s
-    );
-    onUpdateProfile({ ...user, my_services: newServices });
-  };
-
-  const handleUploadPhoto = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await supabase.storage
-        .from('barber-photos')
-        .upload(fileName, file);
-
-      if (uploadError) throw uploadError;
-
-      const { data: { publicUrl } } = supabase.storage
-        .from('barber-photos')
-        .getPublicUrl(fileName);
-
-      onUpdateProfile({ ...user, avatar_url: publicUrl });
-      alert('Foto atualizada!');
-    } catch (error) {
-      alert('Erro ao carregar foto.');
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 pb-24 font-sans">
-      
-      {showPayModal && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock size={32} />
-            </div>
-            <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
-            <p className="text-slate-500 text-sm mb-6">Você atingiu o limite de <b>3 serviços gratuitos</b>.</p>
-            <div className="space-y-3">
-              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold" onClick={handlePayment} disabled={isPaying}>
-                {isPaying ? "Processando..." : "Liberar Tudo (R$ 29,90/mês)"}
-              </button>
-              <button onClick={() => setShowPayModal(false)} className="text-slate-400 text-sm font-bold block w-full">Agora não</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden border border-slate-100">
-                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User className="w-full h-full p-2 text-slate-400" />}
-            </div>
-            <div>
-              <h2 className="text-lg font-black text-slate-900 leading-tight">Painel {user.plano_ativo ? 'Pro' : 'Grátis'}</h2>
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                <p className="text-[10px] text-slate-500 font-bold uppercase">{user.is_visible ? 'Online' : 'Offline'}</p>
-              </div>
-            </div>
-          </div>
-          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
-            <LogOut size={18}/>
-          </button>
-        </div>
-      </header>
-
-      <nav className="px-6 py-4 flex gap-2 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
-        <button onClick={() => setActiveTab('home')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'home' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Início</button>
-        <button onClick={() => setActiveTab('services')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'services' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Serviços</button>
-        <button onClick={() => setActiveTab('config')} className={`flex-1 py-2 px-4 rounded-full text-xs font-bold transition-all ${activeTab === 'config' ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}`}>Perfil & Agenda</button>
-      </nav>
-
-      <main className="p-6 max-w-md mx-auto">
-        {activeTab === 'home' && (
-  <div className="space-y-6">
-    {/* Status Cards */}
-    <div className="grid grid-cols-2 gap-4">
-      <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
-        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
-        <p className="text-2xl font-black">R$ {revenue}</p>
-      </div>
-      <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-        <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
-        <div className="flex gap-2 items-baseline">
-          <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
-          <span className="text-xs text-orange-500 font-bold">({pending.length} novos)</span>
-        </div>
-      </div>
-    </div>
-
-    {/* Section: Novas Solicitações */}
-    <section>
-      <h3 className="font-bold text-slate-900 mb-4 flex items-center justify-between">
-        Novas Solicitações
-        {pending.length > 0 && (
-          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-            {pending.length}
-          </span>
-        )}
-      </h3>
-      
-      {pending.length === 0 ? (
-        <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-          <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-        </div>
-      ) : (
-        /* FILTRO ANTI-DUPLICIDADE usando ID ao invés de client_id */
-        pending
-          .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
-          .map(app => (
-            <div key={app.id || app.client_id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm hover:border-blue-100 transition-all">
-              <div className="flex justify-between items-start mb-4">
-                <div>
-                  <p className="font-black text-slate-900 leading-none mb-1">{app.client}</p>
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço Standard'}</p>
-                  <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
-                    <Clock size={12} strokeWidth={3} />
-                    <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                  </div>
-                </div>
-                <div className="text-right">
-                   <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
-                   <span className="text-[8px] text-orange-500 font-black uppercase tracking-tighter">Pendente</span>
-                </div>
-              </div>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={async () => {
-                    if (!app.id && !app.client_id) return alert("ID inválido.");
-                    try {
-                      await onUpdateStatus(app.id || app.client_id, 'confirmed'); // AQUI ERA O BUG PRINCIPAL
-                      if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
-                      const mensagem = `Olá ${app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
-                      const fone = app.phone?.toString().replace(/\D/g, '');
-                      if (fone) {
-                        // Correção para não bloquear pop-up no mobile após o await:
-                        window.location.href = `https://wa.me/55${fone}?text=${mensagem}`;
-                      }
-                    } catch (err) { console.error(err); }
-                  }} 
-                  className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95"
-                >
-                  <CheckCircle size={14} /> Aceitar Solicitação
-                </button>
-                
-                <button 
-                  onClick={() => onUpdateStatus(app.id || app.client_id, 'rejected')}
-                  className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
-                >
-                  <XCircle size={18} />
-                </button>
-              </div>
-            </div>
-          ))
-      )}
-    </section>
-
-    {/* Section: Próximos na Agenda */}
-    <section className="mt-8">
-      <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-        <Calendar size={18} className="text-blue-500" /> Próximos na Agenda
-      </h3>
-      
-      {agendaOrdenada.length === 0 ? (
-        <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-          <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-        </div>
-      ) : (
+    <div className="fixed inset-0 z-[900] flex items-center justify-center p-6">
+      <div className="absolute inset-0 bg-slate-900/85 backdrop-blur-sm" onClick={onClose}/>
+      <div className="relative bg-white w-full max-w-sm rounded-3xl p-7 shadow-2xl">
+        <h2 className="text-xl font-black text-slate-900 mb-1 text-center">Explorar como Convidado</h2>
+        <p className="text-xs text-slate-400 text-center mb-7">Escolha como deseja visualizar o app</p>
         <div className="space-y-3">
-          {agendaOrdenada
-            .filter((app, index, self) => index === self.findIndex((t) => (t.id || t.client_id) === (app.id || app.client_id)))
-            .map(app => (
-              <div 
-                key={app.id || app.client_id} 
-                className={`group relative flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm hover:shadow-md transition-all ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}
-              >
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-black text-slate-900 text-sm tracking-tight">{app.client}</p>
-                    <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${app.isManual ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                      {app.isManual ? 'Reserva Manual' : 'Confirmado'}
-                    </span>
-                  </div>
-                  <div className="flex flex-col gap-0.5">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">{app.service_name || 'Serviço'}</p>
-                    <div className="flex items-center gap-1.5 text-blue-600 font-bold">
-                      <Clock size={12} strokeWidth={3} />
-                      <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <button 
-                  onClick={() => {
-                    if(window.confirm(`Deseja CANCELAR o horário de ${app.client}?`)) {
-                      if (app.isManual) {
-                        // Se for reserva manual, apenas exclui do perfil
-                        const filtered = (user.manual_appointments || []).filter(m => m.id !== app.id);
-                        onUpdateProfile({ ...user, manual_appointments: filtered });
-                        supabase.from('profiles').update({ manual_appointments: filtered }).eq('id', user.id);
-                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                      } else {
-                        // Agendamento via app
-                        onUpdateStatus(app.id || app.client_id, 'rejected');
-                        if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                      }
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all border border-transparent"
-                >
-                  <XCircle size={20} />
-                  <span className="text-[8px] font-black uppercase tracking-tighter">Cancelar</span>
-                </button>
-              </div>
-            ))}
+          <button onClick={()=>onSelectGuestMode('client')} className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-blue-400 hover:bg-blue-50/40 transition-all active:scale-95 text-left">
+            <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0 shadow-md shadow-blue-200"><User size={22} className="text-white"/></div>
+            <div><p className="font-black text-slate-900 text-sm">Ver como Cliente</p><p className="text-[10px] text-slate-400 mt-0.5">Explore serviços, profissionais e agendamentos</p></div>
+          </button>
+          <button onClick={()=>onSelectGuestMode('barber')} className="w-full flex items-center gap-4 p-4 rounded-2xl border-2 border-slate-100 bg-slate-50 hover:border-slate-700 transition-all active:scale-95 text-left">
+            <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center flex-shrink-0"><Scissors size={22} className="text-white"/></div>
+            <div><p className="font-black text-slate-900 text-sm">Ver como Profissional</p><p className="text-[10px] text-slate-400 mt-0.5">Simule o painel, agenda e serviços (sem salvar)</p></div>
+          </button>
         </div>
-      )}
-    </section>
-  </div>
-)}
+        <button onClick={onClose} className="w-full mt-5 text-slate-400 font-bold text-xs py-2">Cancelar</button>
+      </div>
+    </div>
+  );
+};
 
-        {activeTab === 'services' && (
-          <div className="space-y-4">
-            <div className="p-4 bg-blue-50 rounded-2xl mb-4">
-                <p className="text-xs text-blue-700 font-medium">
-                  <span className="font-bold">{user.plano_ativo ? 'Assinatura Profissional Ativa' : `Limite Grátis: ${user.my_services?.length || 0}/3`}</span>
-                </p>
+// ─── WELCOME SCREEN ───────────────────────────────────────────────────────────
+const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
+  const [showPrivacy,setShowPrivacy]=useState(false), [showGuestModal,setShowGuestModal]=useState(false);
+  const handleGuestMode=(guestType)=>{ setShowGuestModal(false); onSelectMode(guestType==='client'?'guest':'guest-barber'); };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
+      style={{backgroundImage:`url('/backgr.png')`,backgroundSize:'cover',backgroundPosition:'center'}}>
+      <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"/>
+      <div className="absolute top-6 right-6 z-20"><DarkModeToggle isDark={isDark} onToggle={onToggleDark}/></div>
+      <div className="relative z-10 flex flex-col items-center">
+        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50"><Scissors size={40} className="text-white"/></div>
+        <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
+        <div className="w-full max-w-xs space-y-3 mt-10">
+          <Button variant="secondary" onClick={()=>onSelectMode('client')}><User size={16}/> Sou Cliente</Button>
+          <Button variant="primary" onClick={()=>setShowGuestModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white border-none shadow-lg"><Eye size={16}/> Explorar como Convidado</Button>
+          <div className="py-2 flex items-center gap-4"><div className="h-[1px] bg-white/20 flex-1"/><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span><div className="h-[1px] bg-white/20 flex-1"/></div>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-900/40" onClick={()=>onSelectMode('barber')}><Scissors size={16}/> Sou Profissional</Button>
+          <button onClick={()=>setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">Política de Privacidade</button>
+        </div>
+      </div>
+      <PrivacyModal isOpen={showPrivacy} onClose={()=>setShowPrivacy(false)}/>
+      <GuestModeModal isOpen={showGuestModal} onClose={()=>setShowGuestModal(false)} onSelectGuestMode={handleGuestMode}/>
+    </div>
+  );
+};
+
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
+  const [mode,setMode]=useState('login'), [name,setName]=useState(''), [phone,setPhone]=useState(''), [password,setPassword]=useState(''), [loading,setLoading]=useState(false), [error,setError]=useState(''), [showPassword,setShowPassword]=useState(false);
+  const nameValid=name.trim().length>=3, phoneValid=getPhoneDigits(phone).length===11, passwordValid=password.length>=6;
+  const handlePhoneChange=(e)=>setPhone(applyPhoneMask(e.target.value));
+  const handleSubmit=async()=>{
+    setError('');
+    if (mode==='register') {
+      if (name.trim().length<3) { setError('Nome deve ter pelo menos 3 caracteres.'); return; }
+      if (getPhoneDigits(phone).length!==11) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
+      if (password.length<6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
+    }
+    setLoading(true);
+    try { if (mode==='login') await onLogin(getPhoneDigits(phone)||phone,password); else await onRegister(name.trim(),getPhoneDigits(phone),password); }
+    catch(err) { setError(err.message); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
+      <div className="absolute top-6 left-6"><button onClick={onBack} className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button></div>
+      <div className="absolute top-6 right-6"><DarkModeToggle isDark={isDark} onToggle={onToggleDark}/></div>
+      <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
+        <h2 className="text-2xl font-black text-center mb-2">{userType==='barber'?'Área Profissional':'Área do Cliente'}</h2>
+        <p className="text-center text-slate-400 mb-6 text-sm">{mode==='login'?'Faça login para continuar':'Crie sua conta agora'}</p>
+        {error&&<div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
+        <div className="space-y-4">
+          {mode==='register'&&(
+            <div>
+              <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Nome e sobrenome (mín. 3 letras)"
+                className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${name.length>0?(nameValid?'border-green-400':'border-red-300'):'border-slate-200 focus:border-blue-500'}`}/>
+              {name.length>0&&!nameValid&&<p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>}
             </div>
-            {MASTER_SERVICES.map(service => {
-              const userServiceData = user.my_services?.find(s => s.id === service.id);
-              const isActive = !!userServiceData;
+          )}
+          <div>
+            <input type="tel" value={phone} onChange={handlePhoneChange} placeholder="WhatsApp: (41) 99999-9999"
+              className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${phone.length>0?(phoneValid?'border-green-400':'border-amber-300'):'border-slate-200 focus:border-blue-500'}`}/>
+            {phone.length>0&&<p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid?'text-green-600':'text-amber-500'}`}>{getPhoneDigits(phone).length}/11 dígitos {phoneValid?'✓':''}</p>}
+          </div>
+          <div className="relative">
+            <input type={showPassword?'text':'password'} value={password} onChange={e=>setPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
+              className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${password.length>0?(passwordValid?'border-green-400':'border-red-300'):'border-slate-200 focus:border-blue-500'}`}/>
+            <button onClick={()=>setShowPassword(s=>!s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+              {showPassword?<EyeOff size={18}/>:<Eye size={18}/>}
+            </button>
+          </div>
+          <Button onClick={handleSubmit} loading={loading}>{mode==='login'?'Entrar':'Cadastrar'}</Button>
+          <div className="flex items-center gap-2 my-2"><div className="h-[1px] bg-slate-200 flex-1"/><span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span><div className="h-[1px] bg-slate-200 flex-1"/></div>
+          <button onClick={()=>{ setMode(mode==='login'?'register':'login'); setError(''); }} className="w-full text-blue-600 font-bold text-sm mt-2">
+            {mode==='login'?'Criar nova conta':'Já tenho conta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── BARBER ONBOARDING ────────────────────────────────────────────────────────
+const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
+  const [step,setStep]=useState(1), [saving,setSaving]=useState(false);
+  const TOTAL_STEPS=4;
+  const [address,setAddress]=useState(user.address||''), [selectedServices,setSelectedServices]=useState(user.my_services||[]), [duration,setDuration]=useState(user.appointment_duration||'30min'), [capturedLocation,setCapturedLocation]=useState({lat:user.latitude,lng:user.longitude});
+  const handleCaptureLocation=()=>{ if (!navigator.geolocation) { alert('Geolocalização não disponível'); return; } navigator.geolocation.getCurrentPosition(pos=>{ setCapturedLocation({lat:pos.coords.latitude,lng:pos.coords.longitude}); alert('Localização capturada!'); },()=>alert('Erro ao capturar localização.')); };
+  const toggleService=(id,defaultPrice)=>{ const exists=selectedServices.find(s=>s.id===id); if (exists) setSelectedServices(prev=>prev.filter(s=>s.id!==id)); else setSelectedServices(prev=>[...prev,{id,price:defaultPrice}]); };
+  const handleFinish=async()=>{
+    setSaving(true);
+    try {
+      const slug=generateSlug(user.name,user.id);
+      const updateData={address,latitude:capturedLocation?.lat||null,longitude:capturedLocation?.lng||null,my_services:selectedServices,appointment_duration:duration,onboarding_done:true,slug};
+      await sb.from('profiles').update(updateData).eq('id',user.id);
+      onComplete({...user,...updateData});
+    } catch(e) { alert('Erro ao salvar: '+e.message); } finally { setSaving(false); }
+  };
+  const handleSkip=async()=>{
+    setSaving(true);
+    try { const slug=generateSlug(user.name,user.id); await sb.from('profiles').update({onboarding_done:true,slug}).eq('id',user.id); onSkip({...user,onboarding_done:true,slug}); }
+    catch(e) { onSkip({...user,onboarding_done:true}); } finally { setSaving(false); }
+  };
+  const progressPct=Math.round((step/TOTAL_STEPS)*100);
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between mb-3">
+          <div><h1 className="font-black text-slate-900 text-base">Configure seu Perfil</h1><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passo {step} de {TOTAL_STEPS}</p></div>
+          <button onClick={handleSkip} disabled={saving} className="text-slate-400 font-bold text-xs bg-slate-100 px-4 py-2 rounded-full">{saving?'Aguarde...':'Pular tudo'}</button>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{width:`${progressPct}%`}}/></div>
+      </div>
+      <div className="flex-1 p-6 max-w-md mx-auto w-full pb-32">
+        {step===1&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><MapPin size={28} className="text-blue-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Onde você atende?</h2><p className="text-sm text-slate-500">Clientes vão encontrar você pelo endereço.</p></div>
+            <input type="text" value={address} onChange={e=>setAddress(e.target.value)} placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
+              className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors"/>
+            <button onClick={handleCaptureLocation} className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat?'bg-green-50 border-green-500 text-green-700':'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}>
+              <MapPin size={18}/>{capturedLocation?.lat?'✓ Localização capturada!':'Capturar Minha Localização'}
+            </button>
+          </div>
+        )}
+        {step===2&&(
+          <div className="space-y-4">
+            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2"><Scissors size={28} className="text-purple-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Quais serviços você oferece?</h2><p className="text-sm text-slate-500">Selecione os serviços. Ajuste os preços depois.</p></div>
+            {MASTER_SERVICES.map(s=>{
+              const isActive=selectedServices.some(sv=>sv.id===s.id);
               return (
-                <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
-                  <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
-                    <div className="flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>{service.icon}</div>
-                      <div>
-                        <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
-                        <p className="text-[10px] text-slate-400">{service.duration}</p>
-                      </div>
-                    </div>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
-                        {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
-                    </div>
+                <button key={s.id} onClick={()=>toggleService(s.id,s.defaultPrice)}
+                  className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive?'border-slate-900 bg-slate-900 text-white':'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive?'bg-white/20':'bg-slate-100'}`}>{React.cloneElement(s.icon,{size:16})}</div>
+                    <div><p className="font-bold text-sm">{s.name}</p><p className={`text-[10px] ${isActive?'text-slate-300':'text-slate-400'}`}>R$ {s.defaultPrice} · {s.duration}</p></div>
                   </div>
-                  {isActive && (
-                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
-                      <input type="number" value={userServiceData.price || ''} onChange={(e) => updateServicePrice(service.id, e.target.value)} className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
-                    </div>
-                  )}
-                </div>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isActive?'bg-green-400 border-green-400':'border-slate-300'}`}>
+                    {isActive&&<Check size={12} className="text-white"/>}
+                  </div>
+                </button>
               );
             })}
           </div>
         )}
-
-        {activeTab === 'config' && (
-          <div className="space-y-6">
-            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
-                <div className="flex flex-col items-center mb-6">
-                    <div className="relative">
-                        <div className="w-24 h-24 rounded-full bg-slate-100 overflow-hidden border-4 border-white shadow-lg">
-                            {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="Avatar" /> : <User size={40} className="m-auto mt-6 text-slate-300"/>}
-                        </div>
-                        <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
-                            <Camera size={16} />
-                        </label>
-                        <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadPhoto} />
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
-                        <input type="text" value={user.address || ''} onChange={(e) => onUpdateProfile({ ...user, address: e.target.value })} className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium"/>
-                    </div>
-                    <button onClick={() => {
-                        if ("geolocation" in navigator) {
-                            navigator.geolocation.getCurrentPosition((pos) => {
-                                onUpdateProfile({ ...user, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-                                alert("Localização capturada!");
-                            });
-                        }
-                    }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                        <MapPin size={14} /> Atualizar Localização GPS
-                    </button>
-                </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
-                    <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
-                    <div onClick={() => onUpdateProfile({ ...user, is_visible: !user.is_visible })} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${user.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
-                        <div className={`w-4 h-4 bg-white rounded-full transition-transform ${user.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
-                    </div>
-                </div>
-            </section>
-
-            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
-                <div onClick={() => setShowCalendar(!showCalendar)} className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
-                    <div className="flex items-center gap-3">
-                        <CalendarDays size={20} />
-                        <h3 className="font-bold text-sm">Horários Disponíveis</h3>
-                    </div>
-                    <ChevronRight size={18} className={showCalendar ? 'rotate-90' : ''} />
-                </div>
-                {showCalendar && (
-                    <div className="p-5">
-                        <div className="grid grid-cols-7 gap-2 mb-6">
-                            {Array.from({ length: 31 }, (_, i) => {
-                                const day = String(i + 1).padStart(2, '0');
-                                const fullDate = `2026-03-${day}`; 
-                                const isSelected = selectedDateConfig === fullDate;
-                                const isAvailable = user.available_slots?.[fullDate]?.length > 0;
-                                return (
-                                    <button key={i} onClick={() => setSelectedDateConfig(fullDate)} className={`aspect-square rounded-xl text-xs font-bold border transition-all ${isSelected ? 'ring-2 ring-blue-500' : ''} ${isAvailable ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-400 border-slate-100'}`}>
-                                        {i + 1}
-                                    </button>
-                                );
-                            })}
-                        </div>
-                        <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                            <h4 className="font-bold text-xs mb-4">Slots para {selectedDateConfig.split('-').reverse().join('/')}</h4>
-                            <div className="grid grid-cols-4 gap-2">
-                                {GLOBAL_TIME_SLOTS.map(slot => (
-                                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)} className={`py-2 text-[10px] font-bold rounded-lg border transition-all ${user.available_slots?.[selectedDateConfig]?.includes(slot) ? 'bg-green-600 text-white border-green-600' : 'bg-white border-slate-200 text-slate-600'}`}>
-                                        {slot}
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </section>
-
-            <div className="pt-4 text-center">
-               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
-                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
-                  <p className="text-sm font-black text-slate-900 mt-1">
-                    {user.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
-                  </p>
-                  {user.plano_ativo && user.plano_expiracao && (
-                    <p className="text-[11px] text-slate-500 mt-2">
-                       Sua assinatura renova em: <span className="text-blue-600 font-bold">{new Date(user.plano_expiracao).toLocaleDateString('pt-BR')}</span>
-                    </p>
-                  )}
-                  {!user.plano_ativo && (
-                    <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">Fazer Upgrade agora</button>
-                  )}
-               </div>
-               <p className="text-[9px] text-slate-400 mt-6 uppercase font-bold tracking-tighter">Salão Digital © 2026 - Todos os direitos reservados</p>
+        {step===3&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2"><Clock size={28} className="text-amber-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Duração dos atendimentos</h2><p className="text-sm text-slate-500">Define o intervalo mínimo entre horários.</p></div>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {[{value:'30min',label:'30 minutos',icon:'⏱'},{value:'1h',label:'1 hora',icon:'🕐'}].map(opt=>(
+                <button key={opt.value} onClick={()=>setDuration(opt.value)}
+                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration===opt.value?'border-slate-900 bg-slate-900 text-white':'border-slate-200 bg-white hover:border-slate-400'}`}>
+                  <p className="text-2xl mb-2">{opt.icon}</p><p className="font-black text-sm">{opt.label}</p>
+                </button>
+              ))}
             </div>
+          </div>
+        )}
+        {step===4&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Seu link de agendamento</h2><p className="text-sm text-slate-500">Compartilhe com seus clientes!</p></div>
+            <div className="bg-slate-900 rounded-2xl p-5 text-center">
+              <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 overflow-hidden flex items-center justify-center">
+                {user.avatar_url?<img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<User size={28} className="text-slate-400"/>}
+              </div>
+              <p className="text-white font-black text-lg">{user.name}</p>
+              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name,user.id))}</p>
+            </div>
+            <button onClick={handleFinish} disabled={saving}
+              className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50">
+              {saving?<Loader2 className="animate-spin" size={22}/>:<><CheckCircle size={22}/> Finalizar e Ir ao Painel</>}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-100 z-10">
+        <div className="max-w-md mx-auto flex gap-3">
+          {step>1&&<button onClick={()=>setStep(s=>s-1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">← Voltar</button>}
+          {step<TOTAL_STEPS&&<button onClick={()=>setStep(s=>s+1)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Próximo →</button>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TOP PROFESSIONALS ────────────────────────────────────────────────────────
+const TopProfessionalsSection = ({ barbers }) => {
+  const visibleBarbers=barbers.filter(b=>b.is_visible&&((b.my_services||[]).length>0||b.avatar_url));
+  const topBarbers=useMemo(()=>{
+    const featured=visibleBarbers.filter(b=>b.featured_rank).sort((a,b)=>a.featured_rank-b.featured_rank);
+    const others=visibleBarbers.filter(b=>!b.featured_rank).sort((a,b)=>getBarberRating(b)-getBarberRating(a));
+    return [...featured,...others].slice(0,3);
+  },[visibleBarbers]);
+  if (!topBarbers.length) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhores Profissionais</h3>
+        <div className="flex items-center gap-1"><Star size={10} className="text-amber-400 fill-amber-400"/><span className="text-[9px] font-bold text-slate-400">Top 3</span></div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {topBarbers.map(barber=>{
+          const rating=getBarberRating(barber);
+          const specs=(barber.my_services||[]).slice(0,2).map(s=>{ const m=MASTER_SERVICES.find(ms=>ms.id===s.id); return m?.name||''; }).filter(Boolean);
+          return (
+            <div key={barber.id} className="flex-shrink-0 w-[152px] bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 pt-5 pb-6 flex justify-center">
+                {barber.plano_ativo&&<div className="absolute top-2 right-2 bg-blue-600 rounded-full p-0.5"><Zap size={8} className="text-white"/></div>}
+                {barber.featured_rank&&<div className="absolute top-2 left-2 bg-amber-500 rounded-full px-1.5 py-0.5 text-[8px] font-black text-white">★{barber.featured_rank}</div>}
+                <StoryRing rating={rating} size={72} animate>
+                  {barber.avatar_url?<img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>:<div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={22} className="text-slate-400"/></div>}
+                </StoryRing>
+              </div>
+              <div className="px-3 pt-3 pb-3">
+                <p className="font-black text-slate-900 text-xs leading-tight truncate">{barber.name}</p>
+                {barber.bio&&<p className="text-[9px] text-blue-500 font-bold italic mt-0.5 truncate">"{barber.bio}"</p>}
+                <div className="flex items-center gap-1.5 mt-1 mb-2"><StarRating rating={rating}/><span className="text-[9px] font-black text-amber-500">{rating}</span></div>
+                {specs.map((s,i)=><span key={i} className="text-[8px] font-bold text-slate-500 bg-slate-50 rounded-md px-1.5 py-0.5 truncate block mb-0.5">{s}</span>)}
+                {barber.distanceLabel&&<div className="flex items-center gap-0.5 mt-1"><MapPin size={9} className="text-blue-400"/><span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span></div>}
+                {(barber.admin_tags||[]).length>0&&(
+                  <div className="flex flex-wrap gap-0.5 mt-1">
+                    {(barber.admin_tags||[]).slice(0,2).map((tag,i)=>(
+                      <span key={i} className="text-[7px] font-bold bg-purple-50 text-purple-500 border border-purple-100 px-1 py-0.5 rounded-full">{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
+const PublicBarberPage = ({ barber }) => {
+  const [bookStep,setBookStep]=useState(0), [selectedService,setSelectedService]=useState(null), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
+  const rating=getBarberRating(barber), badges=getBadges(barber), workPhotos=barber.work_photos||[];
+  const masterServices=(barber.my_services||[]).map(s=>{ const master=MASTER_SERVICES.find(m=>m.id===s.id); return master?{...master,price:s.price}:null; }).filter(Boolean);
+  const customServices=(barber.custom_services||[]).map(cs=>({...cs,icon:<Scissors size={20}/>,isCustom:true}));
+  const services=[...masterServices,...customServices];
+  const handleCopyLink=()=>{ navigator.clipboard.writeText(window.location.href).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
+  const handleServiceClick=(service)=>{ setSelectedService(service); setSelectedDate(null); setSelectedTime(null); setBookStep(2); };
+  const handleSubmitBooking=async()=>{
+    if (!clientName.trim()||!clientPhone.trim()) { alert('Preencha seu nome e WhatsApp.'); return; }
+    setSubmitting(true);
+    try {
+      const {error}=await supabase.from('appointments').insert([{date:selectedDate,time:selectedTime,barber_id:barber.id,client_id:null,client_name:clientName.trim(),phone:clientPhone.trim(),service_name:selectedService.name,price:selectedService.price,status:'pending'}]);
+      if (error) throw error;
+      setBookStep(4);
+    } catch(e) { alert('Erro ao agendar: '+e.message); } finally { setSubmitting(false); }
+  };
+  if (bookStep===4) return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600"/></div>
+      <h2 className="text-2xl font-black text-slate-900 mb-2">Agendado!</h2>
+      <p className="text-slate-500 text-sm mb-2">Sua solicitação foi enviada para <b>{barber.name}</b>.</p>
+      <p className="text-slate-500 text-sm mb-8">Aguarde a confirmação pelo WhatsApp.</p>
+      <div className="bg-slate-50 rounded-2xl p-4 w-full max-w-xs text-left space-y-2 mb-8 border border-slate-100">
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Serviço</span><span className="text-xs font-black text-slate-900">{selectedService?.name}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Data</span><span className="text-xs font-black text-slate-900">{selectedDate?.split('-').reverse().join('/')}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Horário</span><span className="text-xs font-black text-slate-900">{selectedTime}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Valor</span><span className="text-xs font-black text-green-600">R$ {selectedService?.price}</span></div>
+      </div>
+      <button onClick={()=>{ setBookStep(0); setSelectedService(null); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); }} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
+    </div>
+  );
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <div className="bg-slate-900 pb-8 pt-10 px-6 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-10"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500 rounded-full blur-3xl"/></div>
+        <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
+          <div className="mb-4">
+            <StoryRing rating={rating} size={112} animate>
+              {barber.avatar_url?<img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>:<div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={40} className="text-slate-400"/></div>}
+            </StoryRing>
+          </div>
+          <h1 className="text-white font-black text-2xl leading-tight mb-1 mt-2">{barber.name}</h1>
+          {barber.bio&&<p className="text-blue-300 text-sm font-bold italic mb-1">"{barber.bio}"</p>}
+          {barber.address&&<p className="text-slate-400 text-xs flex items-center justify-center gap-1 mb-3"><MapPin size={11}/>{barber.address}</p>}
+          {badges.length>0&&<div className="flex flex-wrap gap-1.5 justify-center mb-5">{badges.map((b,i)=><span key={i} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}</div>}
+          <div className="flex gap-2 w-full max-w-xs">
+            <button onClick={()=>setBookStep(1)} className="flex-1 py-3.5 bg-blue-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/40"><CalendarDays size={16}/> Agendar</button>
+            <button onClick={handleCopyLink} className={`px-4 py-3.5 rounded-xl font-black text-sm flex items-center justify-center gap-1.5 active:scale-95 transition-all text-xs ${copied?'bg-green-500 text-white':'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}>
+              {copied?<CheckCircle size={15}/>:<Copy size={15}/>}{copied?'Copiado':'Link'}
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="max-w-md mx-auto px-4 pb-10">
+        {bookStep>0&&bookStep<4&&(
+          <div className="bg-white mt-4 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-black text-slate-900 text-sm">{bookStep===1?'Escolha o serviço':bookStep===2?'Data e horário':'Seus dados'}</h3>
+              <button onClick={()=>setBookStep(0)} className="text-slate-400 font-bold text-xs">Cancelar</button>
+            </div>
+            <div className="p-4">
+              {bookStep===1&&<div className="space-y-2">{services.map(s=>(
+                <button key={s.id} onClick={()=>{ setSelectedService(s); setBookStep(2); }} className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-slate-300 transition-all active:scale-95 text-left">
+                  <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
+                  <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
+                </button>
+              ))}</div>}
+              {bookStep===2&&(
+                <div>
+                  <button onClick={()=>setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1"><ChevronLeft size={14}/> {selectedService?.name} · R$ {selectedService?.price}</button>
+                  <MonthCalendar availableSlots={barber.available_slots} selectedDate={selectedDate} onSelectDate={d=>{ setSelectedDate(d); setSelectedTime(null); }}/>
+                  {selectedDate&&(
+                    <div className="mt-5">
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Horários disponíveis</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {GLOBAL_TIME_SLOTS.map(t=>{ const avail=barber.available_slots?.[selectedDate]?.includes(t); return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-lg font-bold text-xs transition-all ${selectedTime===t?'bg-slate-900 text-white shadow-lg scale-105':avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>; })}
+                      </div>
+                    </div>
+                  )}
+                  {selectedTime&&selectedDate&&<button onClick={()=>setBookStep(3)} className="w-full mt-5 py-4 bg-blue-600 text-white rounded-xl font-black text-sm active:scale-95 transition-all">Próximo → {selectedDate.split('-').reverse().join('/')} às {selectedTime}</button>}
+                </div>
+              )}
+              {bookStep===3&&(
+                <div className="space-y-4">
+                  <button onClick={()=>setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><ChevronLeft size={14}/> {selectedDate?.split('-').reverse().join('/')} às {selectedTime}</button>
+                  <div className="bg-blue-50 rounded-xl p-3 flex justify-between items-center">
+                    <div><p className="font-black text-slate-900 text-sm">{selectedService?.name}</p><p className="text-[10px] text-slate-500">{selectedDate?.split('-').reverse().join('/')} às {selectedTime}</p></div>
+                    <p className="font-black text-green-600">R$ {selectedService?.price}</p>
+                  </div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
+                  <button onClick={handleSubmitBooking} disabled={submitting} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                    {submitting?<Loader2 className="animate-spin" size={18}/>:<><CheckCircle size={18}/> Confirmar Agendamento</>}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        {workPhotos.length>0&&(
+          <div className="mt-5">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Trabalhos</p>
+            <div className="grid grid-cols-3 gap-2">{workPhotos.map((url,i)=><div key={i} className="aspect-square rounded-2xl overflow-hidden bg-slate-200"><img src={url} alt={`Trabalho ${i+1}`} className="w-full h-full object-cover"/></div>)}</div>
+          </div>
+        )}
+        <div className="mt-5">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Serviços · <span className="text-blue-500 normal-case font-bold">toque para agendar</span></p>
+          <div className="space-y-2">{services.map(s=>(
+            <button key={s.id} onClick={()=>handleServiceClick(s)} className="w-full bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between active:scale-[0.98] transition-all hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer">
+              <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
+              <div className="flex items-center gap-2"><p className="font-black text-green-600 text-sm">R$ {s.price}</p><div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center"><CalendarDays size={11} className="text-white"/></div></div>
+            </button>
+          ))}</div>
+        </div>
+        <div className="mt-8 text-center"><p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Agendamento via</p><p className="font-black text-slate-400 italic text-sm">SALÃO<span className="text-blue-500">DIGITAL</span></p></div>
+      </div>
+    </div>
+  );
+};
+
+// ─── CLIENT APP ───────────────────────────────────────────────────────────────
+const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES: MS, isDark, onToggleDark }) => {
+  const [view,setView]=useState('home'), [step,setStep]=useState(1), [bookingData,setBookingData]=useState({service:null,barber:null,price:null,date:null,time:null}), [userCoords,setUserCoords]=useState(null);
+  const handleDeleteAccount=async()=>{
+    if (!window.confirm("Deseja realmente excluir sua conta? Todos os seus dados serão apagados permanentemente.")) return;
+    try { await supabase.from('appointments').delete().eq('client_id',user.id); await supabase.from('profiles').delete().eq('id',user.id); alert("Conta removida."); onLogout(); }
+    catch(error) { alert("Erro ao excluir. Tente novamente."); }
+  };
+  useEffect(()=>{ if ("geolocation" in navigator) navigator.geolocation.getCurrentPosition(pos=>setUserCoords({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>console.error(err.message),{enableHighAccuracy:true}); },[]);
+  const processedBarbers=useMemo(()=>(barbers||[]).filter(b=>b.is_visible).map(b=>{ const dist=calculateDistance(userCoords?.lat,userCoords?.lng,b.latitude,b.longitude); const label=dist!==null?(dist<1?`${Math.floor(dist*1000)} m`:`${dist.toFixed(1)} km`):null; return {...b,distance:dist,distanceLabel:label}; }).sort((a,b)=>{ if (a.distance===null) return 1; if (b.distance===null) return -1; return a.distance-b.distance; }),[barbers,userCoords]);
+  const handleFinish=async()=>{
+    try {
+      if (user?.isGuest) { alert("Para realizar um agendamento real, por favor crie sua conta!"); onLogout(); return; }
+      if (!bookingData.date||!bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
+      const payload={date:bookingData.date,time:bookingData.time,barber_id:bookingData.barber?.id,client_id:user?.id,client_name:user?.name||"Cliente",phone:user?.phone||"Sem telefone",service_name:bookingData.service?.name||"Serviço",price:Number(bookingData.price)||0,status:'pending'};
+      if (!payload.barber_id) { alert("Erro: profissional não encontrado."); return; }
+      const {error}=await supabase.from('appointments').insert([payload]);
+      if (error) throw error;
+      setView('success');
+    } catch(error) { alert("Falha ao agendar: "+error.message); }
+  };
+  if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
+  return (
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
+        <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
+        <div className="flex items-center gap-3">
+          <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
+          <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1"><LogOut size={14}/> {user?.isGuest?'Entrar':'Sair'}</button>
+        </div>
+      </header>
+      <main className="p-6 max-w-md mx-auto">
+        {view==='home'&&(
+          <div className="space-y-1">
+            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl mb-2">
+              <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
+              <div className="flex gap-2"><Button variant="secondary" onClick={()=>setView('booking')}>Novo Agendamento</Button><Button variant="outline" className="text-white border-white/20" onClick={()=>setView('history')}>Histórico</Button></div>
+            </div>
+            <div className="mt-4">
+              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
+              <div className="flex gap-2 overflow-x-auto pb-4">
+                {[imgMp,imgMao].map((img,i)=><div key={i} className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100"><img src={img} alt="Galeria" className="w-full h-full object-cover"/></div>)}
+              </div>
+            </div>
+            <TopProfessionalsSection barbers={processedBarbers}/>
+          </div>
+        )}
+        {view==='history'&&(
+          <div className="space-y-4">
+            <button onClick={()=>setView('home')} className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1"><ArrowLeft size={16}/> Voltar</button>
+            <div className="flex justify-between items-end mb-4">
+              <h3 className="font-bold text-lg text-slate-900">Meus Agendamentos</h3>
+              <button onClick={handleDeleteAccount} className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5">Excluir Conta</button>
+            </div>
+            {(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).length===0
+              ? <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">Ainda não tem agendamentos.</div>
+              : <div className="space-y-3">{(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).sort((a,b)=>new Date(`${b.date}T${b.time}`)-new Date(`${a.date}T${a.time}`)).map(app=>{
+                  const professional=(barbers||[]).find(b=>String(b.id)===String(app.barber_id));
+                  return (
+                    <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
+                      <div className="flex gap-3 items-center">
+                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"><User size={18}/></div>
+                        <div><p className="font-bold text-slate-900 text-sm">{app.service_name}</p><p className="text-[10px] text-blue-600 font-bold">Profissional: {professional?.name||"Profissional"}</p><p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10}/>{app.date?.split('-').reverse().join('/')} às {app.time}</p></div>
+                      </div>
+                      <button onClick={()=>{ if (window.confirm("Reagendar? O horário atual será cancelado.")) { const serviceObj=MS.find(s=>s.name===app.service_name); setBookingData({service:serviceObj,barber:professional,price:app.price}); if (typeof onUpdateStatus==='function') onUpdateStatus(app.id,'rejected'); setView('booking'); setStep(3); } }} className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><CalendarDays size={20}/><span className="text-[9px] font-bold uppercase">Reagendar</span></button>
+                    </div>
+                  );
+                })}</div>}
+          </div>
+        )}
+        {view==='booking'&&(
+          <div className="space-y-4">
+            <button onClick={()=>setStep(step-1)} className={`${step===1?'hidden':'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
+            {step===1&&(
+              <div className="flex flex-col h-full relative">
+                <div className="flex-1 pb-24">
+                  <h3 className="font-bold text-lg mb-4 text-slate-900">Escolha o Serviço</h3>
+                  <div className="space-y-3">{MS.map(s=>(
+                    <Card key={s.id} selected={bookingData.service?.id===s.id} onClick={()=>setBookingData({...bookingData,service:s})}>
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-3"><div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id===s.id?'bg-blue-600 text-white':'bg-slate-100'}`}>{s.icon}</div><div><p className="font-bold text-slate-900">{s.name}</p><p className="text-xs text-slate-400 font-medium">{s.duration}</p></div></div>
+                        {bookingData.service?.id===s.id&&<div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"/>}
+                      </div>
+                    </Card>
+                  ))}</div>
+                </div>
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
+                  <div className="max-w-md mx-auto"><Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.service?'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none':'bg-blue-600 text-white active:scale-95'}`} onClick={()=>setStep(2)} disabled={!bookingData.service}>{bookingData.service?`Próximo: ${bookingData.service.name}`:'Selecione um serviço'}</Button></div>
+                </div>
+              </div>
+            )}
+            {step===2&&(
+              <>
+                <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
+                <div className="grid grid-cols-2 gap-3">{processedBarbers.filter(b=>b.my_services?.some(s=>s.id===bookingData.service?.id)).map(b=>{
+                  const displayPrice=b.my_services?.find(s=>s.id===bookingData.service?.id)?.price||0, isSelected=bookingData.barber?.id===b.id, rating=getBarberRating(b);
+                  return (
+                    <div key={b.id} onClick={()=>setBookingData({...bookingData,barber:b,price:displayPrice})} className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected?'border-slate-900 bg-slate-50':'border-white bg-white shadow-sm'}`}>
+                      <div className="mb-2"><StoryRing rating={rating} size={64}>{b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<div className="w-full h-full flex items-center justify-center bg-slate-200"><User size={20} className="text-slate-400"/></div>}</StoryRing></div>
+                      <p className="font-bold text-sm truncate w-full text-center text-slate-900 mt-1">{b.name}</p>
+                      {b.bio&&<p className="text-[8px] text-blue-500 font-bold italic text-center truncate w-full">"{b.bio}"</p>}
+                      <BadgeList barber={b} small/>
+                      {b.distanceLabel&&<p className="text-[10px] text-blue-600 font-black flex items-center gap-1 mt-1"><MapPin size={10}/>{b.distanceLabel}</p>}
+                      <p className="mt-2 text-green-600 font-black text-sm">R$ {displayPrice}</p>
+                    </div>
+                  );
+                })}</div>
+                <Button className="mt-6 w-full" onClick={()=>setStep(3)} disabled={!bookingData.barber}>Próximo</Button>
+              </>
+            )}
+            {step===3&&(
+              <>
+                <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
+                <MonthCalendar availableSlots={bookingData.barber?.available_slots} selectedDate={bookingData.date} onSelectDate={dateStr=>setBookingData({...bookingData,date:dateStr,time:null})}/>
+                <div className="mt-6">
+                  {bookingData.date?<>
+                    <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Horários para {bookingData.date.split('-').reverse().join('/')}</label>
+                    <div className="grid grid-cols-4 gap-2">{GLOBAL_TIME_SLOTS.map(t=>{ const isAvail=bookingData.barber?.available_slots?.[bookingData.date]?.includes(t); return <button key={t} disabled={!isAvail} onClick={()=>setBookingData({...bookingData,time:t})} className={`py-2 rounded-lg font-bold text-xs transition-all ${bookingData.time===t?'bg-slate-900 text-white shadow-lg scale-105':isAvail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>; })}
+                    </div>
+                  </>:<div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center"><Calendar size={24} className="mx-auto text-slate-300 mb-2"/><p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p></div>}
+                </div>
+                {bookingData.time&&bookingData.date&&<div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100"><p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p><div className="flex justify-between items-center"><span className="font-bold text-slate-900">{bookingData.service?.name}</span><span className="font-bold text-slate-900">R$ {bookingData.price}</span></div><p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p></div>}
+                <Button className="mt-6 w-full py-4 text-lg" onClick={handleFinish} disabled={!bookingData.time||!bookingData.date}>Confirmar Agendamento</Button>
+              </>
+            )}
           </div>
         )}
       </main>
     </div>
   );
 };
+
+// ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
+const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase: sb, isGuestBarber, isDark, onToggleDark }) => {
+  const [activeTab, setActiveTab] = useState('home');
+  const [isPaying, setIsPaying] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedDateConfig, setSelectedDateConfig] = useState(new Date().toISOString().split('T')[0]);
+  const today = new Date();
+  const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
+  const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+  const [showAllPending, setShowAllPending] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualSlotTarget, setManualSlotTarget] = useState(null);
+  const [manualName, setManualName] = useState('');
+  const [manualValue, setManualValue] = useState('');
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [newSvcName, setNewSvcName] = useState('');
+  const [newSvcPrice, setNewSvcPrice] = useState('');
+  const [newSvcDuration, setNewSvcDuration] = useState('45min');
+  const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
+  const [showClientHistory, setShowClientHistory] = useState(false);
+
+  // Estado de confirmação de exclusão escondida
+  const [deleteClickCount, setDeleteClickCount] = useState(0);
+  const [showHiddenDelete, setShowHiddenDelete] = useState(false);
+
+  const [guestBarberState, setGuestBarberState] = useState({
+    ...user, name: 'Profissional Demo', plano_ativo: false, is_visible: false,
+    my_services: [], available_slots: {}, manual_appointments: [], appointment_duration: '30min',
+    address: '', avatar_url: '', work_photos: [], custom_services: [], bio: '',
+  });
+
+  const effectiveUser = isGuestBarber ? guestBarberState : user;
+  const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
+
+  const appointmentDuration = effectiveUser.appointment_duration || '30min';
+  const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
+
+  const myAppointments = (appointments || []).filter(a => String(a.barber_id || a.barberId) === String(effectiveUser.id) && a.status !== 'rejected');
+  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
+  const manualAppointments = effectiveUser.manual_appointments || [];
+  const allAppointments = [...confirmed, ...manualAppointments].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+  const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
+  const dedupedPending = pending.filter((app, index, self) => index === self.findIndex(t => t.id === app.id));
+  const pendingToShow = showAllPending ? dedupedPending : dedupedPending.slice(0, 3);
+  const totalAppointmentsForGoal = confirmed.length + manualAppointments.length;
+
+  const uniqueClients = useMemo(() => {
+    const map = {};
+    [...confirmed, ...manualAppointments].forEach(a => {
+      const phone = (a.phone || '').replace(/\D/g, '');
+      const name = a.client_name || a.client || '';
+      const key = phone || name;
+      if (!key) return;
+      if (!map[key]) map[key] = { name, phone, count: 0, lastDate: '', services: [] };
+      map[key].count++;
+      if (!map[key].lastDate || a.date > map[key].lastDate) map[key].lastDate = a.date;
+      const svcName = a.service_name || a.service || '';
+      if (svcName && !map[key].services.includes(svcName)) map[key].services.push(svcName);
+    });
+    return Object.values(map).sort((a, b) => b.count - a.count);
+  }, [confirmed, manualAppointments]);
+
+  const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
+  const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
+  const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
+  const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
+  const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
+
+  const setSlotAvailability = async (date, slot, makeAvailable) => {
+    const currentSlots = effectiveUser.available_slots || {};
+    const slotsForDay = currentSlots[date] || [];
+    let newSlots;
+    if (makeAvailable) { if (!slotsForDay.includes(slot)) newSlots = [...slotsForDay, slot].sort(); else return; }
+    else { if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot); else return; }
+    const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedAvailableSlots });
+    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const toggleSlotForDate = async (date, slot) => {
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    const slotsForDay = [...(currentSlots[date] || [])];
+    const isAvailable = slotsForDay.includes(slot);
+    if (isAvailable) {
+      setManualSlotTarget({ date, slot }); setManualName(''); setManualValue(''); setShowManualModal(true);
+    } else {
+      const updatedDaySlots = [...slotsForDay, slot];
+      const filteredManual = (effectiveUser.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
+      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', effectiveUser.id).catch(console.error);
+    }
+  };
+
+  const handleManualBookingConfirm = async (saveWithClient) => {
+    if (!manualSlotTarget) return;
+    const { date, slot } = manualSlotTarget;
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    const slotsForDay = [...(currentSlots[date] || [])];
+    const updatedDaySlots = slotsForDay.filter(s => s !== slot);
+    if (saveWithClient && manualName.trim() !== '') {
+      const newManualApp = { id: `manual-${Date.now()}`, client: manualName.trim(), date, time: slot, price: Number(manualValue) || 0, status: 'confirmed', isManual: true };
+      const updatedManualApps = [...(effectiveUser.manual_appointments || []), newManualApp];
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
+      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', effectiveUser.id).catch(console.error);
+    } else {
+      const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: finalSlots });
+      if (!isGuestBarber) await sb.from('profiles').update({ available_slots: finalSlots }).eq('id', effectiveUser.id).catch(console.error);
+    }
+    setShowManualModal(false); setManualSlotTarget(null); setManualName(''); setManualValue('');
+  };
+
+  const selectAllSlotsForDay = async (date) => {
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    const updatedSlots = { ...currentSlots, [date]: [...filteredTimeSlots] };
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
+    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const deselectAllSlotsForDay = async (date) => {
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    const updatedSlots = { ...currentSlots, [date]: [] };
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
+    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const markAllDaysInMonth = async () => {
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = [...filteredTimeSlots]; }
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
+    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const unmarkAllDaysInMonth = async () => {
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = []; }
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
+    if (!isGuestBarber) await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const addCustomService = async () => {
+    if (!newSvcName.trim() || !newSvcPrice) return;
+    const newSvc = { id: `custom-${Date.now()}`, name: newSvcName.trim(), price: Number(newSvcPrice), duration: newSvcDuration, isCustom: true };
+    const updatedCustom = [...(effectiveUser.custom_services || []), newSvc];
+    effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
+    if (!isGuestBarber) await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id).catch(console.error);
+    setNewSvcName(''); setNewSvcPrice(''); setNewSvcDuration('45min'); setShowAddCustomSvc(false);
+  };
+
+  const removeCustomService = async (id) => {
+    const updatedCustom = (effectiveUser.custom_services || []).filter(cs => cs.id !== id);
+    effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
+    if (!isGuestBarber) await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  const handlePayment = async () => {
+    if (isGuestBarber) { alert("Para ativar o plano, faça login como profissional!"); return; }
+    setIsPaying(true);
+    try {
+      const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://salaodigital.onrender.com';
+      const response = await fetch(`${API_BASE_URL}/criar-pagamento`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ barberId: effectiveUser.id, price: 29.90, title: "Plano Profissional - Ilimitado" }) });
+      const data = await response.json();
+      if (data.init_point) window.location.href = data.init_point;
+      else alert("Erro ao gerar link.");
+    } catch (_) { alert("Erro ao conectar ao pagamento."); }
+    finally { setIsPaying(false); }
+  };
+
+  const toggleService = (serviceId, defaultPrice) => {
+    const currentServices = effectiveUser.my_services || [];
+    const exists = currentServices.find(s => s.id === serviceId);
+    if (!exists && !effectiveUser.plano_ativo && currentServices.length >= 3) { setShowPayModal(true); return; }
+    const newServices = exists ? currentServices.filter(s => s.id !== serviceId) : [...currentServices, { id: serviceId, price: defaultPrice }];
+    effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
+  };
+
+  const updateServicePrice = (serviceId, newPrice) => {
+    const newServices = (effectiveUser.my_services || []).map(s => s.id === serviceId ? { ...s, price: Number(newPrice) } : s);
+    effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
+  };
+
+  const handleUploadAvatar = async (event) => {
+    if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
+    const file = event.target.files[0]; if (!file) return;
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage.from('barber-photos').upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      const updated = { ...effectiveUser, avatar_url: publicUrl };
+      effectiveOnUpdateProfile(updated);
+      if (!isGuestBarber) await sb.from('profiles').update({ avatar_url: publicUrl }).eq('id', effectiveUser.id);
+      alert('Foto atualizada!');
+    } catch (_) { alert('Erro ao carregar foto.'); }
+  };
+
+  const handleUploadWorkPhoto = async (event) => {
+    if (isGuestBarber) { alert("Para adicionar fotos, faça login!"); return; }
+    const file = event.target.files[0]; if (!file) return;
+    const currentPhotos = effectiveUser.work_photos || [];
+    if (currentPhotos.length >= 3) { alert("Máximo 3 fotos."); return; }
+    setUploadingPhoto(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `work-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage.from('barber-photos').upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      const newPhotos = [...currentPhotos, publicUrl];
+      effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
+      await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
+    } catch (error) { alert('Erro: ' + error.message); }
+    finally { setUploadingPhoto(false); event.target.value = ''; }
+  };
+
+  const handleRemoveWorkPhoto = async (index) => {
+    if (isGuestBarber) return;
+    const currentPhotos = [...(effectiveUser.work_photos || [])];
+    currentPhotos.splice(index, 1);
+    effectiveOnUpdateProfile({ ...effectiveUser, work_photos: currentPhotos });
+    await sb.from('profiles').update({ work_photos: currentPhotos }).eq('id', effectiveUser.id);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (isGuestBarber) return;
+    if (!window.confirm("⚠️ Tem certeza? Todos os dados, agendamentos e fotos serão APAGADOS permanentemente. Esta ação não pode ser desfeita.")) return;
+    if (!window.confirm("Confirme novamente: deseja excluir sua conta profissional?")) return;
+    try {
+      await sb.from('appointments').delete().eq('barber_id', effectiveUser.id);
+      await sb.from('profiles').delete().eq('id', effectiveUser.id);
+      localStorage.removeItem('salao_user_data');
+      alert("Conta excluída.");
+      onLogout();
+    } catch (e) { alert("Erro ao excluir: " + e.message); }
+  };
+
+  const handleBioChange = (value) => {
+    const trimmed = value.slice(0, 15);
+    effectiveOnUpdateProfile({ ...effectiveUser, bio: trimmed });
+  };
+
+  const saveBio = async () => {
+    if (isGuestBarber) return;
+    await sb.from('profiles').update({ bio: effectiveUser.bio || '' }).eq('id', effectiveUser.id).catch(console.error);
+  };
+
+  // Lógica do botão escondido de excluir
+  const handleHiddenVersionClick = () => {
+    const next = deleteClickCount + 1;
+    setDeleteClickCount(next);
+    if (next >= 5) {
+      setShowHiddenDelete(true);
+      setDeleteClickCount(0);
+    }
+  };
+
+  const rating = getBarberRating(effectiveUser);
+  const tabs = ['home', 'services', 'config', 'reports'];
+  const tabLabels = { home: 'Início', services: 'Serviços', config: 'Perfil & Agenda', reports: 'Relatórios' };
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-24 font-sans">
+      {isGuestBarber && (
+        <div className="bg-amber-500 text-white px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 flex-1 min-w-0"><Eye size={14} className="flex-shrink-0" /><p className="text-[11px] font-black uppercase tracking-tight truncate">Modo Demo — Nada será salvo</p></div>
+          <button onClick={onLogout} className="flex-shrink-0 bg-white/20 text-white text-[10px] font-black uppercase px-3 py-1.5 rounded-lg active:scale-95 whitespace-nowrap">Fazer Login</button>
+        </div>
+      )}
+
+      {/* Modal reserva manual */}
+      {showManualModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowManualModal(false)} />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h3 className="font-black text-slate-900 text-lg mb-1">Reservar Horário</h3>
+            <p className="text-xs text-slate-400 mb-5">{manualSlotTarget?.slot} • {manualSlotTarget?.date?.split('-').reverse().join('/')}</p>
+            <div className="space-y-3 mb-5">
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Nome do Cliente</label>
+                <input type="text" value={manualName} onChange={e => setManualName(e.target.value)} placeholder="Ex: Maria Silva"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 transition-colors" />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">Valor (R$) — opcional</label>
+                <input type="number" value={manualValue} onChange={e => setManualValue(e.target.value)} placeholder="0,00"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-400 transition-colors" />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2">
+              <button onClick={() => handleManualBookingConfirm(true)}
+              className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">
+              {manualName.trim() ? '✓ Reservar com Cliente' : '✓ Apenas Fechar Horário'}
+            </button>
+            <button onClick={() => handleManualBookingConfirm(false)}
+              className="w-full py-3 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm active:scale-95">
+              Fechar sem Cliente
+            </button>
+            <button onClick={() => setShowManualModal(false)} className="w-full py-2 text-slate-400 font-bold text-xs">
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+ 
+    {/* ── Modal pagamento ── */}
+    {showPayModal && (
+      <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
+          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Lock size={32}/>
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
+          {isGuestBarber ? (
+            <>
+              <p className="text-slate-500 text-sm mb-6">Para ativar o plano, crie uma conta de profissional.</p>
+              <button className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold"
+                onClick={() => { setShowPayModal(false); onLogout(); }}>
+                Criar conta / Fazer Login
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-500 text-sm mb-6">
+                Você atingiu o limite de <b>3 serviços gratuitos</b>.
+              </p>
+              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold"
+                onClick={handlePayment} disabled={isPaying}>
+                {isPaying ? 'Processando...' : 'Liberar Tudo (R$ 29,90/mês)'}
+              </button>
+            </>
+          )}
+          <button onClick={() => setShowPayModal(false)}
+            className="text-slate-400 text-sm font-bold block w-full mt-3">
+            Agora não
+          </button>
+        </div>
+      </div>
+    )}
+ 
+    {/* ── Header ── */}
+    <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
+      <div className="flex justify-between items-center">
+        <div className="flex items-center gap-3">
+          <div className="flex-shrink-0">
+            <StoryRing rating={rating} size={44}>
+              {effectiveUser.avatar_url
+                ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
+                : <div className="w-full h-full flex items-center justify-center bg-slate-100">
+                    <User size={16} className="text-slate-400"/>
+                  </div>}
+            </StoryRing>
+          </div>
+          <div>
+            <h2 className="text-base font-black text-slate-900 leading-tight">
+              {isGuestBarber ? 'Painel Demo' : `Painel ${effectiveUser.plano_ativo ? 'Pro' : 'Grátis'}`}
+            </h2>
+            {effectiveUser.bio && (
+              <p className="text-[9px] text-blue-500 font-bold italic">"{effectiveUser.bio}"</p>
+            )}
+            <div className="flex items-center gap-2">
+              <span className={`w-2 h-2 rounded-full ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}/>
+              <p className="text-[10px] text-slate-500 font-bold uppercase">
+                {effectiveUser.is_visible ? 'Online' : 'Offline'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
+          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+            <LogOut size={18}/>
+          </button>
+        </div>
+      </div>
+    </header>
+ 
+    {/* ── Tabs ── */}
+    <nav className="px-4 py-3 flex gap-1.5 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
+      {tabs.map(tab => (
+        <button key={tab} onClick={() => setActiveTab(tab)}
+          className={`flex-shrink-0 py-2 px-3.5 rounded-full text-[10px] font-bold transition-all whitespace-nowrap flex items-center gap-1.5
+            ${activeTab === tab ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}
+            ${tab === 'reports' ? 'ml-auto' : ''}`}>
+          {tab === 'reports' && <BarChart2 size={11}/>}
+          {tabLabels[tab]}
+        </button>
+      ))}
+    </nav>
+ 
+    <main className="p-6 max-w-md mx-auto">
+ 
+      {/* ══════════════════════════ HOME TAB ══════════════════════════ */}
+      {activeTab === 'home' && (
+        <div className="space-y-6">
+          {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
+ 
+          {/* Métricas */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
+              <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
+              <p className="text-2xl font-black">R$ {revenue}</p>
+            </div>
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+              <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
+              <div className="flex gap-2 items-baseline">
+                <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
+                {dedupedPending.length > 0 && (
+                  <span className="text-xs text-orange-500 font-bold">({dedupedPending.length} novos)</span>
+                )}
+              </div>
+            </div>
+          </div>
+ 
+          {/* ── PRÓXIMOS 5 ATENDIMENTOS (com lembrete WhatsApp) ── */}
+          {(() => {
+            const now = new Date();
+            const nowDateStr = now.toISOString().split('T')[0];
+            const nowTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+            const upcoming = allAppointments.filter(a => {
+              if (!a.date || !a.time) return false;
+              if (a.date > nowDateStr) return true;
+              if (a.date === nowDateStr && a.time > nowTimeStr) return true;
+              return false;
+            }).slice(0, 5);
+ 
+            if (!upcoming.length) return null;
+ 
+            const sendReminder = (app) => {
+              const nome = app.client_name || app.client || 'Cliente';
+              const servico = app.service_name || app.service || 'seu serviço';
+              const hora = app.time || '';
+              const dia = app.date ? app.date.split('-').reverse().join('/') : '';
+              const fone = (app.phone || '').replace(/\D/g,'');
+              const msg = encodeURIComponent(
+                `Olá ${nome}! 👋 Lembrando que você tem um agendamento hoje às ${hora} para ${servico}. Te esperamos! ✂️💈`
+              );
+              if (fone) {
+                window.open(`https://wa.me/55${fone}?text=${msg}`, '_blank');
+              } else {
+                alert(`Sem número de WhatsApp para ${nome}.\nAgendamento: ${dia} às ${hora}.`);
+              }
+            };
+ 
+            const isToday = (dateStr) => dateStr === nowDateStr;
+            const isSoon = (dateStr, timeStr) => {
+              if (dateStr !== nowDateStr) return false;
+              const [h,m] = timeStr.split(':').map(Number);
+              const apptMin = h*60+m;
+              const nowMin = now.getHours()*60+now.getMinutes();
+              return apptMin - nowMin <= 120 && apptMin > nowMin;
+            };
+ 
+            return (
+              <section>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 bg-blue-50 rounded-xl flex items-center justify-center">
+                    <Bell size={14} className="text-blue-500"/>
+                  </div>
+                  <h3 className="font-black text-slate-900 text-sm">Próximos Atendimentos</h3>
+                  <span className="ml-auto bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {upcoming.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {upcoming.map((app, idx) => {
+                    const nome = app.client_name || app.client || '—';
+                    const servico = app.service_name || app.service || 'Serviço';
+                    const dia = app.date ? app.date.split('-').reverse().join('/') : '';
+                    const hora = app.time || '';
+                    const fone = (app.phone || '').replace(/\D/g,'');
+                    const today = isToday(app.date);
+                    const soon = isSoon(app.date, app.time);
+ 
+                    return (
+                      <div key={app.id || idx}
+                        className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3
+                          ${soon ? 'border-orange-200 border-l-4 border-l-orange-400' : 'border-slate-100 border-l-4 border-l-blue-400'}`}>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <p className="font-black text-slate-900 text-sm truncate">{nome}</p>
+                            {soon && (
+                              <span className="text-[9px] font-black bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full animate-pulse">
+                                Em breve!
+                              </span>
+                            )}
+                            {today && !soon && (
+                              <span className="text-[9px] font-black bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full">
+                                Hoje
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{servico}</p>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <Clock size={10} className="text-blue-400"/>
+                            <span className="text-[10px] text-blue-500 font-bold">{dia} às {hora}</span>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => sendReminder(app)}
+                          title="Enviar lembrete no WhatsApp"
+                          className={`flex-shrink-0 flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95
+                            ${fone
+                              ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                              : 'bg-slate-50 border border-slate-200 text-slate-400'}`}>
+                          <Phone size={14}/>
+                          <span className="text-[8px] font-black uppercase">Lembrar</span>
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[9px] text-slate-400 mt-2 text-center font-bold">
+                  💡 Toque em "Lembrar" para avisar o cliente pelo WhatsApp
+                </p>
+              </section>
+            );
+          })()}
+ 
+          {/* ── Histórico de Clientes ── */}
+          <section>
+            <button onClick={() => setShowClientHistory(!showClientHistory)}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
+                  <History size={18} className="text-purple-500"/>
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-slate-900 text-sm">Meus Clientes</p>
+                  <p className="text-[10px] text-slate-400">
+                    {uniqueClients.length} pessoa{uniqueClients.length !== 1 ? 's' : ''} atendida{uniqueClients.length !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                  {uniqueClients.length}
+                </span>
+                <ChevronRight size={16} className={`text-slate-400 transition-transform ${showClientHistory ? 'rotate-90' : ''}`}/>
+              </div>
+            </button>
+            {showClientHistory && (
+              <div className="mt-2 space-y-2">
+                {uniqueClients.length === 0
+                  ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                      <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
+                    </div>
+                  : uniqueClients.map((c, i) => (
+                    <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                          <span className="text-sm font-black text-purple-600">{c.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900 text-sm truncate">{c.name || 'Cliente'}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {c.count} visita{c.count !== 1 ? 's' : ''} · último: {c.lastDate ? c.lastDate.split('-').reverse().join('/') : '—'}
+                          </p>
+                          {c.services.length > 0 && (
+                            <p className="text-[9px] text-blue-500 font-bold truncate mt-0.5">
+                              {c.services.slice(0,2).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      {c.phone
+                        ? <a href={`https://wa.me/55${c.phone}`} target="_blank" rel="noopener noreferrer"
+                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-[10px] active:scale-95 transition-all">
+                            <Phone size={11}/>
+                            {c.phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}
+                          </a>
+                        : <span className="flex-shrink-0 text-[9px] text-slate-300 font-bold">Sem tel.</span>}
+                    </div>
+                  ))}
+              </div>
+            )}
+          </section>
+ 
+          {/* ── Novas Solicitações ── */}
+          <section>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                Novas Solicitações
+                {dedupedPending.length > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                    {dedupedPending.length}
+                  </span>
+                )}
+              </h3>
+              {dedupedPending.length > 3 && (
+                <button onClick={() => setShowAllPending(!showAllPending)}
+                  className="text-[10px] font-black text-blue-600 uppercase tracking-tight border-b border-blue-200">
+                  {showAllPending ? 'Ver menos' : `Ver todos (${dedupedPending.length})`}
+                </button>
+              )}
+            </div>
+            {dedupedPending.length === 0
+              ? <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                  <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+                </div>
+              : pendingToShow.map(app => (
+                <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <p className="font-black text-slate-900 leading-none mb-1">{app.client_name || app.client}</p>
+                      <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+                      <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+                        <Clock size={12} strokeWidth={3}/>
+                        <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
+                      <span className="text-[8px] text-orange-500 font-black uppercase">Pendente</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={async () => {
+                      if (isGuestBarber) { alert('Para aceitar agendamentos, faça login!'); return; }
+                      if (!app.id) return;
+                      try {
+                        await onUpdateStatus(app.id, 'confirmed');
+                        if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                        const msg = `Olá ${app.client_name || app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                        const fone = app.phone?.toString().replace(/\D/g,'');
+                        if (fone) window.location.href = `https://wa.me/55${fone}?text=${msg}`;
+                      } catch (err) { console.error(err); }
+                    }} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
+                      <CheckCircle size={14}/> Aceitar
+                    </button>
+                    <button onClick={() => !isGuestBarber && onUpdateStatus(app.id, 'rejected')}
+                      className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
+                      <XCircle size={18}/>
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </section>
+ 
+          {/* ── Agenda do dia / próximos ── */}
+          <section>
+            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
+              <Calendar size={18} className="text-blue-500"/> Agenda Completa
+            </h3>
+            {allAppointments.length === 0
+              ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                  <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+                </div>
+              : <div className="space-y-3">
+                  {allAppointments.filter((app,i,self)=>i===self.findIndex(t=>t.id===app.id)).map(app => (
+                    <div key={app.id}
+                      className={`flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm
+                        ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-black text-slate-900 text-sm">{app.client_name || app.client}</p>
+                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase
+                            ${app.isManual ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                            {app.isManual ? 'Manual' : 'Confirmado'}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || app.service || 'Serviço'}</p>
+                        <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-0.5">
+                          <Clock size={12} strokeWidth={3}/>
+                          <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                        </div>
+                      </div>
+                      <button onClick={() => {
+                        if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
+                          if (app.isManual) {
+                            const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
+                            effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
+                            if (!isGuestBarber) sb.from('profiles').update({ manual_appointments: filtered }).eq('id', effectiveUser.id);
+                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                          } else {
+                            if (!isGuestBarber) onUpdateStatus(app.id, 'rejected');
+                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                          }
+                        }
+                      }} className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all">
+                        <XCircle size={20}/>
+                        <span className="text-[8px] font-black uppercase">Cancelar</span>
+                      </button>
+                    </div>
+                  ))}
+                </div>}
+          </section>
+        </div>
+      )}
+ 
+      {/* ══════════════════════════ SERVICES TAB ══════════════════════════ */}
+      {activeTab === 'services' && (
+        <div className="space-y-4">
+          <div className="p-4 bg-blue-50 rounded-2xl mb-4">
+            <p className="text-xs text-blue-700 font-medium">
+              {isGuestBarber ? 'Modo Demo — explore os serviços (sem salvar)'
+                : effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa'
+                : `Limite Grátis: ${effectiveUser.my_services?.length || 0}/3`}
+            </p>
+          </div>
+          {MASTER_SERVICES.map(service => {
+            const userServiceData = effectiveUser.my_services?.find(s => s.id === service.id);
+            const isActive = !!userServiceData;
+            return (
+              <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
+                <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
+                  <div className="flex items-center gap-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                      {service.icon}
+                    </div>
+                    <div>
+                      <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
+                      <p className="text-[10px] text-slate-400">{service.duration}</p>
+                    </div>
+                  </div>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
+                    {isActive && <div className="w-2 h-2 bg-white rounded-full"/>}
+                  </div>
+                </div>
+                {isActive && (
+                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
+                    <input type="number" value={userServiceData.price || ''}
+                      onChange={e => updateServicePrice(service.id, e.target.value)}
+                      className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+ 
+          {/* Serviços personalizados */}
+          <div className="mt-6 pt-6 border-t-2 border-dashed border-slate-200">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                  <PlusCircle size={16} className="text-purple-600"/> Serviços Personalizados
+                </h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">Aparecem apenas no seu link de agendamento</p>
+              </div>
+              <button onClick={() => setShowAddCustomSvc(!showAddCustomSvc)}
+                className={`p-2 rounded-xl transition-all ${showAddCustomSvc ? 'bg-red-50 text-red-500' : 'bg-purple-50 text-purple-600'}`}>
+                {showAddCustomSvc ? <X size={16}/> : <Plus size={16}/>}
+              </button>
+            </div>
+            {(effectiveUser.custom_services || []).length > 0 && (
+              <div className="space-y-2 mb-3">
+                {(effectiveUser.custom_services || []).map(cs => (
+                  <div key={cs.id} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-100">
+                    <div>
+                      <p className="font-bold text-sm text-slate-900">{cs.name}</p>
+                      <p className="text-[10px] text-slate-500">{cs.duration} · R$ {cs.price}</p>
+                    </div>
+                    <button onClick={() => removeCustomService(cs.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all">
+                      <Trash2 size={14}/>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {showAddCustomSvc && (
+              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Serviço</p>
+                <input type="text" value={newSvcName} onChange={e => setNewSvcName(e.target.value)} placeholder="Ex: Progressiva, Coloração..."
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-purple-400 transition-colors"/>
+                <div className="flex gap-2">
+                  <div className="flex-1 relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                    <input type="number" value={newSvcPrice} onChange={e => setNewSvcPrice(e.target.value)} placeholder="Preço"
+                      className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400 transition-colors"/>
+                  </div>
+                  <select value={newSvcDuration} onChange={e => setNewSvcDuration(e.target.value)}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none">
+                    {['30min','45min','1h','1h 30min','2h'].map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <button onClick={addCustomService} disabled={!newSvcName.trim() || !newSvcPrice}
+                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  <Plus size={16}/> Adicionar Serviço
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+ 
+      {/* ══════════════════════════ CONFIG TAB ════════════════════════════ */}
+      {activeTab === 'config' && (
+          <div className="space-y-6">
+            {/* Fotos do trabalho */}
+            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-slate-900">Fotos do Trabalho</h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Máx. 3 fotos · exibidas no link público</p>
+                </div>
+                <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                  {(effectiveUser.work_photos || []).length}/3
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3 mb-4">
+                {(effectiveUser.work_photos || []).map((url, i) => (
+                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+                    <img src={url} alt={`Trabalho ${i+1}`} className="w-full h-full object-cover"/>
+                    <button onClick={() => handleRemoveWorkPhoto(i)}
+                      className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg">
+                      <XCircle size={14}/>
+                    </button>
+                  </div>
+                ))}
+                {(effectiveUser.work_photos || []).length < 3 && (
+                  <label className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all
+                    ${uploadingPhoto ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-400'}`}>
+                    {uploadingPhoto
+                      ? <Loader2 size={20} className="text-blue-500 animate-spin"/>
+                      : <><Image size={20} className="text-slate-400 mb-1"/><span className="text-[9px] font-black text-slate-400 uppercase">Adicionar</span></>}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadWorkPhoto} disabled={uploadingPhoto}/>
+                  </label>
+                )}
+              </div>
+            </section>
+ 
+            {/* Configurações do perfil */}
+            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
+              <div className="flex flex-col items-center mb-6">
+                <div className="relative">
+                  <StoryRing rating={rating} size={96}>
+                    {effectiveUser.avatar_url
+                      ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
+                      : <div className="w-full h-full flex items-center justify-center bg-slate-100"><User size={32} className="text-slate-300"/></div>}
+                  </StoryRing>
+                  <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
+                    <Camera size={16}/>
+                  </label>
+                  <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar}/>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {/* ✅ BIO COM BOTÃO OK */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1"><Type size={11}/> Bio (tagline)</span>
+                    <span className={`font-black text-[10px] ${tempBio.length >= 15 ? 'text-red-500' : tempBio.length >= 12 ? 'text-amber-500' : 'text-slate-400'}`}>
+                      {tempBio.length}/15
+                    </span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input 
+                      type="text" 
+                      maxLength={15} 
+                      value={tempBio} 
+                      onChange={(e) => setTempBio(e.target.value)} 
+                      placeholder="Ex: Especialista em..."
+                      className="flex-1 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
+                    />
+                    <button 
+                      onClick={saveBio}
+                      className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap flex items-center gap-1"
+                    >
+                      ✓ OK
+                    </button>
+                  </div>
+                  {tempBio && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400">Preview:</span>
+                      <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
+                    </div>
+                  )}
+                </div>
+ 
+                {/* Endereço */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
+                  <input type="text" value={effectiveUser.address||''}
+                    onChange={e => effectiveOnUpdateProfile({...effectiveUser, address: e.target.value})}
+                    className="w-full mt-1 bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"/>
+                </div>
+                <button onClick={() => {
+                  if (isGuestBarber) { alert('Para salvar localização, faça login!'); return; }
+                  if ('geolocation' in navigator) {
+                    navigator.geolocation.getCurrentPosition(pos => {
+                      effectiveOnUpdateProfile({...effectiveUser, latitude: pos.coords.latitude, longitude: pos.coords.longitude});
+                      alert('Localização capturada!');
+                    });
+                  }
+                }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
+                  <MapPin size={14}/> Capturar Minha Localização
+                </button>
+              </div>
+ 
+              {/* Toggle visibilidade */}
+              <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
+                  {isGuestBarber && <p className="text-[10px] text-amber-500 font-bold mt-0.5">Faça login para ativar</p>}
+                </div>
+                <div onClick={() => {
+                  if (isGuestBarber) { alert('Para ativar sua loja, faça login!'); return; }
+                  const updated = {...effectiveUser, is_visible: !effectiveUser.is_visible};
+                  effectiveOnUpdateProfile(updated);
+                  if (!isGuestBarber) sb.from('profiles').update({is_visible: !effectiveUser.is_visible}).eq('id', effectiveUser.id);
+                }} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform ${effectiveUser.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
+                </div>
+              </div>
+ 
+              {/* Duração */}
+              <div className="mt-6 pt-6 border-t border-slate-100">
+                <p className="font-bold text-slate-900 text-sm mb-1">Duração do Atendimento</p>
+                <div className="flex gap-2">
+                  {['30min','1h'].map(dur => (
+                    <button key={dur} onClick={async () => {
+                      const updated = {...effectiveUser, appointment_duration: dur};
+                      effectiveOnUpdateProfile(updated);
+                      if (!isGuestBarber) await sb.from('profiles').update({appointment_duration: dur}).eq('id', effectiveUser.id).catch(console.error);
+                    }} className={`flex-1 py-3 rounded-xl font-black text-sm border-2 transition-all active:scale-95
+                      ${appointmentDuration===dur ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
+                      {dur==='30min' ? '⏱ 30 min' : '🕐 1 hora'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </section>
+ 
+            {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
+ 
+            {/* ── Agenda ── */}
+            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+              <div onClick={() => setShowCalendar(!showCalendar)}
+                className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <CalendarDays size={20}/>
+                  <h3 className="font-bold text-sm">Horários Disponíveis</h3>
+                </div>
+                <ChevronRight size={18} className={`transition-transform ${showCalendar ? 'rotate-90' : ''}`}/>
+              </div>
+              {showCalendar && (
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={goConfigPrev} disabled={isPrevConfigDisabled}
+                      className={`p-2 rounded-full transition-all ${isPrevConfigDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}>
+                      <ChevronLeft size={18}/>
+                    </button>
+                    <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
+                    <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
+                      <ChevronRight size={18}/>
+                    </button>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
+                    <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-50 hover:text-red-500">✕ Limpar Mês</button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-1">
+                    {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-6">
+                    {Array.from({length: daysInConfigMonth}, (_,i) => {
+                      const fullDate = formatDate(configCalYear, configCalMonth, i+1);
+                      const isSelected = selectedDateConfig === fullDate;
+                      const slotsQty = effectiveUser.available_slots?.[fullDate]?.length || 0;
+                      const isAvail = slotsQty > 0;
+                      const isLow = slotsQty > 0 && slotsQty < 4;
+                      return (
+                        <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
+                          className={`aspect-square rounded-xl text-xs font-bold border transition-all relative
+                            ${isSelected ? 'ring-2 ring-blue-500' : ''}
+                            ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-900 text-white border-slate-900') : 'bg-white text-slate-400 border-slate-100'}`}>
+                          {i+1}
+                          {isLow && !isSelected && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white"/>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Legenda */}
+                  <div className="flex gap-3 mb-4">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-slate-900 rounded-sm"/>
+                      <span className="text-[9px] text-slate-500 font-bold">Vaga na agenda</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-amber-500 rounded-sm"/>
+                      <span className="text-[9px] text-slate-500 font-bold">Últimas vagas</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-white border border-slate-200 rounded-sm"/>
+                      <span className="text-[9px] text-slate-500 font-bold">Indisponível</span>
+                    </div>
+                  </div>
+                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <h4 className="font-bold text-xs text-slate-900">Horários — {selectedDateConfig.split('-').reverse().join('/')}</h4>
+                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">
+                          {slotsForSelectedDay.length} de {filteredTimeSlots.length} abertos
+                          {slotsForSelectedDay.length > 0 && slotsForSelectedDay.length < 4 && (
+                            <span className="ml-1 text-amber-500 font-black">· Últimas vagas!</span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <button onClick={() => selectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95">+ Todos</button>
+                        <button onClick={() => deselectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-lg text-[9px] font-black uppercase active:scale-95 hover:bg-red-100 hover:text-red-600">− Todos</button>
+                      </div>
+                    </div>
+                    <div className="h-[1px] bg-slate-200 mb-3"/>
+                    <div className="grid grid-cols-4 gap-2">
+                      {filteredTimeSlots.map(slot => {
+                        const isOpen = effectiveUser.available_slots?.[selectedDateConfig]?.includes(slot);
+                        return (
+                          <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                            className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95
+                              ${isOpen ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-white border-slate-200 text-slate-600 hover:border-slate-400'}`}>
+                            {slot}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </section>
+ 
+            {/* Status do plano */}
+            <div className="pt-2 text-center">
+              <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
+                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Status do Plano</p>
+                {isGuestBarber ? (
+                  <>
+                    <p className="text-sm font-black text-slate-900 mt-1">Modo Demonstração 👁️</p>
+                    <button onClick={onLogout} className="mt-3 text-blue-600 font-bold text-xs">Criar conta / Fazer Login</button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-black text-slate-900 mt-1">
+                      {effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
+                    </p>
+                    {!effectiveUser.plano_ativo && (
+                      <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">
+                        Fazer Upgrade agora
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+ 
+            {isGuestBarber && (
+              <section className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center">
+                <p className="text-2xl mb-2">✂️</p>
+                <h3 className="font-black text-slate-900 mb-1">Gostou do que viu?</h3>
+                <p className="text-xs text-slate-500 mb-4">Crie sua conta profissional e comece a receber agendamentos hoje!</p>
+                <button onClick={onLogout} className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold text-sm active:scale-95 transition-all">
+                  Criar conta grátis
+                </button>
+              </section>
+            )}
+ 
+            {/* Botão escondido excluir conta (5 cliques no rodapé) */}
+            <p onClick={handleHiddenVersionClick}
+              className="text-[9px] text-slate-400 mt-4 text-center uppercase font-bold tracking-tighter pb-4 cursor-default select-none">
+              Salão Digital © 2026 · {APP_VERSION}
+            </p>
+            {showHiddenDelete && !isGuestBarber && (
+              <div className="pb-6 text-center">
+                <button onClick={handleDeleteAccount}
+                  className="text-[10px] text-red-400 font-bold underline underline-offset-2 hover:text-red-600 transition-colors">
+                  ⚠️ Excluir minha conta permanentemente
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
+      {activeTab === 'reports' && (
+        <div className="space-y-4">
+          <div className="mb-2">
+            <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+              <BarChart2 size={20} className="text-blue-500"/> Relatórios
+            </h2>
+            <p className="text-xs text-slate-400">Análise do seu desempenho e tempo de trabalho</p>
+          </div>
+          {isGuestBarber && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+              ⚠️ Modo demo — os dados são simulados.
+            </div>
+          )}
+ 
+          <ReportsSection
+            appointments={appointments}
+            user={effectiveUser}
+            isGuest={isGuestBarber}
+            onUpdateProfile={effectiveOnUpdateProfile}
+            supabase={sb}
+          />
+ 
+          {/* ── Meta dos 30 ── */}
+          <GoalCard
+            totalAppointments={totalAppointmentsForGoal}
+            slug={effectiveUser.slug}
+            isGuest={isGuestBarber}
+          />
+ 
+          {/* ── Chat IA de Suporte ── */}
+          <section className="pb-6">
+            <div className="flex items-center gap-2 mb-3">
+              <Bot size={16} className="text-purple-500"/>
+              <h3 className="font-bold text-sm text-slate-900">Assistente IA — Suporte</h3>
+            </div>
+            {isGuestBarber ? (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+                <p className="text-xs text-amber-700 font-bold">Faça login para usar o suporte.</p>
+              </div>
+            ) : (
+              <AISupportChat user={effectiveUser}/>
+            )}
+          </section>
+        </div>
+      )}
+    </main>
+  </div>
+);
+};
+ 
+// ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
-  const [currentMode, setCurrentMode] = useState(null); 
+  const [currentMode, setCurrentMode] = useState(null);
   const [user, setUser] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
   const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
-
-  // 1. EFEITO DE PERSISTÊNCIA (Resolve o loading e mantém o login)
-useEffect(() => {
+  const [isGuestBarber, setIsGuestBarber] = useState(false);
+  const [publicBarber, setPublicBarber] = useState(null);
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('salao_dark_mode');
+    if (saved !== null) return saved === 'true';
+    return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+ 
+  useEffect(() => {
+    injectDarkModeCSS(isDark);
+    localStorage.setItem('salao_dark_mode', isDark);
+  }, [isDark]);
+ 
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = (e) => {
+      if (localStorage.getItem('salao_dark_mode') === null) setIsDark(e.matches);
+    };
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+ 
+  const handleToggleDark = () => {
+    setIsDark(d => {
+      const newVal = !d;
+      localStorage.setItem('salao_dark_mode', newVal);
+      return newVal;
+    });
+  };
+ 
+  useEffect(() => {
+    const checkPublicRoute = async () => {
+      const path = window.location.pathname;
+      if (!path || path === '/') { setLoading(false); restoreSession(); return; }
+ 
+      // Rota admin
+      if (path === '/estrela2016-v2') { setLoading(false); return; }
+ 
+      const slug = path.replace(/^\//, '').replace(/\/$/, '');
+      if (!slug) { setLoading(false); restoreSession(); return; }
+      try {
+        const { data } = await supabase.from('profiles').select('*').eq('slug', slug).maybeSingle();
+        if (data) { setPublicBarber(data); setLoading(false); return; }
+      } catch (_) {}
+      setLoading(false);
+      restoreSession();
+    };
+ 
     const restoreSession = async () => {
       try {
         const saved = localStorage.getItem('salao_user_data');
         if (!saved) return;
-
         const parsedUser = JSON.parse(saved);
-        if (!parsedUser?.id) return;
-
-        const { data: freshData } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', parsedUser.id)
-          .maybeSingle();
-
+        if (!parsedUser?.id || parsedUser?.isGuest) return;
+        const { data: freshData } = await supabase.from('profiles').select('*').eq('id', parsedUser.id).maybeSingle();
         if (freshData) {
           setUser(freshData);
           setCurrentMode(freshData.role);
           localStorage.setItem('salao_user_data', JSON.stringify(freshData));
         }
-      } catch (err) {
-        console.error("Erro no mobile:", err);
-      } finally {
-        setLoading(false); // <--- Isso destrava o app
-      }
+      } catch (err) { console.error('Erro ao restaurar sessão:', err); }
     };
-    restoreSession();
+ 
+    checkPublicRoute();
   }, []);
-  
+ 
   useEffect(() => {
     const fetchData = async () => {
-      const { data: bData } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('role', 'barber')
-        .eq('is_visible', true);
-        
+      const { data: bData } = await supabase.from('profiles').select('*').eq('role', 'barber');
       if (bData) setBarbers(bData);
-
-      if (!user || user.isGuest) return;
+      if (!user || user.isGuest || isGuestBarber) return;
       const { data: aData } = await supabase
-        .from('appointments')
-        .select('*')
+        .from('appointments').select('*')
         .or(`client_id.eq.${user.id},barber_id.eq.${user.id}`);
-      
       if (aData) {
         const formatted = aData.map(a => ({
           ...a,
           client: a.client_name,
           service: a.service_name,
-          time: a.time, 
-          date: a.date, 
-          barberId: a.barber_id
+          barberId: a.barber_id,
         }));
         setAppointments(formatted);
       }
     };
-    fetchData();
-  }, [user]);
-
+    if (!loading) fetchData();
+ 
+    // Realtime
+    if (!loading && user && !user.isGuest) {
+      const channel = supabase.channel(`app-rt-${user.id}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments',
+          filter: `barber_id=eq.${user.id}` }, () => fetchData())
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    }
+  }, [user, isGuestBarber, loading]);
+ 
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
       setUser({ id: 'guest', name: 'Visitante', isGuest: true });
       setCurrentMode('client');
+      setIsGuestBarber(false);
+    } else if (mode === 'guest-barber') {
+      setUser({ id: 'guest-barber', name: 'Profissional Demo', isGuest: true, isGuestBarber: true });
+      setCurrentMode('barber');
+      setIsGuestBarber(true);
     } else {
       setCurrentMode(mode);
+      setIsGuestBarber(false);
     }
   };
+ 
   const handleLogin = async (phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('phone', phone)
-      .eq('password', password)
-      .eq('role', currentMode)
-      .single();
-
+    const { data, error } = await supabase.from('profiles').select('*')
+      .eq('phone', phone).eq('password', password).eq('role', currentMode).single();
     if (error || !data) throw new Error('Telefone ou senha incorretos.');
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
     setUser(data);
+    setIsGuestBarber(false);
   };
-
+ 
   const handleRegister = async (name, phone, password) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert([{ 
-        name, 
-        phone, 
-        password, 
-        role: currentMode, 
-        is_visible: false,
-        has_access: false,
-        plano_ativo: true,
-        my_services: [],
-        available_slots: GLOBAL_TIME_SLOTS,
-        available_dates: [], 
-        avatar_url: '',
-      }])
-      .select()
-      .single();
-
+    const slug = generateSlug(name, Date.now());
+    const { data, error } = await supabase.from('profiles').insert([{
+      name, phone, password, role: currentMode,
+      is_visible: false, has_access: false, plano_ativo: true,
+      my_services: [], available_slots: {}, available_dates: [],
+      avatar_url: '', work_photos: [], custom_services: [],
+      slug, onboarding_done: false, bio: '',
+    }]).select().single();
     if (error) {
       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
       throw new Error(error.message);
     }
-
-    setUser(data);
+    const realSlug = generateSlug(name, data.id);
+    await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
+    const finalData = { ...data, slug: realSlug };
+    localStorage.setItem('salao_user_data', JSON.stringify(finalData));
+    setUser(finalData);
+    setIsGuestBarber(false);
   };
-
-  const handleBookingSubmit = async (data) => {
-    if (user?.isGuest) {
-      alert("Modo Convidado: Para realizar um agendamento real, por favor crie uma conta.");
-      setUser(null);
-      setCurrentMode(null);
-      return;
-    }
-
-    const newBooking = {
-      client_id: user.id,
-      client_name: user.name,
-      barber_id: data.barber.id,
-      barber_name: data.barber.name,
-      service_name: data.service.name,
-      price: data.price,
-      status: 'pending',
-      date: data.date,
-      phone: data.phone,
-      time: data.time
-    };
-
-    const { data: saved, error } = await supabase
-      .from('appointments')
-      .insert([newBooking])
-      .select()
-      .single();
-
-    if (!error && saved) {
-      setAppointments(prev => [...prev, {
-        ...saved,
-        client: saved.client_name,
-        service: saved.service_name,
-        barberId: saved.barber_id,
-        barber_name: saved.barber_name,
-        time: saved.time,
-        date: saved.date,
-        phone: saved.phone
-      }]);
-      alert("Agendamento realizado!");
-    } else {
-      console.error("Erro detalhado:", error);
-      alert("Erro ao agendar: " + (error?.message || "Erro de conexão"));
+ 
+  const handleUpdateStatus = async (appointmentId, status) => {
+    if (user?.isGuest || isGuestBarber) return;
+    const { error } = await supabase.from('appointments').update({ status }).eq('id', appointmentId);
+    if (!error) {
+      if (status === 'rejected') setAppointments(prev => prev.filter(a => a.id !== appointmentId));
+      else setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status } : a));
     }
   };
-
-  const handleUpdateStatus = async (clientId, status) => { // Nomeamos como clientId para clareza
-  if (user?.isGuest) return; 
-
-  const { error } = await supabase
-    .from('appointments')
-    .update({ status })
-    .eq('client_id', clientId); // FILTRO PELA COLUNA CLIENT_ID
-
-  if (!error) {
-    if (status === 'rejected') {
-      setAppointments(prev => prev.filter(a => a.client_id !== clientId));
-    } else {
-      setAppointments(prev => prev.map(a => a.client_id === clientId ? { ...a, status } : a));
-    }
-  } else {
-    console.error("Erro 400 resolvido:", error);
-  }
-};
+ 
   const handleUpdateProfile = async (updatedUser) => {
     try {
       const dataToSave = {
         address: updatedUser.address,
-        latitude: updatedUser.latitude,   
-        longitude: updatedUser.longitude, 
+        latitude: updatedUser.latitude,
+        longitude: updatedUser.longitude,
         avatar_url: updatedUser.avatar_url,
         is_visible: updatedUser.is_visible,
         plano_ativo: updatedUser.plano_ativo,
         my_services: updatedUser.my_services,
         available_dates: updatedUser.available_dates,
-        available_slots: updatedUser.available_slots 
+        available_slots: updatedUser.available_slots,
+        manual_appointments: updatedUser.manual_appointments,
+        appointment_duration: updatedUser.appointment_duration,
+        work_photos: updatedUser.work_photos,
+        custom_services: updatedUser.custom_services,
+        slug: updatedUser.slug,
+        onboarding_done: updatedUser.onboarding_done,
+        hourly_rate: updatedUser.hourly_rate,
+        bio: updatedUser.bio || '',
       };
-
-      const { error } = await supabase
-        .from('profiles')
-        .update(dataToSave)
-        .eq('id', updatedUser.id);
-
+      const { error } = await supabase.from('profiles').update(dataToSave).eq('id', updatedUser.id);
       if (error) throw error;
       setUser(updatedUser);
-    } catch (error) {
-      console.error("Erro completo:", error);
-      alert("Erro ao salvar: " + error.message);
-    }
+      localStorage.setItem('salao_user_data', JSON.stringify(updatedUser));
+    } catch (error) { alert('Erro ao salvar: ' + error.message); }
   };
-if (loading) {
+ 
+  const handleLogout = () => {
+    localStorage.removeItem('salao_user_data');
+    setUser(null);
+    setCurrentMode(null);
+    setIsGuestBarber(false);
+  };
+ 
+  const isAdminRoute = window.location.pathname === '/estrela2016-v2';
+  const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && user.onboarding_done === false;
+ 
+  if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
-        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-blue-500 mb-4"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-blue-500 mb-4"/>
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Sincronizando...</p>
       </div>
     );
   }
-
-  // 2. RENDERIZAÇÃO BLINDADA (Substitui os ternários aninhados)
+ 
+  if (isAdminRoute) return <AdminDashboard/>;
+  if (publicBarber) return <PublicBarberPage barber={publicBarber}/>;
+ 
   return (
     <>
-      {showWelcome && <WelcomePopup onClose={() => setShowWelcome(false)} />}
-
-      {/* TELA INICIAL: Só aparece se não tem modo selecionado E não tem usuário */}
+      {showWelcome && !user && <WelcomePopup onClose={() => setShowWelcome(false)}/>}
       {!currentMode && !user && (
-        <WelcomeScreen onSelectMode={handleSelectMode} />
+        <WelcomeScreen onSelectMode={handleSelectMode} isDark={isDark} onToggleDark={handleToggleDark}/>
       )}
-
-      {/* TELA DE AUTENTICAÇÃO: Tem modo selecionado, mas o usuário ainda não logou */}
       {currentMode && !user && (
-        <AuthScreen 
-          userType={currentMode} 
-          onBack={() => setCurrentMode(null)} 
-          onLogin={handleLogin} 
-          onRegister={handleRegister} 
-        />
+        <AuthScreen userType={currentMode} onBack={() => setCurrentMode(null)}
+          onLogin={handleLogin} onRegister={handleRegister}
+          isDark={isDark} onToggleDark={handleToggleDark}/>
       )}
-
-      {/* DASHBOARDS: O escudo protetor. Só entra aqui se 'user' for 100% verdadeiro */}
       {user && (
-        currentMode === 'barber' ? (
-          <BarberDashboard 
-            user={user} 
-            appointments={appointments} 
-            onLogout={() => { 
-              localStorage.removeItem('salao_user_data'); // Corrigido para limpar o celular no logout
-              setUser(null); 
-              setCurrentMode(null); 
-            }} 
-            onUpdateStatus={handleUpdateStatus} 
-            onUpdateProfile={handleUpdateProfile}
-            MASTER_SERVICES={MASTER_SERVICES} 
-            GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS} 
-            supabase={supabase} 
-          />
-        ) : (
-          <ClientApp 
-            user={user} 
-            barbers={barbers} 
-            appointments={appointments} 
-            onLogout={() => { 
-              localStorage.removeItem('salao_user_data'); // Corrigido para limpar o celular no logout
-              setUser(null); 
-              setCurrentMode(null); 
-            }}
-            onBookingSubmit={handleBookingSubmit}
-            onUpdateStatus={handleUpdateStatus}
-            MASTER_SERVICES={MASTER_SERVICES}
-          />
-        )
+        currentMode === 'barber'
+          ? isFirstTimeBarber
+            ? <BarberOnboarding user={user} supabase={supabase}
+                onComplete={u => { setUser(u); localStorage.setItem('salao_user_data', JSON.stringify(u)); }}
+                onSkip={u => { setUser(u); localStorage.setItem('salao_user_data', JSON.stringify(u)); }}/>
+            : <BarberDashboard
+                user={user}
+                appointments={appointments}
+                onLogout={handleLogout}
+                onUpdateStatus={handleUpdateStatus}
+                onUpdateProfile={handleUpdateProfile}
+                MASTER_SERVICES={MASTER_SERVICES}
+                GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS}
+                supabase={supabase}
+                isGuestBarber={isGuestBarber}
+                isDark={isDark}
+                onToggleDark={handleToggleDark}/>
+          : <ClientApp
+              user={user}
+              barbers={barbers}
+              appointments={appointments}
+              onLogout={handleLogout}
+              onBookingSubmit={() => {}}
+              onUpdateStatus={handleUpdateStatus}
+              MASTER_SERVICES={MASTER_SERVICES}
+              isDark={isDark}
+              onToggleDark={handleToggleDark}/>
       )}
     </>
   );
