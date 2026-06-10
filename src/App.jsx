@@ -25,6 +25,41 @@ const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 // Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
+// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN ───────────────────────────
+import { getMessaging, getToken } from "firebase/messaging";
+// Certifique-se de importar ou inicializar o seu app do Firebase aqui se necessário
+
+export const updateBarberPushToken = async (barberId) => {
+  try {
+    // 1. Solicita permissão de notificação ao navegador do celular/PC do barbeiro
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      console.warn("Permissão de notificação negada pelo usuário.");
+      return;
+    }
+
+    // 2. Captura o token de registro único do Firebase para o dispositivo atual
+    const messaging = getMessaging();
+    const currentToken = await getToken(messaging, { 
+      vapidKey: 'SUA_CHAVE_CHAVE_PUBLICA_VAPID_DO_FIREBASE' 
+    });
+
+    if (currentToken) {
+      // 3. Salva o token de forma totalmente automática na coluna push_token
+      const { error } = await supabase
+        .from('profiles')
+        .update({ push_token: currentToken })
+        .eq('id', barberId);
+
+      if (error) throw error;
+      console.log("Push token sincronizado com o Supabase com sucesso!");
+    } else {
+      console.warn("Nenhum token FCM disponível. Verifique as configurações do Firebase.");
+    }
+  } catch (err) {
+    console.error("Erro ao sincronizar o push token automaticamente:", err);
+  }
+};
 // ─── DARK MODE CSS ────────────────────────────────────────────────────────────
 const injectDarkModeCSS = (isDark) => {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
