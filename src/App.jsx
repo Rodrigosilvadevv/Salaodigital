@@ -1925,6 +1925,8 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const effectiveUser = isGuestBarber ? guestBarberState : user;
   const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
 
+  const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
+
   const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
 
@@ -2129,15 +2131,30 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     } catch (e) { alert("Erro ao excluir: " + e.message); }
   };
 
-  const handleBioChange = (value) => {
-    const trimmed = value.slice(0, 15);
-    effectiveOnUpdateProfile({ ...effectiveUser, bio: trimmed });
-  };
-
+  // ✅ SALVA A BIO COM TRATAMENTO DE ERROS CORRETO
   const saveBio = async () => {
     if (isGuestBarber) return;
-    await sb.from('profiles').update({ bio: effectiveUser.bio || '' }).eq('id', effectiveUser.id).catch(console.error);
+    
+    const bioFormatada = (tempBio || '').slice(0, 15);
+    effectiveOnUpdateProfile({ ...effectiveUser, bio: bioFormatada });
+    
+    const { error } = await sb
+      .from('profiles')
+      .update({ bio: bioFormatada })
+      .eq('id', effectiveUser.id);
+
+    if (error) {
+      console.error("Erro ao salvar bio:", error.message);
+      alert('Erro ao salvar no banco de dados.');
+    } else {
+      alert('Biografia salva com sucesso!');
+    }
   };
+
+  // ✅ SINCRONIZA SE O PERFIL MUDAR DE CONTA
+  useEffect(() => {
+    setTempBio(effectiveUser?.bio || '');
+  }, [effectiveUser?.bio]);
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
