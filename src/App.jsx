@@ -1911,7 +1911,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
-  const [tempBio, setTempBio] = useState(user?.bio || '');
+  const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
 
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
@@ -2716,53 +2716,53 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </div>
             </section>
  
-            {/* Configurações do perfil */}
-            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-              <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
-              <div className="flex flex-col items-center mb-6">
-                <div className="relative">
-                  <StoryRing rating={rating} size={96}>
-                    {effectiveUser.avatar_url
-                      ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
-                      : <div className="w-full h-full flex items-center justify-center bg-slate-100"><User size={32} className="text-slate-300"/></div>}
-                  </StoryRing>
-                  <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
-                    <Camera size={16}/>
-                  </label>
-                  <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar}/>
-                </div>
-              </div>
-              <div className="space-y-4">
-                {/* ✅ BIO COM BOTÃO OK */}
-                <div>
-                  <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
-                    <span className="flex items-center gap-1"><Type size={11}/> Bio (tagline)</span>
-                    <span className={`font-black text-[10px] ${tempBio.length >= 15 ? 'text-red-500' : tempBio.length >= 12 ? 'text-amber-500' : 'text-slate-400'}`}>
-                      {tempBio.length}/15
-                    </span>
-                  </label>
-                  <div className="flex gap-2">
-                    <input 
-                      type="text" 
-                      maxLength={15} 
-                      value={tempBio} 
-                      onChange={(e) => setTempBio(e.target.value)} 
-                      placeholder="Ex: Especialista em..."
-                      className="flex-1 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
-                    />
-                    <button 
-                      onClick={saveBio}
-                      className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap flex items-center gap-1"
-                    >
-                      ✓ OK
-                    </button>
-                  </div>
-                  {tempBio && (
-                    <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
-                      <span className="text-[9px] text-slate-400">Preview:</span>
-                      <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
-                    </div>
-                  )}
+          {/* Configurações do perfil */}
+<section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+  <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
+  <div className="flex flex-col items-center mb-6">
+    <div className="relative">
+      <StoryRing rating={rating} size={96}>
+        {effectiveUser.avatar_url
+          ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
+          : <div className="w-full h-full flex items-center justify-center bg-slate-100"><User size={32} className="text-slate-300"/></div>}
+      </StoryRing>
+      <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
+        <Camera size={16}/>
+      </label>
+      <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar}/>
+    </div>
+  </div>
+  <div className="space-y-4">
+    {/* ✅ BIO COM BOTÃO OK */}
+    <div>
+      <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
+        <span className="flex items-center gap-1"><Type size={11}/> Bio (tagline)</span>
+        <span className={`font-black text-[10px] ${(tempBio || '').length >= 15 ? 'text-red-500' : (tempBio || '').length >= 12 ? 'text-amber-500' : 'text-slate-400'}`}>
+          {(tempBio || '').length}/15
+        </span>
+      </label>
+      <div className="flex gap-2">
+        <input 
+          type="text" 
+          maxLength={15} 
+          value={tempBio || ''} 
+          onChange={(e) => setTempBio(e.target.value)} 
+          placeholder="Ex: Especialista em..."
+          className="flex-1 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
+        />
+        <button 
+          onClick={saveBio}
+          className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap flex items-center gap-1"
+        >
+          ✓ OK
+        </button>
+      </div>
+      {tempBio && (
+        <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
+          <span className="text-[9px] text-slate-400">Preview:</span>
+          <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
+        </div>
+      )}
                 </div>
  
                 {/* Endereço */}
