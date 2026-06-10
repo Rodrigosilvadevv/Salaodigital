@@ -22,6 +22,7 @@ const APP_VERSION = 'v6.2';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
+// Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // ─── DARK MODE CSS ────────────────────────────────────────────────────────────
