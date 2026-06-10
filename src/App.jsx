@@ -1452,7 +1452,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         <div className="space-y-4">
           {mode==='register'&&(
             <div>
-              <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Nome e sobrenome (mín. 3 letras)"
+              <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="Nome e sobrenome ou do seu espaco (mín. 3 letras)"
                 className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors ${name.length>0?(nameValid?'border-green-400':'border-red-300'):'border-slate-200 focus:border-blue-500'}`}/>
               {name.length>0&&!nameValid&&<p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>}
             </div>
@@ -1727,7 +1727,7 @@ const PublicBarberPage = ({ barber }) => {
                     <div><p className="font-black text-slate-900 text-sm">{selectedService?.name}</p><p className="text-[10px] text-slate-500">{selectedDate?.split('-').reverse().join('/')} às {selectedTime}</p></div>
                     <p className="font-black text-green-600">R$ {selectedService?.price}</p>
                   </div>
-                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Seu nome ou do espaco" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
                   <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
                   <button onClick={handleSubmitBooking} disabled={submitting} className="w-full py-4 bg-slate-900 text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
                     {submitting?<Loader2 className="animate-spin" size={18}/>:<><CheckCircle size={18}/> Confirmar Agendamento</>}
