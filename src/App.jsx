@@ -3015,18 +3015,37 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
             isGuest={isGuestBarber}
           />
  
-          {/* ── Chat IA de Suporte ── */}
+         {/* ── Suporte Direto ao Administrador ── */}
           <section className="pb-6">
             <div className="flex items-center gap-2 mb-3">
-              <Bot size={16} className="text-purple-500"/>
-              <h3 className="font-bold text-sm text-slate-900">Assistente IA — Suporte</h3>
+              <MessageSquare size={16} className="text-purple-500"/>
+              <h3 className="font-bold text-sm text-slate-900">Suporte — Falar com Administrador</h3>
             </div>
             {isGuestBarber ? (
               <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
                 <p className="text-xs text-amber-700 font-bold">Faça login para usar o suporte.</p>
               </div>
             ) : (
-              <AISupportChat user={effectiveUser}/>
+              <form onSubmit={handleSendSupport} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Precisa de ajuda com o aplicativo ou quer relatar um problema? Escreva abaixo para o nosso time de suporte.
+                </p>
+                <textarea
+                  value={supportMessage}
+                  onChange={(e) => setSupportMessage(e.target.value)}
+                  placeholder="Digite sua dúvida ou mensagem aqui..."
+                  rows={3}
+                  maxLength={500}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs outline-none focus:border-purple-400 transition-colors resize-none font-medium text-slate-700"
+                />
+                <button
+                  type="submit"
+                  disabled={sendingSupport || !supportMessage.trim()}
+                  className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-purple-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all flex items-center justify-center gap-1.5"
+                >
+                  {sendingSupport ? 'Enviando...' : '✉ Enviar Mensagem'}
+                </button>
+              </form>
             )}
           </section>
         </div>
