@@ -303,12 +303,7 @@ const AISupportChat = ({ user }) => {
   const endRef = useRef(null);
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages]);
-useEffect(() => {
-  // Substitua 'user?.id' pela variável que armazena o ID do barbeiro logado no seu estado
-  if (user?.id) {
-    updateBarberPushToken(user.id);
-  }
-}, [user?.id]);
+
   const sendMessage = async () => {
     if (!input.trim() || loading) return;
     const text = input.trim();
