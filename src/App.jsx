@@ -258,7 +258,7 @@ const GoalCard = ({ totalAppointments, slug, isGuest }) => {
         <div className={`rounded-2xl p-3 border ${achieved?'bg-amber-50 border-amber-200':'bg-slate-50 border-slate-100'}`}>
           <p className={`text-[9px] font-black uppercase tracking-widest mb-2 ${achieved?'text-amber-600':'text-slate-400'}`}>Recompensas ao atingir</p>
           <div className="grid grid-cols-2 gap-2">
-            {[{icon:'📱',title:'3 Cabos de Carregamento',sub:'Tipo-C ou iPhone'},{icon:'🖨️',title:'QR Code Personalizado',sub:'Com seu link'}].map((r,i)=>(
+            {[{icon:'📱',title:'5 Tags NFC',sub:'Cartao aproximacao personalizado'},{icon:'🖨️',title:'QR Code Personalizado',sub:'Com seu link'}].map((r,i)=>(
               <div key={i} className={`rounded-xl p-2.5 text-center border ${achieved?'bg-white border-amber-200':'bg-white border-slate-200 opacity-50'}`}>
                 <p className="text-xl mb-1">{r.icon}</p>
                 <p className="text-[9px] font-black text-slate-700 leading-tight">{r.title}</p>
