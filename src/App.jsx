@@ -2927,19 +2927,19 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       )}
                 </div>
  
-              {/* Endereço */}
+            {/* Endereço */}
 <div>
   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
   <div className="flex gap-2 mt-1">
     <input 
       type="text" 
-      value={effectiveUser.address || ''}
-      onChange={e => effectiveOnUpdateProfile({...effectiveUser, address: e.target.value})}
+      value={tempAddress}
+      onChange={e => setTempAddress(e.target.value)}
       className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"
     />
     <button 
-      onClick={() => { /* Lógica de salvar endereço se necessário */ }}
-      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase"
+      onClick={saveAddress}
+      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase active:scale-95 transition-all"
     >
       OK
     </button>
