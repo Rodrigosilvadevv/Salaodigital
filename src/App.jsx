@@ -1954,6 +1954,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
   const [showHiddenDelete, setShowHiddenDelete] = useState(false);
+  
 
   const [guestBarberState, setGuestBarberState] = useState({
     ...user, name: 'Profissional Demo', plano_ativo: false, is_visible: false,
@@ -2926,7 +2927,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       )}
                 </div>
  
-                {/* Endereço */}
+              {/* Endereço */}
 <div>
   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
   <div className="flex gap-2 mt-1">
