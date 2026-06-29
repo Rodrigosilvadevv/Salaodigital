@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
-import imgPopup from './img/popup.png'; v   
+import imgPopup from './img/popup.png';
 
 import {
   Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign,
