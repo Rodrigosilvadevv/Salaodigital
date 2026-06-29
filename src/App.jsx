@@ -2267,6 +2267,20 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   useEffect(() => {
     setTempBio(effectiveUser?.bio || '');
   }, [effectiveUser?.bio]);
+const saveAddress = async () => {
+  if (isGuestBarber) return;
+  effectiveOnUpdateProfile({ ...effectiveUser, address: tempAddress });
+  const { error } = await sb.from('profiles').update({ address: tempAddress }).eq('id', effectiveUser.id);
+  if (error) { console.error("Erro ao salvar endereço:", error.message); alert('Erro ao salvar endereço.'); }
+  else alert('Endereço salvo!');
+};
+
+
+// esse adc por u
+useEffect(() => {
+  setTempAddress(effectiveUser?.address || '');
+}, [effectiveUser?.address]);
+
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
