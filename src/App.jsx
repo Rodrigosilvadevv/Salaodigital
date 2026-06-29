@@ -1946,6 +1946,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
+  const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
 
   // Estados do suporte direto para o Painel Admin
   const [supportMessage, setSupportMessage] = useState('');
