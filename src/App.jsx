@@ -1946,7 +1946,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
-  const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
 
   // Estados do suporte direto para o Painel Admin
   const [supportMessage, setSupportMessage] = useState('');
@@ -2267,20 +2266,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   useEffect(() => {
     setTempBio(effectiveUser?.bio || '');
   }, [effectiveUser?.bio]);
-const saveAddress = async () => {
-  if (isGuestBarber) return;
-  effectiveOnUpdateProfile({ ...effectiveUser, address: tempAddress });
-  const { error } = await sb.from('profiles').update({ address: tempAddress }).eq('id', effectiveUser.id);
-  if (error) { console.error("Erro ao salvar endereço:", error.message); alert('Erro ao salvar endereço.'); }
-  else alert('Endereço salvo!');
-};
-
-
-// esse adc por u
-useEffect(() => {
-  setTempAddress(effectiveUser?.address || '');
-}, [effectiveUser?.address]);
-
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
@@ -2942,19 +2927,19 @@ useEffect(() => {
       )}
                 </div>
  
-            {/* Endereço */}
+              {/* Endereço */}
 <div>
   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
   <div className="flex gap-2 mt-1">
     <input 
       type="text" 
-      value={tempAddress}
-      onChange={e => setTempAddress(e.target.value)}
+      value={effectiveUser.address || ''}
+      onChange={e => effectiveOnUpdateProfile({...effectiveUser, address: e.target.value})}
       className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"
     />
     <button 
-      onClick={saveAddress}
-      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase active:scale-95 transition-all"
+      onClick={() => { /* Lógica de salvar endereço se necessário */ }}
+      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase"
     >
       OK
     </button>
