@@ -1966,6 +1966,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
 
   const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
+  const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
 
   // ✉️ LÓGICA DE ENVIO DIRETO AO ADMIN (Declarada no topo para evitar ReferenceError)
   const handleSendSupport = async (e) => {
@@ -2261,11 +2262,31 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       alert('Biografia salva com sucesso!');
     }
   };
+// ✅ SALVA O ENDEREÇO QUANDO APERTA OK
+  const saveAddress = async () => {
+    if (isGuestBarber) return;
+    
+    // Atualiza a tela
+    effectiveOnUpdateProfile({ ...effectiveUser, address: tempAddress });
+    
+    // Salva no banco de dados
+    const { error } = await sb
+      .from('profiles')
+      .update({ address: tempAddress })
+      .eq('id', effectiveUser.id);
 
-  // ✅ SINCRONIZA SE O PERFIL MUDAR DE CONTA
+    if (error) {
+      console.error("Erro ao salvar endereço:", error.message);
+      alert('Erro ao salvar o endereço no banco de dados.');
+    } else {
+      alert('Endereço salvo com sucesso!');
+    }
+  };
+// ✅ SINCRONIZA SE O PERFIL MUDAR DE CONTA
   useEffect(() => {
     setTempBio(effectiveUser?.bio || '');
-  }, [effectiveUser?.bio]);
+    setTempAddress(effectiveUser?.address || ''); // Adicione esta linha
+  }, [effectiveUser?.bio, effectiveUser?.address]); // Adicione o address aqui na lista
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
@@ -2927,19 +2948,20 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       )}
                 </div>
  
-              {/* Endereço */}
+             {/* Endereço */}
 <div>
   <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
   <div className="flex gap-2 mt-1">
-    <input 
-      type="text" 
-      value={effectiveUser.address || ''}
-      onChange={e => effectiveOnUpdateProfile({...effectiveUser, address: e.target.value})}
+    <input
+      type="text"
+      value={tempAddress} 
+      onChange={(e) => setTempAddress(e.target.value)} 
+      placeholder="Digite seu endereço completo..."
       className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"
     />
-    <button 
-      onClick={() => { /* Lógica de salvar endereço se necessário */ }}
-      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase"
+    <button
+      onClick={saveAddress} 
+      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-blue-700 active:scale-95 transition-all"
     >
       OK
     </button>
