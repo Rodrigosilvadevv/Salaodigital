@@ -3046,6 +3046,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
                   </div>
                   <div className="grid grid-cols-7 gap-1 mb-6">
+                    {Array.from({length: new Date(configCalYear, configCalMonth, 1).getDay()}, (_, i) => (
+                      <div key={`vazio-${i}`} className="aspect-square"/>
+                    ))}
                     {Array.from({length: daysInConfigMonth}, (_,i) => {
                       const fullDate = formatDate(configCalYear, configCalMonth, i+1);
                       const isSelected = selectedDateConfig === fullDate;
@@ -3113,7 +3116,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               )}
             </section>
- 
+
+
+            
             {/* Status do plano */}
             <div className="pt-2 text-center">
               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
