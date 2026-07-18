@@ -1,12 +1,3 @@
-
-
-Pular para o conteúdo
-Como usar o Gmail com leitores de tela
-Conversas
-31% de 15 GB usados
-Termos · Privacidade · Regulamentos do programa
-Última atividade da conta: há 0 minuto
-Detalhes
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
