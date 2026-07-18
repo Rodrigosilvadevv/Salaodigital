@@ -1,3 +1,12 @@
+
+
+Pular para o conteúdo
+Como usar o Gmail com leitores de tela
+Conversas
+31% de 15 GB usados
+Termos · Privacidade · Regulamentos do programa
+Última atividade da conta: há 0 minuto
+Detalhes
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
@@ -3016,76 +3025,56 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
  
             {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
  
-         {/* ── Agenda ── */}
-<section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
-  <div onClick={() => setShowCalendar(!showCalendar)}
-    className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
-    <div className="flex items-center gap-3">
-      <CalendarDays size={20}/>
-      <h3 className="font-bold text-sm">Horários Disponíveis</h3>
-    </div>
-    <ChevronRight size={18} className={`transition-transform ${showCalendar ? 'rotate-90' : ''}`}/>
-  </div>
-
-  {showCalendar && (
-    <div className="p-5">
-      <div className="flex items-center justify-between mb-3">
-        <button onClick={goConfigPrev} disabled={isPrevConfigDisabled}
-          className={`p-2 rounded-full transition-all ${isPrevConfigDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}>
-          <ChevronLeft size={18}/>
-        </button>
-        <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
-        <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
-          <ChevronRight size={18}/>
-        </button>
-      </div>
-
-      <div className="flex gap-2 mb-4">
-        <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
-        <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-50 hover:text-red-500">✕ Limpar Mês</button>
-      </div>
-
-      <div className="grid grid-cols-7 gap-1 mb-1">
-        {['D','S','T','Q','Q','S','S'].map((d,i) => (
-          <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-7 gap-1">
-        {/* Espaçadores para alinhamento correto do grid */}
-        {Array(firstDayOfMonth).fill(null).map((_, i) => (
-          <div key={`e-${i}`} className="aspect-square invisible pointer-events-none" />
-        ))}
-
-        {Array.from({length: daysInMonth}, (_, i) => {
-          const day = i + 1;
-          const dateStr = formatDate(calYear, calMonth, day);
-          const daySlots = availableSlots?.[dateStr] || [];
-          const isAvailable = daySlots.length > 0;
-          const isSelected = selectedDate === dateStr;
-          const isPast = new Date(dateStr) < new Date(today.getFullYear(), today.getMonth(), today.getDate());
-
-          return (
-            <button 
-              key={i} 
-              disabled={!isAvailable || isPast} 
-              onClick={() => onSelectDate(dateStr)}
-              className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
-                ${isSelected 
-                  ? 'bg-slate-900 text-white border-slate-900 shadow-lg scale-105' 
-                  : isAvailable && !isPast 
-                    ? 'bg-white text-slate-600 border-slate-200 hover:border-slate-400' 
-                    : 'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'
-                }`}>
-              {day}
-              {isAvailable && !isSelected && !isPast && <div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"/>}
-            </button>
-          );
-        })}
-      </div>
-
-
-                 {/* Legenda */}
+            {/* ── Agenda ── */}
+            <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
+              <div onClick={() => setShowCalendar(!showCalendar)}
+                className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
+                <div className="flex items-center gap-3">
+                  <CalendarDays size={20}/>
+                  <h3 className="font-bold text-sm">Horários Disponíveis</h3>
+                </div>
+                <ChevronRight size={18} className={`transition-transform ${showCalendar ? 'rotate-90' : ''}`}/>
+              </div>
+              {showCalendar && (
+                <div className="p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <button onClick={goConfigPrev} disabled={isPrevConfigDisabled}
+                      className={`p-2 rounded-full transition-all ${isPrevConfigDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}>
+                      <ChevronLeft size={18}/>
+                    </button>
+                    <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
+                    <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
+                      <ChevronRight size={18}/>
+                    </button>
+                  </div>
+                  <div className="flex gap-2 mb-4">
+                    <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
+                    <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-50 hover:text-red-500">✕ Limpar Mês</button>
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-1">
+                    {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+                  </div>
+                  <div className="grid grid-cols-7 gap-1 mb-6">
+                    {Array.from({length: daysInConfigMonth}, (_,i) => {
+                      const fullDate = formatDate(configCalYear, configCalMonth, i+1);
+                      const isSelected = selectedDateConfig === fullDate;
+                      const slotsQty = effectiveUser.available_slots?.[fullDate]?.length || 0;
+                      const isAvail = slotsQty > 0;
+                      const isLow = slotsQty > 0 && slotsQty < 4;
+                      return (
+                        <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
+                          className={`aspect-square rounded-xl text-xs font-bold border transition-all relative
+                            ${isSelected ? 'ring-2 ring-blue-500' : ''}
+                            ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-900 text-white border-slate-900') : 'bg-white text-slate-400 border-slate-100'}`}>
+                          {i+1}
+                          {isLow && !isSelected && (
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white"/>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Legenda */}
                   <div className="flex gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
                       <div className="w-3 h-3 bg-slate-900 rounded-sm"/>
