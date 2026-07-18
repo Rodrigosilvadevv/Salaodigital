@@ -3041,30 +3041,34 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                   <div className="flex gap-2 mb-4">
                     <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
                     <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-50 hover:text-red-500">✕ Limpar Mês</button>
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-1">
-                    {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
-                  </div>
-                  <div className="grid grid-cols-7 gap-1 mb-6">
-                    {Array.from({length: daysInConfigMonth}, (_,i) => {
-                      const fullDate = formatDate(configCalYear, configCalMonth, i+1);
-                      const isSelected = selectedDateConfig === fullDate;
-                      const slotsQty = effectiveUser.available_slots?.[fullDate]?.length || 0;
-                      const isAvail = slotsQty > 0;
-                      const isLow = slotsQty > 0 && slotsQty < 4;
-                      return (
-                        <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
-                          className={`aspect-square rounded-xl text-xs font-bold border transition-all relative
-                            ${isSelected ? 'ring-2 ring-blue-500' : ''}
-                            ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-900 text-white border-slate-900') : 'bg-white text-slate-400 border-slate-100'}`}>
-                          {i+1}
-                          {isLow && !isSelected && (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white"/>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  </div>   
+<div className="grid grid-cols-7 gap-1 mb-1">
+  {['D','S','T','Q','Q','S','S'].map((d,i)=><div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+</div>
+<div className="grid grid-cols-7 gap-1">
+  
+  {/* CORREÇÃO AQUI: Forçando o array a preencher e dando dimensões à div vazia */}
+  {Array(firstDayOfMonth).fill(null).map((_, i) => (
+    <div key={`e-${i}`} className="aspect-square invisible pointer-events-none" />
+  ))}
+
+  {Array.from({length:daysInMonth},(_,i)=>{
+    const day=i+1, dateStr=formatDate(calYear,calMonth,day);
+    const daySlots=availableSlots?.[dateStr]||[], isAvailable=daySlots.length>0;
+    const isSelected=selectedDate===dateStr;
+    const isPast=new Date(dateStr)<new Date(today.getFullYear(),today.getMonth(),today.getDate());
+    
+    return (
+      <button key={i} disabled={!isAvailable||isPast} onClick={()=>onSelectDate(dateStr)}
+        className={`aspect-square flex flex-col items-center justify-center rounded-xl text-[11px] font-bold border transition-all
+          ${isSelected?'bg-slate-900 text-white border-slate-900 shadow-lg scale-105':isAvailable&&!isPast?'bg-white text-slate-600 border-slate-200 hover:border-slate-400':'bg-slate-50 text-slate-200 border-transparent opacity-40 cursor-not-allowed'}`}>
+        {day}
+        {isAvailable&&!isSelected&&!isPast&&<div className="w-1 h-1 bg-blue-500 rounded-full mt-0.5"/>}
+      </button>
+    );
+  })}
+</div>
+
                   {/* Legenda */}
                   <div className="flex gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
