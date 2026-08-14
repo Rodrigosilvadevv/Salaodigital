@@ -3,7 +3,6 @@ import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
 import imgPopup from './img/popup.png';
-
 import {
   Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign,
   ChevronLeft, ChevronRight, Check, Trash2, KeyRound, UserPlus, Eye, EyeOff,
@@ -2821,7 +2820,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       </div>
       {tempBio && (
         <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
-          <span className="text-[9px] text-slate-400">Preview:</span>
+          <span className="text-[9px] text-slate-400">Preview  :</span>
           <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
         </div>
       )}
