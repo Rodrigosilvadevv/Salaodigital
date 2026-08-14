@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
 import imgPopup from './img/popup.png';
+
 import {
   Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign,
   ChevronLeft, ChevronRight, Check, Trash2, KeyRound, UserPlus, Eye, EyeOff,
@@ -16,10 +17,10 @@ import {
   Percent, Target, AlertCircle, CheckSquare, Bot
 } from 'lucide-react';
 
+const APP_VERSION = 'v6.2';
 
-const APP_VERSION = 'v6.3';
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
 // Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
