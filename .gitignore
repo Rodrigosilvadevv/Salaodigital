@@ -1,10 +1,2 @@
-# Dependências e pastas locais
-node_modules/
-venv/
-dist/
-build/
-
-# Arquivos de configuração sensíveis ou de ambiente
+node_modules
 .env
-.DS_Store
-
