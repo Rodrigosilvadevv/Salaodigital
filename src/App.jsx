@@ -16,6 +16,7 @@ import {
   Percent, Target, AlertCircle, CheckSquare, Bot
 } from 'lucide-react';
 
+
 const APP_VERSION = 'v6.2';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
