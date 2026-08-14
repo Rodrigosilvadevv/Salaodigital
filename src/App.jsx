@@ -18,9 +18,8 @@ import {
 
 
 const APP_VERSION = 'v6.3';
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 // Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
