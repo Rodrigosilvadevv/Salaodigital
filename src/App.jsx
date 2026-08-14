@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 
-const APP_VERSION = 'v6.2';
+const APP_VERSION = 'v6.3';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
