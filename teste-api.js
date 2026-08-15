@@ -9,7 +9,7 @@ headers: {
 'apikey': '193467281434131969c'
 },
 body: JSON.stringify({
-instanceName: "salao-digital-v5", // Mude o nome para criar uma nova instância sem erro
+instanceName: "salao-digital-v7", // Mude o nome para criar uma nova instância sem erro
 qrcode: true,
 integration: "WHATSAPP-BAILEYS"
 })
