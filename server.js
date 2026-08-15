@@ -12,11 +12,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-// Correção blindada: pega SUPABASE_ANON_KEY ou cai automaticamente nas chaves do Railway
 const supabase = createClient(
   process.env.SUPABASE_URL, 
-  process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.SERVICE_ROLE_KEY
+  process.env.SUPABASE_ANON_KEY
 );
 
 const client = new MercadoPagoConfig({ 
