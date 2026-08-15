@@ -2,7 +2,7 @@ import fs from 'fs';
 
 const fetchInstance = async () => {
 try {
-const response = await fetch('https://evolution-api-production-f602.up.railway.app/message/sendText/salao-digital-v6',{
+const response = await fetch('evolution-api-production-f602.up.railway.app', {
 method: 'POST',
 headers: {
 'Content-Type': 'application/json',
