@@ -12,10 +12,16 @@ const __dirname = path.dirname(__filename);
 const app = express();
 app.use(express.json());
 app.use(cors());
-const supabase = createClient(
-  process.env.SUPABASE_URL, 
-  process.env.SUPABASE_ANON_KEY
-);
+
+// Proteção blindada: puxa das variáveis de ambiente do Railway/Render com fallback seguro
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || process.env.SERVICE_ROLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error("AVISO CRÍTICO: As variáveis de ambiente do Supabase não foram configuradas corretamente!");
+}
+
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 const client = new MercadoPagoConfig({ 
   accessToken: process.env.VITE_MP_ACCESS_TOKEN 
