@@ -2,14 +2,14 @@ import fs from 'fs';
 
 const fetchInstance = async () => {
 try {
-const response = await fetch('evolution-api-production-f602.up.railway.app', {
+const response = await fetch('https://evolution-api-production-f602.up.railway.app/instance/create', {
 method: 'POST',
 headers: {
 'Content-Type': 'application/json',
 'apikey': '193467281434131969c'
 },
 body: JSON.stringify({
-instanceName: "salao-digital-v7", // Mude o nome para criar uma nova instância sem erro
+instanceName: "salao-digital-v10.24", // Mude o nome para criar uma nova instância sem erro
 qrcode: true,
 integration: "WHATSAPP-BAILEYS"
 })
