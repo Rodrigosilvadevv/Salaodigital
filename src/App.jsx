@@ -17,26 +17,13 @@ import {
   Percent, Target, AlertCircle, CheckSquare, Bot, Printer, Hash
 } from 'lucide-react';
 
-const APP_VERSION = 'v6.3';
+const APP_VERSION = 'v6.2';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
 // Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
-
-// ─── STATUS CANÔNICOS DE COMANDA ────────────────────────────────────────────
-// Use sempre estas constantes (nunca strings soltas tipo 'aberta' ou 'em_uso')
-// para consultar ou atualizar status no banco. Isso garante consistência total
-// entre todas as telas e evita comandas "fantasma" por divergência de texto.
-//   comanda_numeros.status → só pode ser LIVRE ou OCUPADA
-//   comandas.status        → só pode ser OCUPADA ou FECHADA
-// (o próprio banco também passa a validar isso via CHECK constraint — ver migration.sql)
-export const COMANDA_NUMERO_STATUS = { LIVRE: 'livre', OCUPADA: 'ocupada' };
-export const COMANDA_STATUS = { OCUPADA: 'ocupada', FECHADA: 'fechada' };
-
-// Categorias fixas de itens da Loja/Bar
-export const PRODUCT_CATEGORY = { PRODUTO: 'produto', CONSUMO: 'consumo' };
 
 // ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN ───────────────────────────
 import { getMessaging, getToken } from "firebase/messaging";
@@ -1690,10 +1677,10 @@ const ComandaStorefrontPage = ({ slug }) => {
       if (!cn) { setComandaNumero(null); setComanda(null); setLoading(false); return; }
       setComandaNumero(cn);
 
-      if (cn.status !== COMANDA_NUMERO_STATUS.OCUPADA) { setComanda(null); setLoading(false); return; }
+      if (cn.status !== 'em_uso') { setComanda(null); setLoading(false); return; }
 
       const { data: c } = await supabase.from('comandas').select('*')
-        .eq('comanda_numero_id', cn.id).eq('status', COMANDA_STATUS.OCUPADA).maybeSingle();
+        .eq('comanda_numero_id', cn.id).eq('status', 'aberta').maybeSingle();
       if (!c) { setComanda(null); setLoading(false); return; }
       setComanda(c);
       setFechada(false);
@@ -1718,11 +1705,8 @@ const ComandaStorefrontPage = ({ slug }) => {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comanda_items', filter: `comanda_id=eq.${comanda.id}` }, (payload) => {
         setItems(prev => prev.some(i => i.id === payload.new.id) ? prev : [...prev, payload.new]);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comanda_items', filter: `comanda_id=eq.${comanda.id}` }, (payload) => {
-        setItems(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
-      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${comanda.id}` }, (payload) => {
-        if (payload.new.status === COMANDA_STATUS.FECHADA) setFechada(true);
+        if (payload.new.status === 'fechada') setFechada(true);
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -1745,20 +1729,13 @@ const ComandaStorefrontPage = ({ slug }) => {
     return [...master, ...custom];
   }, [barber]);
 
-  // Produtos/Consumo são a mesma tabela `products`, filtrada por categoria.
-  // Itens antigos sem `category` preenchida caem em 'produto' por padrão.
-  const displayedProducts = useMemo(() => {
-    const targetCategory = menuTab === 'consumo' ? PRODUCT_CATEGORY.CONSUMO : PRODUCT_CATEGORY.PRODUTO;
-    return products.filter(p => (p.category || PRODUCT_CATEGORY.PRODUTO) === targetCategory);
-  }, [products, menuTab]);
-
   const addToOrder = async (item, type) => {
     if (!comanda) return;
     setAddingId(item.id);
     try {
       const payload = type === 'produto'
-        ? { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1, delivered: false }
-        : { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1, delivered: false };
+        ? { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 }
+        : { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 };
       const { data, error } = await supabase.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
       setItems(prev => prev.some(i => i.id === data.id) ? prev : [...prev, data]);
@@ -1817,11 +1794,7 @@ const ComandaStorefrontPage = ({ slug }) => {
         <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
           <button onClick={() => setMenuTab('produtos')}
             className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'produtos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
-            Produtos
-          </button>
-          <button onClick={() => setMenuTab('consumo')}
-            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'consumo' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
-            Consumo
+            Cardápio
           </button>
           <button onClick={() => setMenuTab('servicos')}
             className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'servicos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
@@ -1829,10 +1802,10 @@ const ComandaStorefrontPage = ({ slug }) => {
           </button>
         </div>
 
-        {menuTab === 'produtos' || menuTab === 'consumo' ? (
-          displayedProducts.length === 0
-            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum item disponível no momento.</p>
-            : displayedProducts.map(p => (
+        {menuTab === 'produtos' ? (
+          products.length === 0
+            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
+            : products.map(p => (
               <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
                 <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
                   {p.photo_url
@@ -1872,15 +1845,10 @@ const ComandaStorefrontPage = ({ slug }) => {
         {items.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mt-4">
             <p className="font-black text-slate-900 text-sm mb-2">Seus pedidos</p>
-            <div className="space-y-1.5 mb-2">
+            <div className="space-y-1 mb-2">
               {items.map(i => (
-                <div key={i.id} className="flex justify-between items-center text-xs text-slate-600">
-                  <span className="flex items-center gap-1.5">
-                    {i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}
-                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${i.delivered ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                      {i.delivered ? 'Entregue' : 'Pendente'}
-                    </span>
-                  </span>
+                <div key={i.id} className="flex justify-between text-xs text-slate-600">
+                  <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
                   <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
                 </div>
               ))}
@@ -2089,8 +2057,6 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const [openingNumero, setOpeningNumero] = useState(null); // linha de comanda_numeros sendo aberta pelo caixa
   const [openClientName, setOpenClientName] = useState('');
   const [openingNumeroSaving, setOpeningNumeroSaving] = useState(false);
-  const [prodCategory, setProdCategory] = useState(PRODUCT_CATEGORY.PRODUTO); // categoria selecionada no modal de produto
-  const [manageCatalogTab, setManageCatalogTab] = useState(PRODUCT_CATEGORY.PRODUTO); // aba ativa em "Produtos do Bar/Loja"
 
   const barberServices = useMemo(() => {
     const master = (effectiveUser.my_services || []).map(s => {
@@ -2101,18 +2067,13 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     return [...master, ...custom];
   }, [effectiveUser.my_services, effectiveUser.custom_services]);
 
-  // `products` reúne Produtos (varejo) e Consumo (uso interno/comanda rápida) na mesma tabela,
-  // diferenciados pela coluna `category`. Itens antigos sem categoria caem em 'produto'.
-  const produtosList = useMemo(() => products.filter(p => (p.category || PRODUCT_CATEGORY.PRODUTO) === PRODUCT_CATEGORY.PRODUTO), [products]);
-  const consumoList = useMemo(() => products.filter(p => p.category === PRODUCT_CATEGORY.CONSUMO), [products]);
-
   const fetchShopData = useCallback(async () => {
     if (isGuestBarber || !effectiveUser?.id) return;
     setLoadingShop(true);
     try {
       const [{ data: prod }, { data: com }, { data: nums }] = await Promise.all([
         sb.from('products').select('*').eq('barber_id', effectiveUser.id).order('created_at', { ascending: false }),
-        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', COMANDA_STATUS.OCUPADA).order('created_at', { ascending: false }),
+        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', 'aberta').order('created_at', { ascending: false }),
         sb.from('comanda_numeros').select('*').eq('barber_id', effectiveUser.id).order('numero', { ascending: true }),
       ]);
       if (prod) setProducts(prod);
@@ -2135,7 +2096,8 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
 
   useEffect(() => { fetchShopData(); }, [fetchShopData]);
 
-  // Realtime: pedidos entram e saem instantaneamente no painel do caixa/comanda em destaque
+  // Realtime: pedidos entram instantaneamente no painel do caixa/comanda em destaque,
+  // sem precisar recarregar. Mudanças em `comandas` (abrir/fechar) disparam um refresh completo.
   useEffect(() => {
     if (isGuestBarber || !effectiveUser?.id) return;
     const channel = sb.channel(`shop-rt-${effectiveUser.id}`)
@@ -2148,30 +2110,15 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           ? { ...prev, comanda_items: [...(prev.comanda_items || []), newItem] }
           : prev);
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comanda_items', filter: `barber_id=eq.${effectiveUser.id}` }, (payload) => {
-        const updatedItem = payload.new;
-        setComandas(prev => prev.map(c => c.id === updatedItem.comanda_id
-          ? { ...c, comanda_items: (c.comanda_items || []).map(i => i.id === updatedItem.id ? updatedItem : i) }
-          : c));
-        setCaixaComanda(prev => (prev && prev.id === updatedItem.comanda_id)
-          ? { ...prev, comanda_items: (prev.comanda_items || []).map(i => i.id === updatedItem.id ? updatedItem : i) }
-          : prev);
-      })
-      // NOVO: Escutando o DELETE para sumir com itens excluídos em tempo real
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'comanda_items', filter: `barber_id=eq.${effectiveUser.id}` }, (payload) => {
-        const oldItem = payload.old;
-        setComandas(prev => prev.map(c => ({
-          ...c, comanda_items: (c.comanda_items || []).filter(i => i.id !== oldItem.id)
-        })));
-        setCaixaComanda(prev => prev ? {
-          ...prev, comanda_items: (prev.comanda_items || []).filter(i => i.id !== oldItem.id)
-        } : prev);
-      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `barber_id=eq.${effectiveUser.id}` }, fetchShopData)
       .subscribe();
     return () => sb.removeChannel(channel);
   }, [sb, effectiveUser?.id, isGuestBarber, fetchShopData]);
 
+  const comandaPublicUrl = (numeroSlug) => `${window.location.origin}/comanda/${numeroSlug}`;
+  const qrImgUrl = (numeroSlug) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(comandaPublicUrl(numeroSlug))}`;
+
+  // Abre uma comanda fixa específica (fluxo manual, tocando em um número livre da grade)
   const openNumero = async (numeroRow, clientName) => {
     if (isGuestBarber) { alert('A comanda com QR Code fica disponível após criar sua conta.'); return; }
     setOpeningNumeroSaving(true);
@@ -2181,11 +2128,11 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         comanda_numero_id: numeroRow.id,
         numero: String(numeroRow.numero),
         client_name: (clientName || '').trim() || 'Cliente',
-        status: COMANDA_STATUS.OCUPADA,
+        status: 'aberta',
       }).select().single();
       if (error) throw error;
       setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-      setNumeros(prev => prev.map(n => n.id === numeroRow.id ? { ...n, status: COMANDA_NUMERO_STATUS.OCUPADA } : n));
+      setNumeros(prev => prev.map(n => n.id === numeroRow.id ? { ...n, status: 'em_uso' } : n));
       setCaixaComanda({ ...data, comanda_items: [] });
       setCaixaInput(String(numeroRow.numero));
       setOpeningNumero(null);
@@ -2196,6 +2143,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     } finally { setOpeningNumeroSaving(false); }
   };
 
+  // Toca em um número já ocupado: leva direto para o caixa daquela comanda
   const openOccupiedNumero = (numeroRow) => {
     const sessao = comandas.find(c => c.comanda_numero_id === numeroRow.id);
     if (!sessao) { fetchShopData(); return; }
@@ -2203,20 +2151,13 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     setCaixaInput(String(numeroRow.numero));
   };
 
-  // CORREÇÃO: Usando o slug do barbeiro + o número da comanda para a URL única
-  const comandaPublicUrl = (numero) => {
-    const barberSlug = effectiveUser?.slug || effectiveUser?.id;
-    return `${window.location.origin}/comanda/${barberSlug}/${numero}`;
-  };
-  const qrImgUrl = (numero) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(comandaPublicUrl(numero))}`;
-
+  // Gera uma folha para impressão com o QR Code das 100 comandas fixas (imprimir uma vez e plastificar)
   const printAllQrCodes = () => {
     const win = window.open('', '_blank');
     if (!win || numeros.length === 0) return;
-    // CORREÇÃO: n.slug substituído por n.numero para gerar o QR code fixo de cada mesa
     const cards = numeros.map(n => `
       <div class="card">
-        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(comandaPublicUrl(n.numero))}" />
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(comandaPublicUrl(n.slug))}" />
         <p>Comanda #${n.numero}</p>
       </div>`).join('');
     win.document.write(`<!DOCTYPE html><html><head><title>Comandas — ${effectiveUser.name || 'Salão Digital'}</title>
@@ -2234,6 +2175,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     win.document.close();
   };
 
+  // Resolve o pedido "__open__<appointmentId>" vindo do botão "Bar" da Agenda
   useEffect(() => {
     const resolveOpenRequest = async () => {
       if (!focusComandaId || !focusComandaId.toString().startsWith('__open__')) return;
@@ -2248,7 +2190,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       const app = activeAppointments.find(a => String(a.id) === String(appointmentId));
       setGenerating(true);
       try {
-        const freeNumero = numeros.find(n => n.status === COMANDA_NUMERO_STATUS.LIVRE);
+        const freeNumero = numeros.find(n => n.status === 'livre');
         if (!freeNumero) {
           alert('As 100 comandas estão em uso no momento. Feche alguma antes de abrir uma nova.');
           setFocusComandaId(null);
@@ -2260,11 +2202,11 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           comanda_numero_id: freeNumero.id,
           client_name: app?.client_name || app?.client || 'Cliente',
           numero: String(freeNumero.numero),
-          status: COMANDA_STATUS.OCUPADA,
+          status: 'aberta',
         }).select().single();
         if (error) throw error;
         setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-        setNumeros(prev => prev.map(n => n.id === freeNumero.id ? { ...n, status: COMANDA_NUMERO_STATUS.OCUPADA } : n));
+        setNumeros(prev => prev.map(n => n.id === freeNumero.id ? { ...n, status: 'em_uso' } : n));
         setFocusComandaId(data.id);
       } catch (err) {
         console.error(err);
@@ -2279,25 +2221,18 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const focusedNumero = focusedComanda ? numeros.find(n => n.id === focusedComanda.comanda_numero_id) : null;
   const comandaTotal = (c) => (c?.comanda_items || []).reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
 
-  const pendingOrders = useMemo(() => {
-    const list = [];
-    comandas.forEach(c => {
-      (c.comanda_items || []).forEach(item => { if (!item.delivered) list.push({ comanda: c, item }); });
-    });
-    return list.sort((a, b) => new Date(a.item.created_at || 0) - new Date(b.item.created_at || 0));
-  }, [comandas]);
-
   const closeComanda = async (c) => {
     if (!window.confirm(`Fechar comanda #${c.numero}? Total: R$ ${comandaTotal(c).toFixed(2)}`)) return;
     try {
-      await sb.from('comandas').update({ status: COMANDA_STATUS.FECHADA, closed_at: new Date().toISOString() }).eq('id', c.id);
+      await sb.from('comandas').update({ status: 'fechada', closed_at: new Date().toISOString() }).eq('id', c.id);
       setComandas(prev => prev.filter(x => x.id !== c.id));
-      if (c.comanda_numero_id) setNumeros(prev => prev.map(n => n.id === c.comanda_numero_id ? { ...n, status: COMANDA_NUMERO_STATUS.LIVRE } : n));
+      if (c.comanda_numero_id) setNumeros(prev => prev.map(n => n.id === c.comanda_numero_id ? { ...n, status: 'livre' } : n));
       if (focusComandaId === c.id) setFocusComandaId(null);
       if (caixaComanda?.id === c.id) { setCaixaComanda(null); setCaixaInput(''); }
     } catch (err) { console.error(err); alert('Erro ao fechar comanda.'); }
   };
 
+  // ── Caixa: busca comanda por número e adiciona itens ──
   const searchComanda = async () => {
     if (!caixaInput.trim()) return;
     setCaixaLoading(true);
@@ -2305,7 +2240,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       const local = comandas.find(c => c.numero === caixaInput.trim());
       if (local) { setCaixaComanda(local); return; }
       const { data, error } = await sb.from('comandas').select('*, comanda_items(*)')
-        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', COMANDA_STATUS.OCUPADA).maybeSingle();
+        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', 'aberta').maybeSingle();
       if (error) throw error;
       if (!data) { alert('Comanda não encontrada ou já fechada.'); setCaixaComanda(null); return; }
       setCaixaComanda(data);
@@ -2316,10 +2251,9 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const addItemToComanda = async (comanda, item, itemType, setter) => {
     setAddingItemId(item.id);
     try {
-      const nowIso = new Date().toISOString();
       const payload = itemType === 'servico'
-        ? { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1, delivered: true, delivered_at: nowIso }
-        : { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1, delivered: true, delivered_at: nowIso };
+        ? { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 }
+        : { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 };
       const { data, error } = await sb.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
       const updated = { ...comanda, comanda_items: [...(comanda.comanda_items || []), data] };
@@ -2329,37 +2263,9 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     finally { setAddingItemId(null); }
   };
 
-  const markDelivered = async (comanda, item) => {
-    if (item.delivered) return;
-    try {
-      const nowIso = new Date().toISOString();
-      const { error } = await sb.from('comanda_items').update({ delivered: true, delivered_at: nowIso }).eq('id', item.id);
-      if (error) throw error;
-      const patchItems = (list) => (list || []).map(i => i.id === item.id ? { ...i, delivered: true, delivered_at: nowIso } : i);
-      setComandas(prev => prev.map(c => c.id === comanda.id ? { ...c, comanda_items: patchItems(c.comanda_items) } : c));
-      setCaixaComanda(prev => (prev && prev.id === comanda.id) ? { ...prev, comanda_items: patchItems(prev.comanda_items) } : prev);
-    } catch (err) { console.error(err); alert('Erro ao marcar pedido como entregue.'); }
-  };
-
-  // NOVO: Função para excluir item lançado errado
-  const removeItemFromComanda = async (comanda, item) => {
-    if (!window.confirm(`Tem certeza que deseja excluir "${item.product_name}" desta comanda?`)) return;
-    try {
-      const { error } = await sb.from('comanda_items').delete().eq('id', item.id);
-      if (error) throw error;
-      // Atualiza estado local na hora
-      const patchItems = (list) => (list || []).filter(i => i.id !== item.id);
-      setComandas(prev => prev.map(c => c.id === comanda.id ? { ...c, comanda_items: patchItems(c.comanda_items) } : c));
-      setCaixaComanda(prev => (prev && prev.id === comanda.id) ? { ...prev, comanda_items: patchItems(prev.comanda_items) } : prev);
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao excluir item da comanda.');
-    }
-  };
-
   // ── Produtos ──
-  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdCategory(manageCatalogTab); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
-  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdCategory(p.category || PRODUCT_CATEGORY.PRODUTO); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
+  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
+  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
   const handleProductPhotoChange = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     setProdPhotoFile(file); setProdPhotoPreview(URL.createObjectURL(file));
@@ -2381,13 +2287,13 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       }
       if (editingProduct) {
         const { data, error } = await sb.from('products')
-          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url, category: prodCategory })
+          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
           .eq('id', editingProduct.id).select().single();
         if (error) throw error;
         setProducts(prev => prev.map(p => p.id === data.id ? data : p));
       } else {
         const { data, error } = await sb.from('products')
-          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url, category: prodCategory })
+          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
           .select().single();
         if (error) throw error;
         setProducts(prev => [data, ...prev]);
@@ -2402,6 +2308,9 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     try { await sb.from('products').delete().eq('id', p.id); setProducts(prev => prev.filter(x => x.id !== p.id)); }
     catch (err) { console.error(err); alert('Erro ao remover produto.'); }
   };
+
+  const comandaPublicUrl = (numero) => `${window.location.origin}/comanda/${numero}`;
+  const qrImgUrl = (numero) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(comandaPublicUrl(numero))}`;
 
   return (
     <div className="space-y-6">
@@ -2431,8 +2340,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Comanda Ativa</p>
               <p className="text-2xl font-black text-slate-900 mb-1">#{focusedComanda.numero}</p>
               <p className="text-xs text-slate-500 font-bold mb-3">{focusedComanda.client_name}</p>
-              {/* CORREÇÃO AQUI: Passando o número correto da comanda pro gerador de QR */}
-              <img src={qrImgUrl(focusedComanda.numero)} alt={`QR Code comanda ${focusedComanda.numero}`}
+              <img src={qrImgUrl(focusedNumero?.slug)} alt={`QR Code comanda ${focusedComanda.numero}`}
                 className="w-36 h-36 mx-auto rounded-2xl border border-slate-100 mb-3"/>
               <p className="text-[10px] text-slate-400 mb-3">O cliente escaneia o QR ou acessa com o número da comanda para ver o cardápio e pedir.</p>
               <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 mb-3">
@@ -2457,30 +2365,6 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         </section>
       )}
 
-      {/* ── Pedidos Pendentes ── */}
-      {pendingOrders.length > 0 && (
-        <section className="bg-white rounded-3xl border-2 border-blue-300 shadow-sm p-5">
-          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2 mb-3">
-            <Bell size={16} className="text-blue-500"/> Pedidos Pendentes
-            <span className="ml-auto bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{pendingOrders.length}</span>
-          </h3>
-          <div className="space-y-2">
-            {pendingOrders.map(({ comanda: c, item }) => (
-              <div key={item.id} className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
-                <div className="min-w-0">
-                  <p className="text-[10px] font-black text-blue-600 uppercase">Comanda #{c.numero} · {c.client_name}</p>
-                  <p className="text-xs font-bold text-slate-700 truncate">{item.qty}x {item.product_name}{item.item_type === 'servico' ? ' 💈' : ''}</p>
-                </div>
-                <button onClick={() => markDelivered(c, item)}
-                  className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all flex-shrink-0">
-                  <CheckCircle2 size={12}/> Entregar
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* ── Comandas Numeradas Fixas (1-100) ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
@@ -2499,7 +2383,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
               {numeros.map(n => {
                 const sessao = comandas.find(c => c.comanda_numero_id === n.id);
-                const ocupada = n.status === COMANDA_NUMERO_STATUS.OCUPADA;
+                const ocupada = n.status === 'em_uso';
                 return (
                   <button key={n.id}
                     onClick={() => { if (ocupada) { openOccupiedNumero(n); } else { setOpeningNumero(n); setOpenClientName(''); } }}
@@ -2514,7 +2398,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           )}
         <div className="flex items-center gap-4 mt-3">
           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400"/><span className="text-[10px] font-bold text-slate-500">Livre</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/><span className="text-[10px] font-bold text-slate-500">Ocupada</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/><span className="text-[10px] font-bold text-slate-500">Em uso</span></div>
         </div>
       </section>
 
@@ -2565,39 +2449,20 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               </div>
               <p className="text-sm font-black text-blue-600">R$ {comandaTotal(caixaComanda).toFixed(2)}</p>
             </div>
-            
             {(caixaComanda.comanda_items || []).length > 0 && (
-              <div className="space-y-1.5 mb-3">
+              <div className="space-y-1 mb-3">
                 {caixaComanda.comanda_items.map(i => (
-                  <div key={i.id} className="flex justify-between items-center text-[11px] text-slate-600 gap-2">
-                    <span className="truncate">{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
-                    <span className="flex items-center gap-1 flex-shrink-0">
-                      <span className="font-bold mr-1">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
-                      {i.delivered ? (
-                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600">Entregue</span>
-                      ) : (
-                        <button onClick={() => markDelivered(caixaComanda, i)}
-                          className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95 transition-all">
-                          <CheckCircle2 size={10}/> Entregar
-                        </button>
-                      )}
-                      
-                      {/* BOTÃO NOVO: EXCLUIR ITEM DA COMANDA */}
-                      <button onClick={() => removeItemFromComanda(caixaComanda, i)}
-                        title="Excluir item"
-                        className="flex items-center justify-center w-6 h-6 bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-700 rounded-lg active:scale-95 transition-all">
-                        <Trash size={12}/>
-                      </button>
-                    </span>
+                  <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
+                    <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
+                    <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             )}
-            
-            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Produtos</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar produto</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
-              {produtosList.map(p => (
-                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, PRODUCT_CATEGORY.PRODUTO, setCaixaComanda)} disabled={addingItemId === p.id}
+              {products.map(p => (
+                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
                   className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
                   <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
                     {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
@@ -2609,29 +2474,103 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
                 </button>
               ))}
             </div>
-            
-            {consumoList.length > 0 && (
+            {barberServices.length > 0 && (
               <>
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Consumo</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar serviço</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                  {consumoList.map(p => (
-                    <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, PRODUCT_CATEGORY.CONSUMO, setCaixaComanda)} disabled={addingItemId === p.id}
-                      className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
-                      <div className="w-8 h-8 rounded-lg bg-teal-100 overflow-hidden flex-shrink-0">
-                        {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
+                  {barberServices.map(s => (
+                    <button key={s.id} onClick={() => addItemToComanda(caixaComanda, s, 'servico', setCaixaComanda)} disabled={addingItemId === s.id}
+                      className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 text-purple-500">
+                        <Scissors size={14}/>
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-700 truncate">{p.name}</p>
-                        <p className="text-[9px] text-teal-600 font-black">R$ {Number(p.price).toFixed(2)}</p>
+                        <p className="text-[10px] font-bold text-slate-700 truncate">{s.name}</p>
+                        <p className="text-[9px] text-purple-600 font-black">R$ {Number(s.price).toFixed(2)}</p>
                       </div>
                     </button>
                   ))}
                 </div>
               </>
             )}
+            <button onClick={() => closeComanda(caixaComanda)}
+              className="w-full py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
+              Fechar comanda e somar ao atendimento
+            </button>
           </div>
         )}
       </section>
+
+      {/* ── Gestão de Produtos ── */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+            <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
+          </h3>
+          <button onClick={openNewProduct}
+            className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
+            <PlusCircle size={12}/> Novo
+          </button>
+        </div>
+        {loadingShop
+          ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+          : products.length === 0
+          ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+              <p className="text-slate-400 text-sm">Nenhum produto cadastrado ainda.</p>
+            </div>
+          : <div className="space-y-2">
+              {products.map(p => (
+                <div key={p.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="w-12 h-12 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0">
+                    {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                      : <div className="w-full h-full flex items-center justify-center text-slate-400"><Tag size={16}/></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
+                    <p className="text-[11px] text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
+                  </div>
+                  <button onClick={() => openEditProduct(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500">
+                    <Edit3 size={14}/>
+                  </button>
+                  <button onClick={() => deleteProductItem(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-red-500">
+                    <Trash2 size={14}/>
+                  </button>
+                </div>
+              ))}
+            </div>}
+      </section>
+
+      {/* ── Modal Produto ── */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowProductModal(false)}/>
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h3 className="font-black text-slate-900 text-lg mb-4">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h3>
+            <label className="block mb-4">
+              <div className="w-24 h-24 mx-auto rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden cursor-pointer">
+                {prodPhotoPreview
+                  ? <img src={prodPhotoPreview} className="w-full h-full object-cover" alt="Prévia"/>
+                  : <Camera size={22} className="text-slate-400"/>}
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleProductPhotoChange}/>
+              <p className="text-center text-[10px] text-slate-400 font-bold mt-2">Toque para escolher foto</p>
+            </label>
+            <input value={prodName} onChange={(e) => setProdName(e.target.value)} placeholder="Nome do produto"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
+            <input value={prodPrice} onChange={(e) => setProdPrice(e.target.value.replace(/[^0-9.,]/g,''))} placeholder="Valor (R$)" inputMode="decimal"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-5"/>
+            <div className="flex gap-2">
+              <button onClick={() => setShowProductModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">
+                Cancelar
+              </button>
+              <button onClick={saveProduct} disabled={savingProduct}
+                className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50">
+                {savingProduct ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
