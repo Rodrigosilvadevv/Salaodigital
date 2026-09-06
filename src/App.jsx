@@ -226,6 +226,33 @@ const DarkModeToggle = ({ isDark, onToggle }) => (
 );
 
 // ─── GOAL CARD ────────────────────────────────────────────────────────────────
+// ─── BOTTOM NAVIGATION (estilo Instagram) ─────────────────────────────────────
+const BottomNavBar = ({ activeTab, setActiveTab, tabs, tabLabels, tabIcons, badges = {} }) => (
+  <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex items-stretch z-30 shadow-[0_-2px_12px_rgba(0,0,0,0.06)]">
+    {tabs.map(tab => {
+      const Icon = tabIcons[tab];
+      const active = activeTab === tab;
+      const badge = badges[tab];
+      return (
+        <button key={tab} onClick={() => setActiveTab(tab)}
+          className={`relative flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95
+            ${active ? 'text-slate-900' : 'text-slate-400'}`}>
+          <div className="relative">
+            <Icon size={20} strokeWidth={active ? 2.5 : 2}/>
+            {badge > 0 && (
+              <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[8px] font-black min-w-[14px] h-[14px] px-0.5 rounded-full flex items-center justify-center">
+                {badge > 9 ? '9+' : badge}
+              </span>
+            )}
+          </div>
+          <span className={`text-[9px] uppercase tracking-tight ${active ? 'font-black' : 'font-bold'}`}>{tabLabels[tab]}</span>
+          {active && <span className="absolute top-0 w-8 h-0.5 bg-slate-900 rounded-full"/>}
+        </button>
+      );
+    })}
+  </nav>
+);
+
 const GoalCard = ({ totalAppointments, slug, isGuest }) => {
   const META_GOAL=30, progress=Math.min(100,Math.round((totalAppointments/META_GOAL)*100)), achieved=totalAppointments>=META_GOAL, remaining=META_GOAL-totalAppointments;
   const publicUrl=getPublicUrl(slug||'profissional');
@@ -1632,6 +1659,119 @@ const PublicBarberPage = ({ barber }) => {
 };
 
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
+// ─── VITRINE PÚBLICA DA COMANDA (acesso via nº ou QR Code) ────────────────────
+const ComandaStorefrontPage = ({ numero }) => {
+  const [loading, setLoading] = useState(true);
+  const [comanda, setComanda] = useState(null);
+  const [barber, setBarber] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [items, setItems] = useState([]);
+  const [addingId, setAddingId] = useState(null);
+
+  const loadAll = useCallback(async () => {
+    try {
+      const { data: c } = await supabase.from('comandas').select('*').eq('numero', numero).eq('status', 'aberta').maybeSingle();
+      if (!c) { setComanda(null); setLoading(false); return; }
+      setComanda(c);
+      const [{ data: b }, { data: p }, { data: it }] = await Promise.all([
+        supabase.from('profiles').select('*').eq('id', c.barber_id).maybeSingle(),
+        supabase.from('products').select('*').eq('barber_id', c.barber_id).order('created_at', { ascending: false }),
+        supabase.from('comanda_items').select('*').eq('comanda_id', c.id).order('created_at', { ascending: true }),
+      ]);
+      setBarber(b); setProducts(p || []); setItems(it || []);
+    } catch (err) { console.error(err); }
+    finally { setLoading(false); }
+  }, [numero]);
+
+  useEffect(() => {
+    loadAll();
+    const t = setInterval(loadAll, 8000);
+    return () => clearInterval(t);
+  }, [loadAll]);
+
+  const addToOrder = async (product) => {
+    if (!comanda) return;
+    setAddingId(product.id);
+    try {
+      const { data, error } = await supabase.from('comanda_items').insert({
+        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
+      }).select().single();
+      if (error) throw error;
+      setItems(prev => [...prev, data]);
+    } catch (err) { console.error(err); alert('Não foi possível enviar o pedido. Tente novamente.'); }
+    finally { setAddingId(null); }
+  };
+
+  const total = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-slate-400" size={32}/>
+      </div>
+    );
+  }
+
+  if (!comanda) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <XCircle size={40} className="text-red-400 mb-3"/>
+        <p className="font-black text-slate-700">Comanda não encontrada</p>
+        <p className="text-xs text-slate-400 mt-1">Verifique o número ou peça uma nova ao atendente.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-10">
+      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-10">
+        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Comanda #{comanda.numero}</p>
+        <h1 className="text-lg font-black text-slate-900">{barber?.name || 'Loja / Bar'}</h1>
+        <p className="text-xs text-slate-400">Cliente: {comanda.client_name}</p>
+      </header>
+      <main className="p-4 max-w-md mx-auto space-y-3">
+        <p className="text-[11px] font-black text-slate-400 uppercase tracking-tight px-1">Cardápio</p>
+        {products.length === 0
+          ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
+          : products.map(p => (
+            <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                {p.photo_url
+                  ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                  : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={18}/></div>}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
+                <p className="text-xs text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
+              </div>
+              <button onClick={() => addToOrder(p)} disabled={addingId === p.id}
+                className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all disabled:opacity-50">
+                {addingId === p.id ? '...' : 'Pedir'}
+              </button>
+            </div>
+          ))}
+
+        {items.length > 0 && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mt-4">
+            <p className="font-black text-slate-900 text-sm mb-2">Seus pedidos</p>
+            <div className="space-y-1 mb-2">
+              {items.map(i => (
+                <div key={i.id} className="flex justify-between text-xs text-slate-600">
+                  <span>{i.qty}x {i.product_name}</span>
+                  <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between border-t border-slate-100 pt-2 font-black text-slate-900">
+              <span>Total</span><span>R$ {total.toFixed(2)}</span>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES: MS, isDark, onToggleDark }) => {
   const [view,setView]=useState('home'), [step,setStep]=useState(1), [bookingData,setBookingData]=useState({service:null,barber:null,price:null,date:null,time:null}), [userCoords,setUserCoords]=useState(null);
   const handleDeleteAccount=async()=>{
@@ -1805,6 +1945,364 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 };
 
 // ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
+// ─── LOJA / BAR + COMANDAS ─────────────────────────────────────────────────────
+const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, focusComandaId, setFocusComandaId }) => {
+  const [products, setProducts] = useState([]);
+  const [comandas, setComandas] = useState([]);
+  const [loadingShop, setLoadingShop] = useState(false);
+  const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [prodName, setProdName] = useState('');
+  const [prodPrice, setProdPrice] = useState('');
+  const [prodPhotoFile, setProdPhotoFile] = useState(null);
+  const [prodPhotoPreview, setProdPhotoPreview] = useState('');
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [caixaInput, setCaixaInput] = useState('');
+  const [caixaComanda, setCaixaComanda] = useState(null);
+  const [caixaLoading, setCaixaLoading] = useState(false);
+  const [addingItemId, setAddingItemId] = useState(null);
+
+  const fetchShopData = useCallback(async () => {
+    if (isGuestBarber || !effectiveUser?.id) return;
+    setLoadingShop(true);
+    try {
+      const [{ data: prod }, { data: com }] = await Promise.all([
+        sb.from('products').select('*').eq('barber_id', effectiveUser.id).order('created_at', { ascending: false }),
+        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', 'aberta').order('created_at', { ascending: false }),
+      ]);
+      if (prod) setProducts(prod);
+      if (com) setComandas(com);
+    } catch (err) { console.error('Erro ao carregar loja:', err); }
+    finally { setLoadingShop(false); }
+  }, [sb, effectiveUser?.id, isGuestBarber]);
+
+  useEffect(() => { fetchShopData(); }, [fetchShopData]);
+
+  useEffect(() => {
+    if (isGuestBarber || !effectiveUser?.id) return;
+    const channel = sb.channel(`shop-rt-${effectiveUser.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_items' }, fetchShopData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `barber_id=eq.${effectiveUser.id}` }, fetchShopData)
+      .subscribe();
+    return () => sb.removeChannel(channel);
+  }, [sb, effectiveUser?.id, isGuestBarber, fetchShopData]);
+
+  const generateComandaNumber = () => String(Math.floor(1000 + Math.random() * 9000));
+
+  // Resolve o pedido "__open__<appointmentId>" vindo do botão "Bar" da Agenda
+  useEffect(() => {
+    const resolveOpenRequest = async () => {
+      if (!focusComandaId || !focusComandaId.toString().startsWith('__open__')) return;
+      const appointmentId = focusComandaId.replace('__open__', '');
+      if (isGuestBarber) {
+        alert('A comanda com QR Code fica disponível após criar sua conta.');
+        setFocusComandaId(null);
+        return;
+      }
+      const existing = comandas.find(c => String(c.appointment_id) === String(appointmentId));
+      if (existing) { setFocusComandaId(existing.id); return; }
+      const app = activeAppointments.find(a => String(a.id) === String(appointmentId));
+      setGenerating(true);
+      try {
+        let numero = generateComandaNumber();
+        for (let i = 0; i < 5 && comandas.some(c => c.numero === numero); i++) numero = generateComandaNumber();
+        const { data, error } = await sb.from('comandas').insert({
+          barber_id: effectiveUser.id,
+          appointment_id: appointmentId,
+          client_name: app?.client_name || app?.client || 'Cliente',
+          numero,
+          status: 'aberta',
+        }).select().single();
+        if (error) throw error;
+        setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
+        setFocusComandaId(data.id);
+      } catch (err) {
+        console.error(err);
+        alert('Não foi possível gerar a comanda. Verifique se a tabela "comandas" existe no Supabase.');
+        setFocusComandaId(null);
+      } finally { setGenerating(false); }
+    };
+    resolveOpenRequest();
+  }, [focusComandaId, comandas, activeAppointments, isGuestBarber, effectiveUser?.id, sb, setFocusComandaId]);
+
+  const focusedComanda = comandas.find(c => c.id === focusComandaId);
+  const comandaTotal = (c) => (c?.comanda_items || []).reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
+
+  const closeComanda = async (c) => {
+    if (!window.confirm(`Fechar comanda #${c.numero}? Total: R$ ${comandaTotal(c).toFixed(2)}`)) return;
+    try {
+      await sb.from('comandas').update({ status: 'fechada' }).eq('id', c.id);
+      setComandas(prev => prev.filter(x => x.id !== c.id));
+      if (focusComandaId === c.id) setFocusComandaId(null);
+      if (caixaComanda?.id === c.id) { setCaixaComanda(null); setCaixaInput(''); }
+    } catch (err) { console.error(err); alert('Erro ao fechar comanda.'); }
+  };
+
+  // ── Caixa: busca comanda por número e adiciona itens ──
+  const searchComanda = async () => {
+    if (!caixaInput.trim()) return;
+    setCaixaLoading(true);
+    try {
+      const local = comandas.find(c => c.numero === caixaInput.trim());
+      if (local) { setCaixaComanda(local); return; }
+      const { data, error } = await sb.from('comandas').select('*, comanda_items(*)')
+        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', 'aberta').maybeSingle();
+      if (error) throw error;
+      if (!data) { alert('Comanda não encontrada ou já fechada.'); setCaixaComanda(null); return; }
+      setCaixaComanda(data);
+    } catch (err) { console.error(err); alert('Erro ao buscar comanda.'); }
+    finally { setCaixaLoading(false); }
+  };
+
+  const addItemToComanda = async (comanda, product, setter) => {
+    setAddingItemId(product.id);
+    try {
+      const { data, error } = await sb.from('comanda_items').insert({
+        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
+      }).select().single();
+      if (error) throw error;
+      const updated = { ...comanda, comanda_items: [...(comanda.comanda_items || []), data] };
+      setter(updated);
+      setComandas(prev => prev.map(c => c.id === comanda.id ? updated : c));
+    } catch (err) { console.error(err); alert('Erro ao lançar item. Verifique a tabela "comanda_items".'); }
+    finally { setAddingItemId(null); }
+  };
+
+  // ── Produtos ──
+  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
+  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
+  const handleProductPhotoChange = (e) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setProdPhotoFile(file); setProdPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const saveProduct = async () => {
+    if (isGuestBarber) { alert('Cadastre produtos após criar sua conta.'); return; }
+    if (!prodName.trim() || !prodPrice) { alert('Preencha nome e valor do produto.'); return; }
+    setSavingProduct(true);
+    try {
+      let photo_url = editingProduct?.photo_url || '';
+      if (prodPhotoFile) {
+        const ext = prodPhotoFile.name.split('.').pop();
+        const fileName = `product-${effectiveUser.id}-${Date.now()}.${ext}`;
+        const { error: upErr } = await sb.storage.from('barber-photos').upload(fileName, prodPhotoFile);
+        if (upErr) throw upErr;
+        const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+        photo_url = publicUrl;
+      }
+      if (editingProduct) {
+        const { data, error } = await sb.from('products')
+          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
+          .eq('id', editingProduct.id).select().single();
+        if (error) throw error;
+        setProducts(prev => prev.map(p => p.id === data.id ? data : p));
+      } else {
+        const { data, error } = await sb.from('products')
+          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
+          .select().single();
+        if (error) throw error;
+        setProducts(prev => [data, ...prev]);
+      }
+      setShowProductModal(false);
+    } catch (err) { console.error(err); alert('Erro ao salvar produto. Verifique se a tabela "products" existe no Supabase.'); }
+    finally { setSavingProduct(false); }
+  };
+
+  const deleteProductItem = async (p) => {
+    if (!window.confirm(`Remover "${p.name}" da loja?`)) return;
+    try { await sb.from('products').delete().eq('id', p.id); setProducts(prev => prev.filter(x => x.id !== p.id)); }
+    catch (err) { console.error(err); alert('Erro ao remover produto.'); }
+  };
+
+  const comandaPublicUrl = (numero) => `${window.location.origin}/comanda/${numero}`;
+  const qrImgUrl = (numero) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(comandaPublicUrl(numero))}`;
+
+  return (
+    <div className="space-y-6">
+      <div className="mb-2">
+        <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+          <Tag size={20} className="text-amber-500"/> Loja / Bar
+        </h2>
+        <p className="text-xs text-slate-400">Comandas com QR Code, caixa e produtos do estabelecimento</p>
+      </div>
+
+      {isGuestBarber && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+          ⚠️ Crie sua conta para gerar comandas reais e cadastrar produtos.
+        </div>
+      )}
+
+      {/* ── Comanda em destaque (gerada pela Agenda) ── */}
+      {(generating || focusedComanda) && (
+        <section className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-5 text-center">
+          {generating ? (
+            <div className="py-6 flex flex-col items-center gap-2">
+              <Loader2 className="animate-spin text-amber-500" size={24}/>
+              <p className="text-xs text-slate-400 font-bold">Gerando comanda...</p>
+            </div>
+          ) : (
+            <>
+              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Comanda Ativa</p>
+              <p className="text-2xl font-black text-slate-900 mb-1">#{focusedComanda.numero}</p>
+              <p className="text-xs text-slate-500 font-bold mb-3">{focusedComanda.client_name}</p>
+              <img src={qrImgUrl(focusedComanda.numero)} alt={`QR Code comanda ${focusedComanda.numero}`}
+                className="w-36 h-36 mx-auto rounded-2xl border border-slate-100 mb-3"/>
+              <p className="text-[10px] text-slate-400 mb-3">O cliente escaneia o QR ou acessa com o número da comanda para ver o cardápio e pedir.</p>
+              <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 mb-3">
+                <span className="text-[11px] font-bold text-slate-500">Consumo até agora</span>
+                <span className="text-sm font-black text-slate-900">R$ {comandaTotal(focusedComanda).toFixed(2)}</span>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => { setCaixaInput(focusedComanda.numero); setCaixaComanda(focusedComanda); }}
+                  className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
+                  Lançar consumo
+                </button>
+                <button onClick={() => closeComanda(focusedComanda)}
+                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
+                  Fechar comanda
+                </button>
+              </div>
+              <button onClick={() => setFocusComandaId(null)} className="text-[10px] text-slate-400 font-bold mt-3 underline">
+                Ocultar
+              </button>
+            </>
+          )}
+        </section>
+      )}
+
+      {/* ── Caixa: buscar comanda por número ── */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+        <h3 className="font-black text-slate-900 text-sm mb-3 flex items-center gap-2">
+          <QrCode size={16} className="text-blue-500"/> Caixa — Lançar Consumo
+        </h3>
+        <div className="flex gap-2 mb-3">
+          <input value={caixaInput} onChange={(e) => setCaixaInput(e.target.value.replace(/\D/g,'').slice(0,4))}
+            placeholder="Nº da comanda" inputMode="numeric"
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"/>
+          <button onClick={searchComanda} disabled={caixaLoading || !caixaInput.trim()}
+            className="px-4 bg-blue-600 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50 active:scale-95 transition-all">
+            {caixaLoading ? '...' : 'Buscar'}
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mb-2">Digite o número informado pelo cliente ou escaneado do QR Code.</p>
+
+        {caixaComanda && (
+          <div className="mt-2 border-t border-slate-100 pt-3">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-black text-slate-900 text-sm">Comanda #{caixaComanda.numero}</p>
+                <p className="text-[10px] text-slate-400">{caixaComanda.client_name}</p>
+              </div>
+              <p className="text-sm font-black text-blue-600">R$ {comandaTotal(caixaComanda).toFixed(2)}</p>
+            </div>
+            {(caixaComanda.comanda_items || []).length > 0 && (
+              <div className="space-y-1 mb-3">
+                {caixaComanda.comanda_items.map(i => (
+                  <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
+                    <span>{i.qty}x {i.product_name}</span>
+                    <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar produto</p>
+            <div className="grid grid-cols-2 gap-2 mb-3">
+              {products.map(p => (
+                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, setCaixaComanda)} disabled={addingItemId === p.id}
+                  className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
+                  <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
+                    {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold text-slate-700 truncate">{p.name}</p>
+                    <p className="text-[9px] text-blue-600 font-black">R$ {Number(p.price).toFixed(2)}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <button onClick={() => closeComanda(caixaComanda)}
+              className="w-full py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
+              Fechar comanda e somar ao atendimento
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* ── Gestão de Produtos ── */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+            <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
+          </h3>
+          <button onClick={openNewProduct}
+            className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
+            <PlusCircle size={12}/> Novo
+          </button>
+        </div>
+        {loadingShop
+          ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+          : products.length === 0
+          ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+              <p className="text-slate-400 text-sm">Nenhum produto cadastrado ainda.</p>
+            </div>
+          : <div className="space-y-2">
+              {products.map(p => (
+                <div key={p.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="w-12 h-12 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0">
+                    {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                      : <div className="w-full h-full flex items-center justify-center text-slate-400"><Tag size={16}/></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
+                    <p className="text-[11px] text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
+                  </div>
+                  <button onClick={() => openEditProduct(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500">
+                    <Edit3 size={14}/>
+                  </button>
+                  <button onClick={() => deleteProductItem(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-red-500">
+                    <Trash2 size={14}/>
+                  </button>
+                </div>
+              ))}
+            </div>}
+      </section>
+
+      {/* ── Modal Produto ── */}
+      {showProductModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowProductModal(false)}/>
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <h3 className="font-black text-slate-900 text-lg mb-4">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h3>
+            <label className="block mb-4">
+              <div className="w-24 h-24 mx-auto rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden cursor-pointer">
+                {prodPhotoPreview
+                  ? <img src={prodPhotoPreview} className="w-full h-full object-cover" alt="Prévia"/>
+                  : <Camera size={22} className="text-slate-400"/>}
+              </div>
+              <input type="file" accept="image/*" className="hidden" onChange={handleProductPhotoChange}/>
+              <p className="text-center text-[10px] text-slate-400 font-bold mt-2">Toque para escolher foto</p>
+            </label>
+            <input value={prodName} onChange={(e) => setProdName(e.target.value)} placeholder="Nome do produto"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
+            <input value={prodPrice} onChange={(e) => setProdPrice(e.target.value.replace(/[^0-9.,]/g,''))} placeholder="Valor (R$)" inputMode="decimal"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-5"/>
+            <div className="flex gap-2">
+              <button onClick={() => setShowProductModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">
+                Cancelar
+              </button>
+              <button onClick={saveProduct} disabled={savingProduct}
+                className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50">
+                {savingProduct ? 'Salvando...' : 'Salvar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase: sb, isGuestBarber, isDark, onToggleDark }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
@@ -1825,6 +2323,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [newSvcDuration, setNewSvcDuration] = useState('45min');
   const [showAddCustomSvc, setShowAddCustomSvc] = useState(false);
   const [showClientHistory, setShowClientHistory] = useState(false);
+  const [focusComandaId, setFocusComandaId] = useState(null);
 
   // Estados do suporte direto para o Painel Admin
   const [supportMessage, setSupportMessage] = useState('');
@@ -2178,8 +2677,9 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   };
 
   const rating = getBarberRating(effectiveUser);
-  const tabs = ['home', 'services', 'config', 'reports'];
-  const tabLabels = { home: 'Início', services: 'Serviços', config: 'Perfil & Agenda', reports: 'Relatórios' };
+  const tabs = ['home', 'reports', 'shop', 'config'];
+  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja/Bar', config: 'Ajustes' };
+  const tabIcons = { home: Calendar, reports: BarChart2, shop: Tag, config: Settings };
 
   return (
     <div className="min-h-screen bg-slate-50 pb-24 font-sans">
@@ -2333,20 +2833,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       </div>
     </header>
  
-    {/* ── Tabs ── */}
-    <nav className="px-4 py-3 flex gap-1.5 overflow-x-auto bg-white border-b border-slate-100 sticky top-[80px] z-10">
-      {tabs.map(tab => (
-        <button key={tab} onClick={() => setActiveTab(tab)}
-          className={`flex-shrink-0 py-2 px-3.5 rounded-full text-[10px] font-bold transition-all whitespace-nowrap flex items-center gap-1.5
-            ${activeTab === tab ? 'bg-slate-900 text-white' : 'text-slate-500 bg-slate-50'}
-            ${tab === 'reports' ? 'ml-auto' : ''}`}>
-          {tab === 'reports' && <BarChart2 size={11}/>}
-          {tabLabels[tab]}
-        </button>
-      ))}
-    </nav>
- 
-    <main className="p-6 max-w-md mx-auto">
+    <main className="p-6 max-w-md mx-auto pb-24">
  
       {/* ══════════════════════════ HOME TAB ══════════════════════════ */}
       {activeTab === 'home' && (
@@ -2624,6 +3111,14 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                         </div>
                       </div>
                       <button onClick={() => {
+                        setActiveTab('shop');
+                        setFocusComandaId(`__open__${app.id}`);
+                      }} title="Abrir comanda do Bar/Loja para este atendimento"
+                        className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
+                        <Tag size={18}/>
+                        <span className="text-[8px] font-black uppercase">Bar</span>
+                      </button>
+                      <button onClick={() => {
                         if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
                           if (app.isManual) {
                             const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
@@ -2649,6 +3144,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       {/* ══════════════════════════ SERVICES TAB ══════════════════════════ */}
       {activeTab === 'services' && (
         <div className="space-y-4">
+          <button onClick={() => setActiveTab('config')}
+            className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-tight">
+            <ArrowLeft size={14}/> Voltar para Ajustes
+          </button>
           <div className="p-4 bg-blue-50 rounded-2xl mb-4">
             <p className="text-xs text-blue-700 font-medium">
               {isGuestBarber ? 'Modo Demo — explore os serviços (sem salvar)'
@@ -2745,6 +3244,21 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
       {/* ══════════════════════════ CONFIG TAB ════════════════════════════ */}
       {activeTab === 'config' && (
           <div className="space-y-6">
+            {/* Atalho para gestão de serviços */}
+            <button onClick={() => setActiveTab('services')}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <Scissors size={16} className="text-blue-500"/>
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-slate-900 text-sm">Meus Serviços</p>
+                  <p className="text-[10px] text-slate-400">Gerencie os serviços e preços oferecidos</p>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-slate-400"/>
+            </button>
+
             {/* Fotos do trabalho */}
             <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">
@@ -3141,7 +3655,21 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
           </section>
         </div>
       )}
+
+      {/* ══════════════════════════ SHOP/BAR TAB ══════════════════════════ */}
+      {activeTab === 'shop' && (
+        <ShopBarSection
+          effectiveUser={effectiveUser}
+          isGuestBarber={isGuestBarber}
+          sb={sb}
+          activeAppointments={allAppointments}
+          focusComandaId={focusComandaId}
+          setFocusComandaId={setFocusComandaId}
+        />
+      )}
     </main>
+
+    <BottomNavBar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabs} tabLabels={tabLabels} tabIcons={tabIcons}/>
   </div>
 );
 };
@@ -3156,6 +3684,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [isGuestBarber, setIsGuestBarber] = useState(false);
   const [publicBarber, setPublicBarber] = useState(null);
+  const [publicComandaNumero, setPublicComandaNumero] = useState(null);
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('salao_dark_mode');
     if (saved !== null) return saved === 'true';
@@ -3191,6 +3720,12 @@ export default function App() {
  
       // Rota admin
       if (path === '/estrela2016-v2') { setLoading(false); return; }
+
+      // Rota da vitrine da comanda (acesso via QR Code ou número)
+      if (path.startsWith('/comanda/')) {
+        const numero = path.split('/comanda/')[1]?.replace(/\/$/, '');
+        if (numero) { setPublicComandaNumero(numero); setLoading(false); return; }
+      }
  
       const slug = path.replace(/^\//, '').replace(/\/$/, '');
       if (!slug) { setLoading(false); restoreSession(); return; }
@@ -3352,6 +3887,7 @@ export default function App() {
   }
  
   if (isAdminRoute) return <AdminDashboard/>;
+  if (publicComandaNumero) return <ComandaStorefrontPage numero={publicComandaNumero}/>;
   if (publicBarber) return <PublicBarberPage barber={publicBarber}/>;
  
   return (
