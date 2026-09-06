@@ -14,7 +14,7 @@ import {
   BarChart2, TrendingUp, Moon, Sun, Video, VideoOff, RefreshCw, PlusCircle, X,
   Gift, QrCode, Type, FileText, Users, Tag, Settings, Activity, MessageSquare,
   ChevronDown, ChevronUp, Search, Filter, Reply, MoreVertical, Circle, TrendingDown,
-  Percent, Target, AlertCircle, CheckSquare, Bot
+  Percent, Target, AlertCircle, CheckSquare, Bot, Printer, Hash
 } from 'lucide-react';
 
 const APP_VERSION = 'v6.2';
@@ -1660,44 +1660,85 @@ const PublicBarberPage = ({ barber }) => {
 
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
 // ─── VITRINE PÚBLICA DA COMANDA (acesso via nº ou QR Code) ────────────────────
-const ComandaStorefrontPage = ({ numero }) => {
+const ComandaStorefrontPage = ({ slug }) => {
   const [loading, setLoading] = useState(true);
-  const [comanda, setComanda] = useState(null);
+  const [comandaNumero, setComandaNumero] = useState(null); // linha fixa da tabela comanda_numeros (1-100)
+  const [comanda, setComanda] = useState(null); // sessão aberta atual (tabela comandas)
   const [barber, setBarber] = useState(null);
   const [products, setProducts] = useState([]);
   const [items, setItems] = useState([]);
   const [addingId, setAddingId] = useState(null);
+  const [menuTab, setMenuTab] = useState('produtos');
+  const [fechada, setFechada] = useState(false);
 
   const loadAll = useCallback(async () => {
     try {
-      const { data: c } = await supabase.from('comandas').select('*').eq('numero', numero).eq('status', 'aberta').maybeSingle();
+      const { data: cn } = await supabase.from('comanda_numeros').select('*').eq('slug', slug).maybeSingle();
+      if (!cn) { setComandaNumero(null); setComanda(null); setLoading(false); return; }
+      setComandaNumero(cn);
+
+      if (cn.status !== 'em_uso') { setComanda(null); setLoading(false); return; }
+
+      const { data: c } = await supabase.from('comandas').select('*')
+        .eq('comanda_numero_id', cn.id).eq('status', 'aberta').maybeSingle();
       if (!c) { setComanda(null); setLoading(false); return; }
       setComanda(c);
+      setFechada(false);
+
       const [{ data: b }, { data: p }, { data: it }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', c.barber_id).maybeSingle(),
-        supabase.from('products').select('*').eq('barber_id', c.barber_id).order('created_at', { ascending: false }),
+        supabase.from('profiles').select('*').eq('id', cn.barber_id).maybeSingle(),
+        supabase.from('products').select('*').eq('barber_id', cn.barber_id).order('created_at', { ascending: false }),
         supabase.from('comanda_items').select('*').eq('comanda_id', c.id).order('created_at', { ascending: true }),
       ]);
       setBarber(b); setProducts(p || []); setItems(it || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [numero]);
+  }, [slug]);
 
+  useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Realtime: pedidos do próprio cliente OU lançados pelo caixa aparecem instantaneamente,
+  // e o fechamento da comanda pelo caixa também reflete na hora.
   useEffect(() => {
-    loadAll();
-    const t = setInterval(loadAll, 8000);
-    return () => clearInterval(t);
+    if (!comanda?.id) return;
+    const channel = supabase.channel(`comanda-public-${comanda.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comanda_items', filter: `comanda_id=eq.${comanda.id}` }, (payload) => {
+        setItems(prev => prev.some(i => i.id === payload.new.id) ? prev : [...prev, payload.new]);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${comanda.id}` }, (payload) => {
+        if (payload.new.status === 'fechada') setFechada(true);
+      })
+      .subscribe();
+    return () => supabase.removeChannel(channel);
+  }, [comanda?.id]);
+
+  // Revalida ao voltar para a tela (celular travado, app em segundo plano, etc.)
+  useEffect(() => {
+    const onVisible = () => { if (document.visibilityState === 'visible') loadAll(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, [loadAll]);
 
-  const addToOrder = async (product) => {
+  const barberServices = useMemo(() => {
+    if (!barber) return [];
+    const master = (barber.my_services || []).map(s => {
+      const m = MASTER_SERVICES.find(ms => ms.id === s.id);
+      return m ? { id: `master-${m.id}`, name: m.name, price: s.price } : null;
+    }).filter(Boolean);
+    const custom = (barber.custom_services || []).map(cs => ({ id: cs.id, name: cs.name, price: cs.price }));
+    return [...master, ...custom];
+  }, [barber]);
+
+  const addToOrder = async (item, type) => {
     if (!comanda) return;
-    setAddingId(product.id);
+    setAddingId(item.id);
     try {
-      const { data, error } = await supabase.from('comanda_items').insert({
-        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
-      }).select().single();
+      const payload = type === 'produto'
+        ? { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 }
+        : { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 };
+      const { data, error } = await supabase.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
-      setItems(prev => [...prev, data]);
+      setItems(prev => prev.some(i => i.id === data.id) ? prev : [...prev, data]);
     } catch (err) { console.error(err); alert('Não foi possível enviar o pedido. Tente novamente.'); }
     finally { setAddingId(null); }
   };
@@ -1712,12 +1753,32 @@ const ComandaStorefrontPage = ({ numero }) => {
     );
   }
 
-  if (!comanda) {
+  if (!comandaNumero) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <XCircle size={40} className="text-red-400 mb-3"/>
         <p className="font-black text-slate-700">Comanda não encontrada</p>
-        <p className="text-xs text-slate-400 mt-1">Verifique o número ou peça uma nova ao atendente.</p>
+        <p className="text-xs text-slate-400 mt-1">Verifique o link ou peça ajuda ao atendente.</p>
+      </div>
+    );
+  }
+
+  if (fechada) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <CheckCircle2 size={40} className="text-green-500 mb-3"/>
+        <p className="font-black text-slate-700">Comanda #{comandaNumero.numero} fechada</p>
+        <p className="text-xs text-slate-400 mt-1">Obrigado pela preferência!</p>
+      </div>
+    );
+  }
+
+  if (!comanda) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
+        <Clock size={40} className="text-amber-400 mb-3"/>
+        <p className="font-black text-slate-700">Comanda #{comandaNumero.numero} ainda não foi aberta</p>
+        <p className="text-xs text-slate-400 mt-1">Peça ao atendente para abrir sua comanda.</p>
       </div>
     );
   }
@@ -1730,26 +1791,56 @@ const ComandaStorefrontPage = ({ numero }) => {
         <p className="text-xs text-slate-400">Cliente: {comanda.client_name}</p>
       </header>
       <main className="p-4 max-w-md mx-auto space-y-3">
-        <p className="text-[11px] font-black text-slate-400 uppercase tracking-tight px-1">Cardápio</p>
-        {products.length === 0
-          ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
-          : products.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
-                {p.photo_url
-                  ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
-                  : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={18}/></div>}
+        <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
+          <button onClick={() => setMenuTab('produtos')}
+            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'produtos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            Cardápio
+          </button>
+          <button onClick={() => setMenuTab('servicos')}
+            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'servicos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            Serviços
+          </button>
+        </div>
+
+        {menuTab === 'produtos' ? (
+          products.length === 0
+            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
+            : products.map(p => (
+              <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                  {p.photo_url
+                    ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                    : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={18}/></div>}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
+                  <p className="text-xs text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
+                </div>
+                <button onClick={() => addToOrder(p, 'produto')} disabled={addingId === p.id}
+                  className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all disabled:opacity-50">
+                  {addingId === p.id ? '...' : 'Pedir'}
+                </button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
-                <p className="text-xs text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
+            ))
+        ) : (
+          barberServices.length === 0
+            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum serviço disponível no momento.</p>
+            : barberServices.map(s => (
+              <div key={s.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
+                <div className="w-14 h-14 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 text-slate-400">
+                  <Scissors size={20}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-slate-900 text-sm truncate">{s.name}</p>
+                  <p className="text-xs text-blue-600 font-bold">R$ {Number(s.price).toFixed(2)}</p>
+                </div>
+                <button onClick={() => addToOrder(s, 'servico')} disabled={addingId === s.id}
+                  className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all disabled:opacity-50">
+                  {addingId === s.id ? '...' : 'Pedir'}
+                </button>
               </div>
-              <button onClick={() => addToOrder(p)} disabled={addingId === p.id}
-                className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all disabled:opacity-50">
-                {addingId === p.id ? '...' : 'Pedir'}
-              </button>
-            </div>
-          ))}
+            ))
+        )}
 
         {items.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mt-4">
@@ -1757,7 +1848,7 @@ const ComandaStorefrontPage = ({ numero }) => {
             <div className="space-y-1 mb-2">
               {items.map(i => (
                 <div key={i.id} className="flex justify-between text-xs text-slate-600">
-                  <span>{i.qty}x {i.product_name}</span>
+                  <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
                   <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
                 </div>
               ))}
@@ -1957,38 +2048,129 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const [prodPhotoFile, setProdPhotoFile] = useState(null);
   const [prodPhotoPreview, setProdPhotoPreview] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [caixaInput, setCaixaInput] = useState('');
   const [caixaComanda, setCaixaComanda] = useState(null);
   const [caixaLoading, setCaixaLoading] = useState(false);
   const [addingItemId, setAddingItemId] = useState(null);
+  const [numeros, setNumeros] = useState([]); // pool fixo de comandas 1-100 (tabela comanda_numeros)
+  const [generating, setGenerating] = useState(false);
+  const [openingNumero, setOpeningNumero] = useState(null); // linha de comanda_numeros sendo aberta pelo caixa
+  const [openClientName, setOpenClientName] = useState('');
+  const [openingNumeroSaving, setOpeningNumeroSaving] = useState(false);
+
+  const barberServices = useMemo(() => {
+    const master = (effectiveUser.my_services || []).map(s => {
+      const m = MASTER_SERVICES.find(ms => ms.id === s.id);
+      return m ? { id: `master-${m.id}`, name: m.name, price: s.price } : null;
+    }).filter(Boolean);
+    const custom = (effectiveUser.custom_services || []).map(cs => ({ id: cs.id, name: cs.name, price: cs.price }));
+    return [...master, ...custom];
+  }, [effectiveUser.my_services, effectiveUser.custom_services]);
 
   const fetchShopData = useCallback(async () => {
     if (isGuestBarber || !effectiveUser?.id) return;
     setLoadingShop(true);
     try {
-      const [{ data: prod }, { data: com }] = await Promise.all([
+      const [{ data: prod }, { data: com }, { data: nums }] = await Promise.all([
         sb.from('products').select('*').eq('barber_id', effectiveUser.id).order('created_at', { ascending: false }),
         sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', 'aberta').order('created_at', { ascending: false }),
+        sb.from('comanda_numeros').select('*').eq('barber_id', effectiveUser.id).order('numero', { ascending: true }),
       ]);
       if (prod) setProducts(prod);
       if (com) setComandas(com);
+      if (nums && nums.length > 0) {
+        setNumeros(nums);
+      } else if (nums && nums.length === 0) {
+        // Primeiro acesso deste barbeiro à Loja/Bar: gera as 100 comandas fixas automaticamente
+        const { error: rpcError } = await sb.rpc('ensure_comanda_numeros', { p_barber_id: effectiveUser.id });
+        if (rpcError) {
+          console.error(rpcError);
+        } else {
+          const { data: seeded } = await sb.from('comanda_numeros').select('*').eq('barber_id', effectiveUser.id).order('numero', { ascending: true });
+          setNumeros(seeded || []);
+        }
+      }
     } catch (err) { console.error('Erro ao carregar loja:', err); }
     finally { setLoadingShop(false); }
   }, [sb, effectiveUser?.id, isGuestBarber]);
 
   useEffect(() => { fetchShopData(); }, [fetchShopData]);
 
+  // Realtime: pedidos entram instantaneamente no painel do caixa/comanda em destaque,
+  // sem precisar recarregar. Mudanças em `comandas` (abrir/fechar) disparam um refresh completo.
   useEffect(() => {
     if (isGuestBarber || !effectiveUser?.id) return;
     const channel = sb.channel(`shop-rt-${effectiveUser.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_items' }, fetchShopData)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comanda_items', filter: `barber_id=eq.${effectiveUser.id}` }, (payload) => {
+        const newItem = payload.new;
+        setComandas(prev => prev.map(c => c.id === newItem.comanda_id
+          ? { ...c, comanda_items: [...(c.comanda_items || []), newItem] }
+          : c));
+        setCaixaComanda(prev => (prev && prev.id === newItem.comanda_id)
+          ? { ...prev, comanda_items: [...(prev.comanda_items || []), newItem] }
+          : prev);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `barber_id=eq.${effectiveUser.id}` }, fetchShopData)
       .subscribe();
     return () => sb.removeChannel(channel);
   }, [sb, effectiveUser?.id, isGuestBarber, fetchShopData]);
 
-  const generateComandaNumber = () => String(Math.floor(1000 + Math.random() * 9000));
+  // Abre uma comanda fixa específica (fluxo manual, tocando em um número livre da grade)
+  const openNumero = async (numeroRow, clientName) => {
+    if (isGuestBarber) { alert('A comanda com QR Code fica disponível após criar sua conta.'); return; }
+    setOpeningNumeroSaving(true);
+    try {
+      const { data, error } = await sb.from('comandas').insert({
+        barber_id: effectiveUser.id,
+        comanda_numero_id: numeroRow.id,
+        numero: String(numeroRow.numero),
+        client_name: (clientName || '').trim() || 'Cliente',
+        status: 'aberta',
+      }).select().single();
+      if (error) throw error;
+      setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
+      setNumeros(prev => prev.map(n => n.id === numeroRow.id ? { ...n, status: 'em_uso' } : n));
+      setCaixaComanda({ ...data, comanda_items: [] });
+      setCaixaInput(String(numeroRow.numero));
+      setOpeningNumero(null);
+      setOpenClientName('');
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível abrir a comanda. Verifique se a tabela "comanda_numeros" foi criada no Supabase.');
+    } finally { setOpeningNumeroSaving(false); }
+  };
+
+  // Toca em um número já ocupado: leva direto para o caixa daquela comanda
+  const openOccupiedNumero = (numeroRow) => {
+    const sessao = comandas.find(c => c.comanda_numero_id === numeroRow.id);
+    if (!sessao) { fetchShopData(); return; }
+    setCaixaComanda(sessao);
+    setCaixaInput(String(numeroRow.numero));
+  };
+
+  // Gera uma folha para impressão com o QR Code das 100 comandas fixas (imprimir uma vez e plastificar)
+  const printAllQrCodes = () => {
+    const win = window.open('', '_blank');
+    if (!win || numeros.length === 0) return;
+    const cards = numeros.map(n => `
+      <div class="card">
+        <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(comandaPublicUrl(n.slug))}" />
+        <p>Comanda #${n.numero}</p>
+      </div>`).join('');
+    win.document.write(`<!DOCTYPE html><html><head><title>Comandas — ${effectiveUser.name || 'Salão Digital'}</title>
+      <style>
+        body{font-family:sans-serif;margin:0;padding:16px;}
+        .grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;}
+        .card{border:1px solid #ddd;border-radius:12px;padding:10px;text-align:center;page-break-inside:avoid;}
+        .card img{width:100%;height:auto;display:block;}
+        .card p{margin:6px 0 0;font-weight:800;font-size:13px;}
+        @media print{ .grid{grid-template-columns:repeat(4,1fr);} }
+      </style></head>
+      <body><div class="grid">${cards}</div>
+      <script>window.onload = function(){ setTimeout(function(){ window.print(); }, 400); };</script>
+      </body></html>`);
+    win.document.close();
+  };
 
   // Resolve o pedido "__open__<appointmentId>" vindo do botão "Bar" da Agenda
   useEffect(() => {
@@ -2005,35 +2187,43 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       const app = activeAppointments.find(a => String(a.id) === String(appointmentId));
       setGenerating(true);
       try {
-        let numero = generateComandaNumber();
-        for (let i = 0; i < 5 && comandas.some(c => c.numero === numero); i++) numero = generateComandaNumber();
+        const freeNumero = numeros.find(n => n.status === 'livre');
+        if (!freeNumero) {
+          alert('As 100 comandas estão em uso no momento. Feche alguma antes de abrir uma nova.');
+          setFocusComandaId(null);
+          return;
+        }
         const { data, error } = await sb.from('comandas').insert({
           barber_id: effectiveUser.id,
           appointment_id: appointmentId,
+          comanda_numero_id: freeNumero.id,
           client_name: app?.client_name || app?.client || 'Cliente',
-          numero,
+          numero: String(freeNumero.numero),
           status: 'aberta',
         }).select().single();
         if (error) throw error;
         setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
+        setNumeros(prev => prev.map(n => n.id === freeNumero.id ? { ...n, status: 'em_uso' } : n));
         setFocusComandaId(data.id);
       } catch (err) {
         console.error(err);
-        alert('Não foi possível gerar a comanda. Verifique se a tabela "comandas" existe no Supabase.');
+        alert('Não foi possível abrir a comanda. Verifique se a tabela "comanda_numeros" foi criada no Supabase.');
         setFocusComandaId(null);
       } finally { setGenerating(false); }
     };
     resolveOpenRequest();
-  }, [focusComandaId, comandas, activeAppointments, isGuestBarber, effectiveUser?.id, sb, setFocusComandaId]);
+  }, [focusComandaId, comandas, numeros, activeAppointments, isGuestBarber, effectiveUser?.id, sb, setFocusComandaId]);
 
   const focusedComanda = comandas.find(c => c.id === focusComandaId);
+  const focusedNumero = focusedComanda ? numeros.find(n => n.id === focusedComanda.comanda_numero_id) : null;
   const comandaTotal = (c) => (c?.comanda_items || []).reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
 
   const closeComanda = async (c) => {
     if (!window.confirm(`Fechar comanda #${c.numero}? Total: R$ ${comandaTotal(c).toFixed(2)}`)) return;
     try {
-      await sb.from('comandas').update({ status: 'fechada' }).eq('id', c.id);
+      await sb.from('comandas').update({ status: 'fechada', closed_at: new Date().toISOString() }).eq('id', c.id);
       setComandas(prev => prev.filter(x => x.id !== c.id));
+      if (c.comanda_numero_id) setNumeros(prev => prev.map(n => n.id === c.comanda_numero_id ? { ...n, status: 'livre' } : n));
       if (focusComandaId === c.id) setFocusComandaId(null);
       if (caixaComanda?.id === c.id) { setCaixaComanda(null); setCaixaInput(''); }
     } catch (err) { console.error(err); alert('Erro ao fechar comanda.'); }
@@ -2055,12 +2245,13 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     finally { setCaixaLoading(false); }
   };
 
-  const addItemToComanda = async (comanda, product, setter) => {
-    setAddingItemId(product.id);
+  const addItemToComanda = async (comanda, item, itemType, setter) => {
+    setAddingItemId(item.id);
     try {
-      const { data, error } = await sb.from('comanda_items').insert({
-        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
-      }).select().single();
+      const payload = itemType === 'servico'
+        ? { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 }
+        : { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 };
+      const { data, error } = await sb.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
       const updated = { ...comanda, comanda_items: [...(comanda.comanda_items || []), data] };
       setter(updated);
@@ -2146,7 +2337,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Comanda Ativa</p>
               <p className="text-2xl font-black text-slate-900 mb-1">#{focusedComanda.numero}</p>
               <p className="text-xs text-slate-500 font-bold mb-3">{focusedComanda.client_name}</p>
-              <img src={qrImgUrl(focusedComanda.numero)} alt={`QR Code comanda ${focusedComanda.numero}`}
+              <img src={qrImgUrl(focusedNumero?.slug)} alt={`QR Code comanda ${focusedComanda.numero}`}
                 className="w-36 h-36 mx-auto rounded-2xl border border-slate-100 mb-3"/>
               <p className="text-[10px] text-slate-400 mb-3">O cliente escaneia o QR ou acessa com o número da comanda para ver o cardápio e pedir.</p>
               <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 mb-3">
@@ -2171,14 +2362,73 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         </section>
       )}
 
+      {/* ── Comandas Numeradas Fixas (1-100) ── */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+            <Hash size={16} className="text-emerald-500"/> Comandas Numeradas (1–100)
+          </h3>
+          <button onClick={printAllQrCodes} disabled={numeros.length === 0}
+            className="flex items-center gap-1 text-[10px] font-black text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-lg active:scale-95 transition-all disabled:opacity-50">
+            <Printer size={12}/> Imprimir QR
+          </button>
+        </div>
+        <p className="text-[10px] text-slate-400 mb-3">Toque em um número livre para abrir a comanda de um cliente, ou em um número ocupado para lançar consumo.</p>
+        {numeros.length === 0
+          ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+          : (
+            <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
+              {numeros.map(n => {
+                const sessao = comandas.find(c => c.comanda_numero_id === n.id);
+                const ocupada = n.status === 'em_uso';
+                return (
+                  <button key={n.id}
+                    onClick={() => { if (ocupada) { openOccupiedNumero(n); } else { setOpeningNumero(n); setOpenClientName(''); } }}
+                    title={ocupada ? `#${n.numero} — ${sessao?.client_name || 'ocupada'}` : `#${n.numero} — livre`}
+                    className={`aspect-square rounded-lg text-[11px] font-black flex items-center justify-center transition-all active:scale-90
+                      ${ocupada ? 'bg-amber-500 text-white' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'}`}>
+                    {n.numero}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        <div className="flex items-center gap-4 mt-3">
+          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400"/><span className="text-[10px] font-bold text-slate-500">Livre</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/><span className="text-[10px] font-bold text-slate-500">Em uso</span></div>
+        </div>
+      </section>
+
+      {/* ── Modal: abrir uma comanda fixa ── */}
+      {openingNumero && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setOpeningNumero(null)}/>
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl text-center">
+            <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Abrir Comanda</p>
+            <p className="text-3xl font-black text-slate-900 mb-4">#{openingNumero.numero}</p>
+            <input value={openClientName} onChange={(e) => setOpenClientName(e.target.value)} placeholder="Nome do cliente (opcional)"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-emerald-400 mb-4"/>
+            <div className="flex gap-2">
+              <button onClick={() => setOpeningNumero(null)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">
+                Cancelar
+              </button>
+              <button onClick={() => openNumero(openingNumero, openClientName)} disabled={openingNumeroSaving}
+                className="flex-1 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50">
+                {openingNumeroSaving ? 'Abrindo...' : 'Abrir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Caixa: buscar comanda por número ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <h3 className="font-black text-slate-900 text-sm mb-3 flex items-center gap-2">
           <QrCode size={16} className="text-blue-500"/> Caixa — Lançar Consumo
         </h3>
         <div className="flex gap-2 mb-3">
-          <input value={caixaInput} onChange={(e) => setCaixaInput(e.target.value.replace(/\D/g,'').slice(0,4))}
-            placeholder="Nº da comanda" inputMode="numeric"
+          <input value={caixaInput} onChange={(e) => setCaixaInput(e.target.value.replace(/\D/g,'').slice(0,3))}
+            placeholder="Nº da comanda (1-100)" inputMode="numeric"
             className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"/>
           <button onClick={searchComanda} disabled={caixaLoading || !caixaInput.trim()}
             className="px-4 bg-blue-600 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50 active:scale-95 transition-all">
@@ -2200,7 +2450,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               <div className="space-y-1 mb-3">
                 {caixaComanda.comanda_items.map(i => (
                   <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
-                    <span>{i.qty}x {i.product_name}</span>
+                    <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
                     <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
                   </div>
                 ))}
@@ -2209,7 +2459,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar produto</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {products.map(p => (
-                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, setCaixaComanda)} disabled={addingItemId === p.id}
+                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
                   className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
                   <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
                     {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
@@ -2221,6 +2471,25 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
                 </button>
               ))}
             </div>
+            {barberServices.length > 0 && (
+              <>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar serviço</p>
+                <div className="grid grid-cols-2 gap-2 mb-3">
+                  {barberServices.map(s => (
+                    <button key={s.id} onClick={() => addItemToComanda(caixaComanda, s, 'servico', setCaixaComanda)} disabled={addingItemId === s.id}
+                      className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
+                      <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 text-purple-500">
+                        <Scissors size={14}/>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold text-slate-700 truncate">{s.name}</p>
+                        <p className="text-[9px] text-purple-600 font-black">R$ {Number(s.price).toFixed(2)}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
             <button onClick={() => closeComanda(caixaComanda)}
               className="w-full py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
               Fechar comanda e somar ao atendimento
