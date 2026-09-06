@@ -2463,7 +2463,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         </section>
       )}
 
-      {/* ── Comandas Numeradas Fixas (1-100) ── */}
+{/* ── Comandas Numeradas Fixas (1-100) ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
@@ -2570,7 +2570,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Produtos</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
               {produtosList.map(p => (
-                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
+                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, PRODUCT_CATEGORY.PRODUTO, setCaixaComanda)} disabled={addingItemId === p.id}
                   className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
                   <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
                     {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
@@ -2587,7 +2587,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Consumo</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
                   {consumoList.map(p => (
-                    <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
+                    <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, PRODUCT_CATEGORY.CONSUMO, setCaixaComanda)} disabled={addingItemId === p.id}
                       className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
                       <div className="w-8 h-8 rounded-lg bg-teal-100 overflow-hidden flex-shrink-0">
                         {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
