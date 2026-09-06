@@ -17,13 +17,26 @@ import {
   Percent, Target, AlertCircle, CheckSquare, Bot, Printer, Hash
 } from 'lucide-react';
 
-const APP_VERSION = 'v6.2';
+const APP_VERSION = 'v6.3';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
 // Inicialização do cliente Supabase
 export const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ─── STATUS CANÔNICOS DE COMANDA ────────────────────────────────────────────
+// Use sempre estas constantes (nunca strings soltas tipo 'aberta' ou 'em_uso')
+// para consultar ou atualizar status no banco. Isso garante consistência total
+// entre todas as telas e evita comandas "fantasma" por divergência de texto.
+//   comanda_numeros.status → só pode ser LIVRE ou OCUPADA
+//   comandas.status        → só pode ser OCUPADA ou FECHADA
+// (o próprio banco também passa a validar isso via CHECK constraint — ver migration.sql)
+export const COMANDA_NUMERO_STATUS = { LIVRE: 'livre', OCUPADA: 'ocupada' };
+export const COMANDA_STATUS = { OCUPADA: 'ocupada', FECHADA: 'fechada' };
+
+// Categorias fixas de itens da Loja/Bar
+export const PRODUCT_CATEGORY = { PRODUTO: 'produto', CONSUMO: 'consumo' };
 
 // ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN ───────────────────────────
 import { getMessaging, getToken } from "firebase/messaging";
@@ -1677,10 +1690,10 @@ const ComandaStorefrontPage = ({ slug }) => {
       if (!cn) { setComandaNumero(null); setComanda(null); setLoading(false); return; }
       setComandaNumero(cn);
 
-      if (cn.status !== 'em_uso') { setComanda(null); setLoading(false); return; }
+      if (cn.status !== COMANDA_NUMERO_STATUS.OCUPADA) { setComanda(null); setLoading(false); return; }
 
       const { data: c } = await supabase.from('comandas').select('*')
-        .eq('comanda_numero_id', cn.id).eq('status', 'aberta').maybeSingle();
+        .eq('comanda_numero_id', cn.id).eq('status', COMANDA_STATUS.OCUPADA).maybeSingle();
       if (!c) { setComanda(null); setLoading(false); return; }
       setComanda(c);
       setFechada(false);
@@ -1705,8 +1718,11 @@ const ComandaStorefrontPage = ({ slug }) => {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comanda_items', filter: `comanda_id=eq.${comanda.id}` }, (payload) => {
         setItems(prev => prev.some(i => i.id === payload.new.id) ? prev : [...prev, payload.new]);
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comanda_items', filter: `comanda_id=eq.${comanda.id}` }, (payload) => {
+        setItems(prev => prev.map(i => i.id === payload.new.id ? payload.new : i));
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comandas', filter: `id=eq.${comanda.id}` }, (payload) => {
-        if (payload.new.status === 'fechada') setFechada(true);
+        if (payload.new.status === COMANDA_STATUS.FECHADA) setFechada(true);
       })
       .subscribe();
     return () => supabase.removeChannel(channel);
@@ -1729,13 +1745,20 @@ const ComandaStorefrontPage = ({ slug }) => {
     return [...master, ...custom];
   }, [barber]);
 
+  // Produtos/Consumo são a mesma tabela `products`, filtrada por categoria.
+  // Itens antigos sem `category` preenchida caem em 'produto' por padrão.
+  const displayedProducts = useMemo(() => {
+    const targetCategory = menuTab === 'consumo' ? PRODUCT_CATEGORY.CONSUMO : PRODUCT_CATEGORY.PRODUTO;
+    return products.filter(p => (p.category || PRODUCT_CATEGORY.PRODUTO) === targetCategory);
+  }, [products, menuTab]);
+
   const addToOrder = async (item, type) => {
     if (!comanda) return;
     setAddingId(item.id);
     try {
       const payload = type === 'produto'
-        ? { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 }
-        : { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 };
+        ? { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1, delivered: false }
+        : { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1, delivered: false };
       const { data, error } = await supabase.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
       setItems(prev => prev.some(i => i.id === data.id) ? prev : [...prev, data]);
@@ -1794,7 +1817,11 @@ const ComandaStorefrontPage = ({ slug }) => {
         <div className="flex gap-2 bg-slate-100 rounded-xl p-1">
           <button onClick={() => setMenuTab('produtos')}
             className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'produtos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
-            Cardápio
+            Produtos
+          </button>
+          <button onClick={() => setMenuTab('consumo')}
+            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'consumo' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            Consumo
           </button>
           <button onClick={() => setMenuTab('servicos')}
             className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${menuTab === 'servicos' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
@@ -1802,10 +1829,10 @@ const ComandaStorefrontPage = ({ slug }) => {
           </button>
         </div>
 
-        {menuTab === 'produtos' ? (
-          products.length === 0
-            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
-            : products.map(p => (
+        {menuTab === 'produtos' || menuTab === 'consumo' ? (
+          displayedProducts.length === 0
+            ? <p className="text-center text-slate-400 text-sm py-10">Nenhum item disponível no momento.</p>
+            : displayedProducts.map(p => (
               <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
                 <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
                   {p.photo_url
@@ -1845,10 +1872,15 @@ const ComandaStorefrontPage = ({ slug }) => {
         {items.length > 0 && (
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mt-4">
             <p className="font-black text-slate-900 text-sm mb-2">Seus pedidos</p>
-            <div className="space-y-1 mb-2">
+            <div className="space-y-1.5 mb-2">
               {items.map(i => (
-                <div key={i.id} className="flex justify-between text-xs text-slate-600">
-                  <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
+                <div key={i.id} className="flex justify-between items-center text-xs text-slate-600">
+                  <span className="flex items-center gap-1.5">
+                    {i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}
+                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full ${i.delivered ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                      {i.delivered ? 'Entregue' : 'Pendente'}
+                    </span>
+                  </span>
                   <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
                 </div>
               ))}
@@ -2057,6 +2089,8 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const [openingNumero, setOpeningNumero] = useState(null); // linha de comanda_numeros sendo aberta pelo caixa
   const [openClientName, setOpenClientName] = useState('');
   const [openingNumeroSaving, setOpeningNumeroSaving] = useState(false);
+  const [prodCategory, setProdCategory] = useState(PRODUCT_CATEGORY.PRODUTO); // categoria selecionada no modal de produto
+  const [manageCatalogTab, setManageCatalogTab] = useState(PRODUCT_CATEGORY.PRODUTO); // aba ativa em "Produtos do Bar/Loja"
 
   const barberServices = useMemo(() => {
     const master = (effectiveUser.my_services || []).map(s => {
@@ -2067,13 +2101,18 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     return [...master, ...custom];
   }, [effectiveUser.my_services, effectiveUser.custom_services]);
 
+  // `products` reúne Produtos (varejo) e Consumo (uso interno/comanda rápida) na mesma tabela,
+  // diferenciados pela coluna `category`. Itens antigos sem categoria caem em 'produto'.
+  const produtosList = useMemo(() => products.filter(p => (p.category || PRODUCT_CATEGORY.PRODUTO) === PRODUCT_CATEGORY.PRODUTO), [products]);
+  const consumoList = useMemo(() => products.filter(p => p.category === PRODUCT_CATEGORY.CONSUMO), [products]);
+
   const fetchShopData = useCallback(async () => {
     if (isGuestBarber || !effectiveUser?.id) return;
     setLoadingShop(true);
     try {
       const [{ data: prod }, { data: com }, { data: nums }] = await Promise.all([
         sb.from('products').select('*').eq('barber_id', effectiveUser.id).order('created_at', { ascending: false }),
-        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', 'aberta').order('created_at', { ascending: false }),
+        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', COMANDA_STATUS.OCUPADA).order('created_at', { ascending: false }),
         sb.from('comanda_numeros').select('*').eq('barber_id', effectiveUser.id).order('numero', { ascending: true }),
       ]);
       if (prod) setProducts(prod);
@@ -2110,6 +2149,16 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           ? { ...prev, comanda_items: [...(prev.comanda_items || []), newItem] }
           : prev);
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'comanda_items', filter: `barber_id=eq.${effectiveUser.id}` }, (payload) => {
+        // Mantém "Entregue/Pendente" sincronizado em tempo real entre vários caixas abertos ao mesmo tempo
+        const updatedItem = payload.new;
+        setComandas(prev => prev.map(c => c.id === updatedItem.comanda_id
+          ? { ...c, comanda_items: (c.comanda_items || []).map(i => i.id === updatedItem.id ? updatedItem : i) }
+          : c));
+        setCaixaComanda(prev => (prev && prev.id === updatedItem.comanda_id)
+          ? { ...prev, comanda_items: (prev.comanda_items || []).map(i => i.id === updatedItem.id ? updatedItem : i) }
+          : prev);
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `barber_id=eq.${effectiveUser.id}` }, fetchShopData)
       .subscribe();
     return () => sb.removeChannel(channel);
@@ -2125,11 +2174,11 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         comanda_numero_id: numeroRow.id,
         numero: String(numeroRow.numero),
         client_name: (clientName || '').trim() || 'Cliente',
-        status: 'aberta',
+        status: COMANDA_STATUS.OCUPADA,
       }).select().single();
       if (error) throw error;
       setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-      setNumeros(prev => prev.map(n => n.id === numeroRow.id ? { ...n, status: 'em_uso' } : n));
+      setNumeros(prev => prev.map(n => n.id === numeroRow.id ? { ...n, status: COMANDA_NUMERO_STATUS.OCUPADA } : n));
       setCaixaComanda({ ...data, comanda_items: [] });
       setCaixaInput(String(numeroRow.numero));
       setOpeningNumero(null);
@@ -2187,7 +2236,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       const app = activeAppointments.find(a => String(a.id) === String(appointmentId));
       setGenerating(true);
       try {
-        const freeNumero = numeros.find(n => n.status === 'livre');
+        const freeNumero = numeros.find(n => n.status === COMANDA_NUMERO_STATUS.LIVRE);
         if (!freeNumero) {
           alert('As 100 comandas estão em uso no momento. Feche alguma antes de abrir uma nova.');
           setFocusComandaId(null);
@@ -2199,11 +2248,11 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           comanda_numero_id: freeNumero.id,
           client_name: app?.client_name || app?.client || 'Cliente',
           numero: String(freeNumero.numero),
-          status: 'aberta',
+          status: COMANDA_STATUS.OCUPADA,
         }).select().single();
         if (error) throw error;
         setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-        setNumeros(prev => prev.map(n => n.id === freeNumero.id ? { ...n, status: 'em_uso' } : n));
+        setNumeros(prev => prev.map(n => n.id === freeNumero.id ? { ...n, status: COMANDA_NUMERO_STATUS.OCUPADA } : n));
         setFocusComandaId(data.id);
       } catch (err) {
         console.error(err);
@@ -2218,12 +2267,22 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const focusedNumero = focusedComanda ? numeros.find(n => n.id === focusedComanda.comanda_numero_id) : null;
   const comandaTotal = (c) => (c?.comanda_items || []).reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
 
+  // Todos os pedidos pendentes (não entregues) de todas as comandas abertas, mais antigos primeiro.
+  // Alimenta o painel "Pedidos Pendentes" em tempo real — ver seção logo abaixo da comanda em destaque.
+  const pendingOrders = useMemo(() => {
+    const list = [];
+    comandas.forEach(c => {
+      (c.comanda_items || []).forEach(item => { if (!item.delivered) list.push({ comanda: c, item }); });
+    });
+    return list.sort((a, b) => new Date(a.item.created_at || 0) - new Date(b.item.created_at || 0));
+  }, [comandas]);
+
   const closeComanda = async (c) => {
     if (!window.confirm(`Fechar comanda #${c.numero}? Total: R$ ${comandaTotal(c).toFixed(2)}`)) return;
     try {
-      await sb.from('comandas').update({ status: 'fechada', closed_at: new Date().toISOString() }).eq('id', c.id);
+      await sb.from('comandas').update({ status: COMANDA_STATUS.FECHADA, closed_at: new Date().toISOString() }).eq('id', c.id);
       setComandas(prev => prev.filter(x => x.id !== c.id));
-      if (c.comanda_numero_id) setNumeros(prev => prev.map(n => n.id === c.comanda_numero_id ? { ...n, status: 'livre' } : n));
+      if (c.comanda_numero_id) setNumeros(prev => prev.map(n => n.id === c.comanda_numero_id ? { ...n, status: COMANDA_NUMERO_STATUS.LIVRE } : n));
       if (focusComandaId === c.id) setFocusComandaId(null);
       if (caixaComanda?.id === c.id) { setCaixaComanda(null); setCaixaInput(''); }
     } catch (err) { console.error(err); alert('Erro ao fechar comanda.'); }
@@ -2237,7 +2296,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       const local = comandas.find(c => c.numero === caixaInput.trim());
       if (local) { setCaixaComanda(local); return; }
       const { data, error } = await sb.from('comandas').select('*, comanda_items(*)')
-        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', 'aberta').maybeSingle();
+        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', COMANDA_STATUS.OCUPADA).maybeSingle();
       if (error) throw error;
       if (!data) { alert('Comanda não encontrada ou já fechada.'); setCaixaComanda(null); return; }
       setCaixaComanda(data);
@@ -2248,9 +2307,12 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const addItemToComanda = async (comanda, item, itemType, setter) => {
     setAddingItemId(item.id);
     try {
+      // Lançado direto pelo caixa/barbeiro: considera já entregue na hora (ele está lançando e entregando no mesmo gesto).
+      // Pedidos feitos pelo cliente via QR Code (ComandaStorefrontPage) começam como pendentes — ver addToOrder().
+      const nowIso = new Date().toISOString();
       const payload = itemType === 'servico'
-        ? { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1 }
-        : { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1 };
+        ? { comanda_id: comanda.id, item_type: 'servico', product_id: null, service_ref: item.id, product_name: item.name, price: item.price, qty: 1, delivered: true, delivered_at: nowIso }
+        : { comanda_id: comanda.id, item_type: 'produto', product_id: item.id, product_name: item.name, price: item.price, qty: 1, delivered: true, delivered_at: nowIso };
       const { data, error } = await sb.from('comanda_items').insert(payload).select().single();
       if (error) throw error;
       const updated = { ...comanda, comanda_items: [...(comanda.comanda_items || []), data] };
@@ -2260,9 +2322,24 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
     finally { setAddingItemId(null); }
   };
 
+  // Marca um pedido (normalmente feito pelo cliente via QR Code) como entregue.
+  // Atualiza o banco e reflete instantaneamente na tela; outros caixas abertos
+  // recebem a mesma atualização via Supabase Realtime (ver useEffect acima).
+  const markDelivered = async (comanda, item) => {
+    if (item.delivered) return;
+    try {
+      const nowIso = new Date().toISOString();
+      const { error } = await sb.from('comanda_items').update({ delivered: true, delivered_at: nowIso }).eq('id', item.id);
+      if (error) throw error;
+      const patchItems = (list) => (list || []).map(i => i.id === item.id ? { ...i, delivered: true, delivered_at: nowIso } : i);
+      setComandas(prev => prev.map(c => c.id === comanda.id ? { ...c, comanda_items: patchItems(c.comanda_items) } : c));
+      setCaixaComanda(prev => (prev && prev.id === comanda.id) ? { ...prev, comanda_items: patchItems(prev.comanda_items) } : prev);
+    } catch (err) { console.error(err); alert('Erro ao marcar pedido como entregue.'); }
+  };
+
   // ── Produtos ──
-  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
-  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
+  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdCategory(manageCatalogTab); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
+  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdCategory(p.category || PRODUCT_CATEGORY.PRODUTO); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
   const handleProductPhotoChange = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     setProdPhotoFile(file); setProdPhotoPreview(URL.createObjectURL(file));
@@ -2284,13 +2361,13 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       }
       if (editingProduct) {
         const { data, error } = await sb.from('products')
-          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
+          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url, category: prodCategory })
           .eq('id', editingProduct.id).select().single();
         if (error) throw error;
         setProducts(prev => prev.map(p => p.id === data.id ? data : p));
       } else {
         const { data, error } = await sb.from('products')
-          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
+          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url, category: prodCategory })
           .select().single();
         if (error) throw error;
         setProducts(prev => [data, ...prev]);
@@ -2362,6 +2439,30 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         </section>
       )}
 
+      {/* ── Pedidos Pendentes (tempo real, via Supabase Realtime) ── */}
+      {pendingOrders.length > 0 && (
+        <section className="bg-white rounded-3xl border-2 border-blue-300 shadow-sm p-5">
+          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2 mb-3">
+            <Bell size={16} className="text-blue-500"/> Pedidos Pendentes
+            <span className="ml-auto bg-blue-600 text-white text-[10px] font-black px-2 py-0.5 rounded-full">{pendingOrders.length}</span>
+          </h3>
+          <div className="space-y-2">
+            {pendingOrders.map(({ comanda: c, item }) => (
+              <div key={item.id} className="flex items-center justify-between gap-2 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-black text-blue-600 uppercase">Comanda #{c.numero} · {c.client_name}</p>
+                  <p className="text-xs font-bold text-slate-700 truncate">{item.qty}x {item.product_name}{item.item_type === 'servico' ? ' 💈' : ''}</p>
+                </div>
+                <button onClick={() => markDelivered(c, item)}
+                  className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all flex-shrink-0">
+                  <CheckCircle2 size={12}/> Entregar
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ── Comandas Numeradas Fixas (1-100) ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-3">
@@ -2380,7 +2481,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <div className="grid grid-cols-8 sm:grid-cols-10 gap-1.5">
               {numeros.map(n => {
                 const sessao = comandas.find(c => c.comanda_numero_id === n.id);
-                const ocupada = n.status === 'em_uso';
+                const ocupada = n.status === COMANDA_NUMERO_STATUS.OCUPADA;
                 return (
                   <button key={n.id}
                     onClick={() => { if (ocupada) { openOccupiedNumero(n); } else { setOpeningNumero(n); setOpenClientName(''); } }}
@@ -2395,7 +2496,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
           )}
         <div className="flex items-center gap-4 mt-3">
           <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400"/><span className="text-[10px] font-bold text-slate-500">Livre</span></div>
-          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/><span className="text-[10px] font-bold text-slate-500">Em uso</span></div>
+          <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded-full bg-amber-500"/><span className="text-[10px] font-bold text-slate-500">Ocupada</span></div>
         </div>
       </section>
 
@@ -2447,18 +2548,28 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               <p className="text-sm font-black text-blue-600">R$ {comandaTotal(caixaComanda).toFixed(2)}</p>
             </div>
             {(caixaComanda.comanda_items || []).length > 0 && (
-              <div className="space-y-1 mb-3">
+              <div className="space-y-1.5 mb-3">
                 {caixaComanda.comanda_items.map(i => (
-                  <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
-                    <span>{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
-                    <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
+                  <div key={i.id} className="flex justify-between items-center text-[11px] text-slate-600 gap-2">
+                    <span className="truncate">{i.qty}x {i.product_name}{i.item_type === 'servico' ? ' 💈' : ''}</span>
+                    <span className="flex items-center gap-2 flex-shrink-0">
+                      <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
+                      {i.delivered ? (
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600">Entregue</span>
+                      ) : (
+                        <button onClick={() => markDelivered(caixaComanda, i)}
+                          className="flex items-center gap-1 px-2 py-1 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95 transition-all">
+                          <CheckCircle2 size={10}/> Entregar
+                        </button>
+                      )}
+                    </span>
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar produto</p>
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Produtos</p>
             <div className="grid grid-cols-2 gap-2 mb-3">
-              {products.map(p => (
+              {produtosList.map(p => (
                 <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
                   className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
                   <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
@@ -2471,24 +2582,43 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
                 </button>
               ))}
             </div>
-            {barberServices.length > 0 && (
+            {consumoList.length > 0 && (
               <>
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar serviço</p>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Consumo</p>
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                  {barberServices.map(s => (
-                    <button key={s.id} onClick={() => addItemToComanda(caixaComanda, s, 'servico', setCaixaComanda)} disabled={addingItemId === s.id}
-                      className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
-                      <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 text-purple-500">
-                        <Scissors size={14}/>
+                  {consumoList.map(p => (
+                    <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, 'produto', setCaixaComanda)} disabled={addingItemId === p.id}
+                      className="flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
+                      <div className="w-8 h-8 rounded-lg bg-teal-100 overflow-hidden flex-shrink-0">
+                        {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[10px] font-bold text-slate-700 truncate">{s.name}</p>
-                        <p className="text-[9px] text-purple-600 font-black">R$ {Number(s.price).toFixed(2)}</p>
+                        <p className="text-[10px] font-bold text-slate-700 truncate">{p.name}</p>
+                        <p className="text-[9px] text-teal-600 font-black">R$ {Number(p.price).toFixed(2)}</p>
                       </div>
                     </button>
                   ))}
                 </div>
               </>
+            )}
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar serviço</p>
+            {barberServices.length > 0 ? (
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {barberServices.map(s => (
+                  <button key={s.id} onClick={() => addItemToComanda(caixaComanda, s, 'servico', setCaixaComanda)} disabled={addingItemId === s.id}
+                    className="flex items-center gap-2 bg-purple-50 border border-purple-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
+                    <div className="w-8 h-8 rounded-lg bg-purple-100 flex items-center justify-center flex-shrink-0 text-purple-500">
+                      <Scissors size={14}/>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold text-slate-700 truncate">{s.name}</p>
+                      <p className="text-[9px] text-purple-600 font-black">R$ {Number(s.price).toFixed(2)}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-400 mb-3">Nenhum serviço cadastrado ainda. Cadastre em Perfil → Meus Serviços.</p>
             )}
             <button onClick={() => closeComanda(caixaComanda)}
               className="w-full py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
@@ -2509,14 +2639,24 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <PlusCircle size={12}/> Novo
           </button>
         </div>
+        <div className="flex gap-2 bg-slate-100 rounded-xl p-1 mb-4">
+          <button onClick={() => setManageCatalogTab(PRODUCT_CATEGORY.PRODUTO)}
+            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${manageCatalogTab === PRODUCT_CATEGORY.PRODUTO ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            Produtos
+          </button>
+          <button onClick={() => setManageCatalogTab(PRODUCT_CATEGORY.CONSUMO)}
+            className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${manageCatalogTab === PRODUCT_CATEGORY.CONSUMO ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            Consumo
+          </button>
+        </div>
         {loadingShop
           ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
-          : products.length === 0
+          : (manageCatalogTab === PRODUCT_CATEGORY.PRODUTO ? produtosList : consumoList).length === 0
           ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-              <p className="text-slate-400 text-sm">Nenhum produto cadastrado ainda.</p>
+              <p className="text-slate-400 text-sm">{manageCatalogTab === PRODUCT_CATEGORY.PRODUTO ? 'Nenhum produto cadastrado ainda.' : 'Nenhum item de consumo cadastrado ainda.'}</p>
             </div>
           : <div className="space-y-2">
-              {products.map(p => (
+              {(manageCatalogTab === PRODUCT_CATEGORY.PRODUTO ? produtosList : consumoList).map(p => (
                 <div key={p.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
                   <div className="w-12 h-12 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0">
                     {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
@@ -2555,7 +2695,18 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <input value={prodName} onChange={(e) => setProdName(e.target.value)} placeholder="Nome do produto"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
             <input value={prodPrice} onChange={(e) => setProdPrice(e.target.value.replace(/[^0-9.,]/g,''))} placeholder="Valor (R$)" inputMode="decimal"
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-5"/>
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
+            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Categoria</p>
+            <div className="flex gap-2 bg-slate-100 rounded-xl p-1 mb-5">
+              <button onClick={() => setProdCategory(PRODUCT_CATEGORY.PRODUTO)}
+                className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${prodCategory === PRODUCT_CATEGORY.PRODUTO ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+                Produto
+              </button>
+              <button onClick={() => setProdCategory(PRODUCT_CATEGORY.CONSUMO)}
+                className={`flex-1 py-2 rounded-lg text-[11px] font-black uppercase transition-all ${prodCategory === PRODUCT_CATEGORY.CONSUMO ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+                Consumo
+              </button>
+            </div>
             <div className="flex gap-2">
               <button onClick={() => setShowProductModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">
                 Cancelar
