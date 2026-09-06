@@ -2233,7 +2233,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-            <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
+            <Camera size={16} className="text-purple-500"/> Produtos da Loja
           </h3>
           
           {/* Grupo de botões aninhados para manter o layout */}
@@ -2241,10 +2241,10 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             <button onClick={() => {
                 setActiveTab('shop');
                 setFocusComandaId(`__open__${typeof app !== 'undefined' ? app.id : 'nova'}`);
-              }} title="Abrir comanda do Bar/Loja"
+              }} title="Abrir comanda da Loja"
               className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
               <Tag size={14}/>
-              <span className="text-[10px] font-black uppercase">Abrir Bar</span>
+              <span className="text-[10px] font-black uppercase">Abrir Loja</span>
             </button>
 
             <button onClick={openNewProduct}
@@ -2691,7 +2691,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const rating = getBarberRating(effectiveUser);
   const tabs = ['home', 'reports', 'shop', 'config'];
-  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja/Bar', config: 'Ajustes' };
+  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja', config: 'Ajustes' };
   const tabIcons = { home: Calendar, reports: BarChart2, shop: Tag, config: Settings };
 
   return (
@@ -3126,10 +3126,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <button onClick={() => {
                         setActiveTab('shop');
                         setFocusComandaId(`__open__${app.id}`);
-                      }} title="Abrir comanda do Bar/Loja para este atendimento"
+                      }} title="Abrir comanda da Loja para este atendimento"
                         className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
                         <Tag size={18}/>
-                        <span className="text-[8px] font-black uppercase">Bar</span>
+                        <span className="text-[8px] font-black uppercase">Loja</span>
                       </button>
                       <button onClick={() => {
                         if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
