@@ -2229,17 +2229,31 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         )}
       </section>
 
-      {/* ── Gestão de Produtos ── */}
+    {/* ── Gestão de Produtos ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
             <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
           </h3>
-          <button onClick={openNewProduct}
-            className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
-            <PlusCircle size={12}/> Novo
-          </button>
+          
+          {/* Grupo de botões aninhados para manter o layout */}
+          <div className="flex items-center gap-2">
+            <button onClick={() => {
+                setActiveTab('shop');
+                setFocusComandaId(`__open__${typeof app !== 'undefined' ? app.id : 'nova'}`);
+              }} title="Abrir comanda do Bar/Loja"
+              className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
+              <Tag size={14}/>
+              <span className="text-[10px] font-black uppercase">Abrir Bar</span>
+            </button>
+
+            <button onClick={openNewProduct}
+              className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
+              <PlusCircle size={12}/> Novo
+            </button>
+          </div>
         </div>
+
         {loadingShop
           ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
           : products.length === 0
@@ -2267,7 +2281,6 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               ))}
             </div>}
       </section>
-
       {/* ── Modal Produto ── */}
       {showProductModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
