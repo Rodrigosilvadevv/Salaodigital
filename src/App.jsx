@@ -13,7 +13,7 @@ import {
   CheckCircle, ArrowLeft, Send, Headphones, Copy, Link, Image, Shield, Award, Zap, ExternalLink,
   BarChart2, TrendingUp, Moon, Sun, Video, VideoOff, RefreshCw, PlusCircle, X,
   Gift, QrCode, Type, FileText, Users, Tag, Settings, Activity, MessageSquare,
-  ChevronDown, ChevronUp, Search, Filter, Reply, MoreVertical, Circle, TrendingDown,
+  ChevronDown, ChevronUp, Search, Filter, Reply, MoreVertical, Trash2, Circle, TrendingDown,
   Percent, Target, AlertCircle, CheckSquare, Bot, Printer, Hash
 } from 'lucide-react';
 
