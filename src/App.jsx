@@ -2308,6 +2308,51 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
             </div>}
       </section>
 
+      {/* ── Comandas Abertas no Salão ── */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
+            <Tag size={16} className="text-amber-500"/> Comandas Abertas ({comandas.length})
+          </h3>
+        </div>
+        {loadingShop ? (
+          <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+        ) : comandas.length === 0 ? (
+          <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+            <p className="text-slate-400 text-sm">Nenhuma comanda aberta no momento.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {comandas.map(c => {
+              const total = comandaTotal(c);
+              return (
+                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-black text-slate-900 text-sm">#{c.numero}</span>
+                      <span className="text-xs font-bold text-slate-600 truncate">{c.client_name}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      {(c.comanda_items || []).length} iten(s) • <span className="font-black text-blue-600">R$ {total.toFixed(2)}</span>
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 flex-shrink-0">
+                    <button onClick={() => { setFocusComandaId(c.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
+                      Ver / Caixa
+                    </button>
+                    <button onClick={() => closeComanda(c)}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
+                      Fechar
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
       {/* ── Modal Produto ── */}
       {showProductModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
