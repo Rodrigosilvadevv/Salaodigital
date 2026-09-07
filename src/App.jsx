@@ -1726,7 +1726,7 @@ const ComandaStorefrontPage = ({ numero }) => {
     <div className="min-h-screen bg-slate-50 pb-10">
       <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-10">
         <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Comanda #{comanda.numero}</p>
-        <h1 className="text-lg font-black text-slate-900">{barber?.name || 'Loja / Bar'}</h1>
+        <h1 className="text-lg font-black text-slate-900">{barber?.name || 'Loja'}</h1>
         <p className="text-xs text-slate-400">Cliente: {comanda.client_name}</p>
       </header>
       <main className="p-4 max-w-md mx-auto space-y-3">
@@ -2157,7 +2157,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       <div className="flex items-center justify-between mb-2">
         <div>
           <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
-            <Tag size={20} className="text-amber-500"/> Loja / Bar
+            <Tag size={20} className="text-amber-500"/> Loja
           </h2>
           <p className="text-xs text-slate-400">Comandas com QR Code, caixa e produtos do estabelecimento</p>
         </div>
@@ -2273,7 +2273,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-            <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
+            <Camera size={16} className="text-purple-500"/> Produtos da Loja
           </h3>
           <button onClick={openNewProduct}
             className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
@@ -2763,7 +2763,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const rating = getBarberRating(effectiveUser);
   const tabs = ['home', 'reports', 'shop', 'config'];
-  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja/Bar', config: 'Ajustes' };
+  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja', config: 'Ajustes' };
   const tabIcons = { home: Calendar, reports: BarChart2, shop: Tag, config: Settings };
 
   return (
@@ -3198,7 +3198,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <button onClick={() => {
                         setActiveTab('shop');
                         setFocusComandaId(`__open__${app.id}`);
-                      }} title="Abrir comanda do Bar/Loja para este atendimento"
+                      }} title="Abrir comanda do Loja para este atendimento"
                         className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
                         <Tag size={18}/>
                         <span className="text-[8px] font-black uppercase">Bar</span>
