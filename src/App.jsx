@@ -1990,6 +1990,40 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
 
   const generateComandaNumber = () => String(Math.floor(1000 + Math.random() * 9000));
 
+  // Função para criar comanda avulsa solicitando o nome via prompt
+  const handleCreateManualComanda = async () => {
+    if (isGuestBarber) {
+      alert('A comanda com QR Code fica disponível após criar sua conta.');
+      return;
+    }
+    const clientName = window.prompt('Digite o nome do cliente para a nova comanda:');
+    if (!clientName || !clientName.trim()) return;
+
+    setGenerating(true);
+    try {
+      let numero = generateComandaNumber();
+      for (let i = 0; i < 5 && comandas.some(c => c.numero === numero); i++) {
+        numero = generateComandaNumber();
+      }
+      const { data, error } = await sb.from('comandas').insert({
+        barber_id: effectiveUser.id,
+        appointment_id: null,
+        client_name: clientName.trim(),
+        numero,
+        status: 'aberta',
+      }).select().single();
+
+      if (error) throw error;
+      setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
+      setFocusComandaId(data.id);
+    } catch (err) {
+      console.error(err);
+      alert('Não foi possível gerar a comanda. Verifique se a tabela "comandas" existe no Supabase.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   // Resolve o pedido "__open__<appointmentId>" vindo do botão "Bar" da Agenda
   useEffect(() => {
     const resolveOpenRequest = async () => {
@@ -2120,11 +2154,17 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
 
   return (
     <div className="space-y-6">
-      <div className="mb-2">
-        <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
-          <Tag size={20} className="text-amber-500"/> Loja / Bar
-        </h2>
-        <p className="text-xs text-slate-400">Comandas com QR Code, caixa e produtos do estabelecimento</p>
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+            <Tag size={20} className="text-amber-500"/> Loja / Bar
+          </h2>
+          <p className="text-xs text-slate-400">Comandas com QR Code, caixa e produtos do estabelecimento</p>
+        </div>
+        <button onClick={handleCreateManualComanda} disabled={generating}
+          className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all shadow-sm disabled:opacity-50 flex-shrink-0">
+          <PlusCircle size={14}/> Nova Comanda
+        </button>
       </div>
 
       {isGuestBarber && (
@@ -2133,7 +2173,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         </div>
       )}
 
-      {/* ── Comanda em destaque (gerada pela Agenda) ── */}
+      {/* ── Comanda em destaque (gerada pela Agenda ou Avulsa) ── */}
       {(generating || focusedComanda) && (
         <section className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-5 text-center">
           {generating ? (
@@ -2229,31 +2269,17 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
         )}
       </section>
 
-    {/* ── Gestão de Produtos ── */}
+      {/* ── Gestão de Produtos ── */}
       <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-            <Camera size={16} className="text-purple-500"/> Produtos da Loja
+            <Camera size={16} className="text-purple-500"/> Produtos do Bar/Loja
           </h3>
-          
-          {/* Grupo de botões aninhados para manter o layout */}
-          <div className="flex items-center gap-2">
-            <button onClick={() => {
-                setActiveTab('shop');
-                setFocusComandaId(`__open__${typeof app !== 'undefined' ? app.id : 'nova'}`);
-              }} title="Abrir comanda da Loja"
-              className="flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
-              <Tag size={14}/>
-              <span className="text-[10px] font-black uppercase">Abrir Loja</span>
-            </button>
-
-            <button onClick={openNewProduct}
-              className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
-              <PlusCircle size={12}/> Novo
-            </button>
-          </div>
+          <button onClick={openNewProduct}
+            className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
+            <PlusCircle size={12}/> Novo
+          </button>
         </div>
-
         {loadingShop
           ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
           : products.length === 0
@@ -2281,6 +2307,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
               ))}
             </div>}
       </section>
+
       {/* ── Modal Produto ── */}
       {showProductModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
@@ -2691,7 +2718,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 
   const rating = getBarberRating(effectiveUser);
   const tabs = ['home', 'reports', 'shop', 'config'];
-  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja', config: 'Ajustes' };
+  const tabLabels = { home: 'Agenda', reports: 'Relatórios', shop: 'Loja/Bar', config: 'Ajustes' };
   const tabIcons = { home: Calendar, reports: BarChart2, shop: Tag, config: Settings };
 
   return (
@@ -3126,10 +3153,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <button onClick={() => {
                         setActiveTab('shop');
                         setFocusComandaId(`__open__${app.id}`);
-                      }} title="Abrir comanda da Loja para este atendimento"
+                      }} title="Abrir comanda do Bar/Loja para este atendimento"
                         className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
                         <Tag size={18}/>
-                        <span className="text-[8px] font-black uppercase">Loja</span>
+                        <span className="text-[8px] font-black uppercase">Bar</span>
                       </button>
                       <button onClick={() => {
                         if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
