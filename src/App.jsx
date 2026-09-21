@@ -3265,49 +3265,60 @@ const longPressFired = useRef(false);
     effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
   };
 
-  const handleUploadAvatar = async (event) => {
-    if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
-    const file = event.target.files[0]; if (!file) return;
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await sb.storage.from('barber-photos').upload(fileName, file);
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
-      const updated = { ...effectiveUser, avatar_url: publicUrl };
-      effectiveOnUpdateProfile(updated);
-      if (!isGuestBarber) await sb.from('profiles').update({ avatar_url: publicUrl }).eq('id', effectiveUser.id);
-      alert('Foto atualizada!');
-    } catch (_) { alert('Erro ao carregar foto.'); }
-  };
+const handleUploadAvatar = async (event) => {
+  if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    // Lê o arquivo pra memória JÁ, antes que o Android invalide a URI content://
+    const arrayBuffer = await file.arrayBuffer();
+    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+    const { error: uploadError } = await sb.storage
+      .from('barber-photos')
+      .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+    const updated = { ...effectiveUser, avatar_url: publicUrl };
+    effectiveOnUpdateProfile(updated);
+    if (!isGuestBarber) await sb.from('profiles').update({ avatar_url: publicUrl }).eq('id', effectiveUser.id);
+    alert('Foto atualizada!');
+  } catch (err) {
+    console.error('[handleUploadAvatar]', err);
+    alert('Erro ao carregar foto: ' + (err?.message || 'tente novamente.'));
+  } finally {
+    event.target.value = '';
+  }
+};
 
-  const handleUploadWorkPhoto = async (event) => {
-    if (isGuestBarber) { alert("Para adicionar fotos, faça login!"); return; }
-    const file = event.target.files[0]; if (!file) return;
-    const currentPhotos = effectiveUser.work_photos || [];
-    if (currentPhotos.length >= 10) { alert("Máximo 10 fotos."); return; }
-    setUploadingPhoto(true);
-    try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `work-${effectiveUser.id}-${Date.now()}.${fileExt}`;
-      const { error: uploadError } = await sb.storage.from('barber-photos').upload(fileName, file);
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
-      const newPhotos = [...currentPhotos, publicUrl];
-      effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
-      await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
-    } catch (error) { alert('Erro: ' + error.message); }
-    finally { setUploadingPhoto(false); event.target.value = ''; }
-  };
-
-  const handleRemoveWorkPhoto = async (index) => {
-    if (isGuestBarber) return;
-    const currentPhotos = [...(effectiveUser.work_photos || [])];
-    currentPhotos.splice(index, 1);
-    effectiveOnUpdateProfile({ ...effectiveUser, work_photos: currentPhotos });
-    await sb.from('profiles').update({ work_photos: currentPhotos }).eq('id', effectiveUser.id);
-  };
-
+const handleUploadWorkPhoto = async (event) => {
+  if (isGuestBarber) { alert("Para adicionar fotos, faça login!"); return; }
+  const file = event.target.files[0];
+  if (!file) return;
+  const currentPhotos = effectiveUser.work_photos || [];
+  if (currentPhotos.length >= 10) { alert("Máximo 10 fotos."); return; }
+  setUploadingPhoto(true);
+  try {
+    // Mesma correção: ler pra memória antes de subir
+    const arrayBuffer = await file.arrayBuffer();
+    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const fileName = `work-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+    const { error: uploadError } = await sb.storage
+      .from('barber-photos')
+      .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+    const newPhotos = [...currentPhotos, publicUrl];
+    effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
+    await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
+  } catch (error) {
+    console.error('[handleUploadWorkPhoto]', error);
+    alert('Erro: ' + (error?.message || 'tente novamente.'));
+  } finally {
+    setUploadingPhoto(false);
+    event.target.value = '';
+  }
+};
   const handleDeleteAccount = async () => {
     if (isGuestBarber) return;
     if (!window.confirm("⚠️ Tem certeza? Todos os dados, agendamentos e fotos serão APAGADOS permanentemente. Esta ação não pode ser desfeita.")) return;
@@ -4366,7 +4377,7 @@ const longPressFired = useRef(false);
                 ) : (
                   <>
                     <p className="text-sm font-black text-slate-900 mt-1">
-                      {effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Gratuita'}
+                      {effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa ✅' : 'Versão Beta'}
                     </p>
                     {!effectiveUser.plano_ativo && (
                       <button onClick={() => setShowPayModal(true)} className="mt-3 text-blue-600 font-bold text-xs">
