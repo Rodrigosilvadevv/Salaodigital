@@ -1338,8 +1338,7 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
   );
 };
 
-// ─── AUTH SCREEN
-/const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
+const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
  
   // Registro
