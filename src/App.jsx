@@ -1503,8 +1503,24 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || user.app_metadata?.provider !== 'google') return;
 
-      const { data: existingProfile } = await supabase
+      // 1) Tenta achar o perfil pelo id do Google (conta já criada via Google antes)
+      let { data: existingProfile } = await supabase
         .from('profiles').select('*').eq('id', user.id).maybeSingle();
+
+      // 2) Se não achou por id, tenta achar pelo e-mail (conta criada antes por
+      //    telefone/e-mail, do mesmo tipo de usuário). Se já tiver telefone
+      //    preenchido, não pede de novo — loga direto.
+      if (!existingProfile && user.email) {
+        const { data: byEmail } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('email', user.email)
+          .eq('role', userType)
+          .not('phone', 'is', null)
+          .neq('phone', '')
+          .maybeSingle();
+        existingProfile = byEmail || null;
+      }
 
       if (existingProfile) {
         try { await onLogin(existingProfile.phone, null, existingProfile); }
