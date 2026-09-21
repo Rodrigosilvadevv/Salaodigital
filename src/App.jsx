@@ -1362,56 +1362,45 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
 
-  // Login por e-mail sem conta existente -> precisa completar telefone p/ criar conta
-  const [completeEmailData, setCompleteEmailData] = useState(null); // { email, password }
-  const [phoneForEmail, setPhoneForEmail] = useState('');
+  // Login por e-mail sem conta existente -> oferece ir pro cadastro (não pede telefone sozinho)
+  const [noAccountHint, setNoAccountHint] = useState(false);
 
-  // Validações registro
+  // Validações registro (cadastro novo sempre exige o formato completo, 11 dígitos)
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
   const regEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
   const regPasswordValid = regPassword.length >= 6;
 
-  // Validações login
-  const loginPhoneValid = getPhoneDigits(loginPhone).length === 11;
+  // Validações login (aceita 10 ou 11 dígitos: contas antigas podem não ter o 9º dígito)
+  const loginPhoneDigits = getPhoneDigits(loginPhone).length;
+  const loginPhoneValid = loginPhoneDigits === 10 || loginPhoneDigits === 11;
   const loginEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());
   const loginPasswordValid = loginPassword.length >= 6;
 
   // Google
   const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
 
-  // Completar telefone após login por e-mail sem conta
-  const phoneEmailValid = getPhoneDigits(phoneForEmail).length === 11;
-
   const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
-  const handlePhoneEmailChange = (e) => setPhoneForEmail(applyPhoneMask(e.target.value));
 
-  /* ── HELPERS: checar duplicidade (telefone/e-mail são chaves de login,
-        únicos DENTRO do mesmo tipo de usuário — 'barber' ou 'client') ── */
-  const checkAccountByEmail = async (email) => {
-    const { data, error: qErr } = await supabase
-      .from('profiles')
-      .select('id, phone, email')
-      .eq('email', email)
-      .eq('role', userType)
-      .maybeSingle();
-    if (qErr) throw new Error('Erro ao verificar e-mail. Tente novamente.');
-    return data;
+  /* ── Traduz erros comuns de duplicidade vindos do backend (onRegister/onLogin)
+        em mensagens amigáveis, sem precisar consultar a tabela direto daqui
+        (evita bater em RLS do Supabase, que bloqueia leitura anônima) ── */
+  const friendlyAuthError = (err, fallback) => {
+    const msg = (err && err.message) || '';
+    const lower = msg.toLowerCase();
+    if (lower.includes('duplicate') || lower.includes('unique') || lower.includes('já existe') || lower.includes('already exists') || lower.includes('já cadastrado')) {
+      if (lower.includes('phone') || lower.includes('telefone')) return 'Já existe uma conta com este telefone.';
+      if (lower.includes('email') || lower.includes('e-mail')) return 'Já existe uma conta com este e-mail.';
+      return 'Já existe uma conta com esses dados.';
+    }
+    return msg || fallback;
   };
 
-  const checkAccountByPhone = async (phone) => {
-    const { data, error: qErr } = await supabase
-      .from('profiles')
-      .select('id, phone, email')
-      .eq('phone', phone)
-      .eq('role', userType)
-      .maybeSingle();
-    if (qErr) throw new Error('Erro ao verificar telefone. Tente novamente.');
-    return data;
-  };
-
-  /* ── REGISTRO (telefone + e-mail + senha são obrigatórios) ── */
+  /* ── REGISTRO (telefone + e-mail + senha são obrigatórios) ──
+        A checagem de duplicidade (telefone/e-mail únicos por tipo de usuário)
+        é responsabilidade do backend em onRegister — aqui só chamamos e
+        traduzimos o erro que ele devolver. ── */
   const handleRegister = async () => {
     setError('');
     if (!regPhoneValid) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
@@ -1422,21 +1411,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     try {
       const email = regEmail.trim().toLowerCase();
       const phone = getPhoneDigits(regPhone);
-
-      const emailExists = await checkAccountByEmail(email);
-      if (emailExists) {
-        setError('Já existe uma conta com este e-mail.');
-        setLoading(false);
-        return;
-      }
-
-      const phoneExists = await checkAccountByPhone(phone);
-      if (phoneExists) {
-        setError('Já existe uma conta com este telefone.');
-        setLoading(false);
-        return;
-      }
-
       await onRegister(
         email, // nome = email (ajuste no App se quiser)
         phone,
@@ -1445,25 +1419,29 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         email
       );
     } catch (err) {
-      setError(err.message);
+      setError(friendlyAuthError(err, 'Erro ao cadastrar. Tente novamente.'));
     } finally {
       setLoading(false);
     }
   };
 
-  /* ── LOGIN ── */
+  /* ── LOGIN ──
+        Telefone é o eixo principal: login por telefone sempre tentado direto.
+        Login por e-mail também tenta direto; só se falhar (conta não existe)
+        oferecemos ir para o cadastro — sem pedir telefone à toa a cada login. ── */
   const handleLogin = async () => {
     setError('');
+    setNoAccountHint(false);
 
     if (loginBy === 'phone') {
       // Login por telefone: aceito SOMENTE para entrar, nunca cria conta aqui.
       // Senha é opcional (contas antigas criadas antes de o e-mail existir).
-      if (!loginPhoneValid) { setError('WhatsApp deve ter 11 dígitos.'); return; }
+      if (!loginPhoneValid) { setError('WhatsApp deve ter 10 ou 11 dígitos.'); return; }
       setLoading(true);
       try {
         await onLogin(getPhoneDigits(loginPhone), loginPassword || null, null, 'phone');
       } catch (err) {
-        setError(err.message);
+        setError(err.message || 'Não foi possível entrar. Verifique telefone e senha.');
       } finally {
         setLoading(false);
       }
@@ -1477,21 +1455,23 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     setLoading(true);
     try {
       const email = loginEmail.trim().toLowerCase();
-      const existing = await checkAccountByEmail(email);
-
-      if (existing) {
-        // Já existe conta com esse e-mail (para este tipo de usuário) -> loga
-        await onLogin(email, loginPassword, existing, 'email');
-      } else {
-        // Não existe conta com esse e-mail -> precisa criar, mas falta o telefone
-        setCompleteEmailData({ email, password: loginPassword });
-        setError('');
-      }
+      await onLogin(email, loginPassword, null, 'email');
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Não encontramos uma conta com este e-mail.');
+      setNoAccountHint(true);
     } finally {
       setLoading(false);
     }
+  };
+
+  /* ── Ir do login (e-mail sem conta) direto pro cadastro, já preenchido ── */
+  const handleGoToRegisterFromEmail = () => {
+    setRegEmail(loginEmail.trim());
+    setRegPassword(loginPassword);
+    setRegPhone('');
+    setError('');
+    setNoAccountHint(false);
+    setMode('register');
   };
 
   /* ── GOOGLE ── */
@@ -1538,50 +1518,15 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
     setLoading(true); setError('');
     try {
-      const phone = getPhoneDigits(phoneForGoogle);
-      const phoneExists = await checkAccountByPhone(phone);
-      if (phoneExists) {
-        setError('Este telefone já está cadastrado em outra conta.');
-        setLoading(false);
-        return;
-      }
-
       await onRegister(
         googleUser.name,
-        phone,
+        getPhoneDigits(phoneForGoogle),
         'google-' + googleUser.id,
         googleUser,
         googleUser.email,
       );
     } catch (err) {
-      setError(err.message || 'Erro ao finalizar cadastro.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /* ── SALVAR TELEFONE — conta nova via login com e-mail sem cadastro ── */
-  const handleSaveEmailPhone = async () => {
-    if (!phoneEmailValid) { setError('WhatsApp inválido.'); return; }
-    setLoading(true); setError('');
-    try {
-      const phone = getPhoneDigits(phoneForEmail);
-      const phoneExists = await checkAccountByPhone(phone);
-      if (phoneExists) {
-        setError('Este telefone já está cadastrado em outra conta.');
-        setLoading(false);
-        return;
-      }
-
-      await onRegister(
-        completeEmailData.email, // nome = email (ajuste no App se quiser)
-        phone,
-        completeEmailData.password,
-        null,
-        completeEmailData.email
-      );
-    } catch (err) {
-      setError(err.message || 'Erro ao finalizar cadastro.');
+      setError(friendlyAuthError(err, 'Erro ao finalizar cadastro.'));
     } finally {
       setLoading(false);
     }
@@ -1621,45 +1566,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
               )}
             </div>
             <Button onClick={handleSaveGooglePhone} loading={loading} disabled={!phoneGoogleValid}>
-              Finalizar cadastro
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  /* ── TELA: COMPLETAR TELEFONE (login por e-mail sem conta ainda) ── */
-  if (completeEmailData) {
-    return (
-      <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
-        <div className="absolute top-6 left-6">
-          <button onClick={() => { setCompleteEmailData(null); setPhoneForEmail(''); setError(''); }}
-            className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button>
-        </div>
-        <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
-          <div className="flex flex-col items-center mb-6">
-            <p className="font-black text-slate-900 text-base">Nova conta</p>
-            <p className="text-xs text-slate-400">{completeEmailData.email}</p>
-          </div>
-          <h2 className="text-lg font-black text-center text-slate-900 mb-1">Só falta o WhatsApp</h2>
-          <p className="text-center text-slate-400 text-xs mb-6">
-            Não encontramos uma conta com este e-mail. Informe seu número para criar a sua conta.
-          </p>
-          {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
-          <div className="space-y-4">
-            <div>
-              <input type="tel" value={phoneForEmail} onChange={handlePhoneEmailChange}
-                placeholder="WhatsApp: (41) 99999-9999"
-                className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                  ${phoneForEmail.length > 0 ? (phoneEmailValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-              {phoneForEmail.length > 0 && (
-                <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneEmailValid ? 'text-green-600' : 'text-amber-500'}`}>
-                  {getPhoneDigits(phoneForEmail).length}/11 dígitos {phoneEmailValid ? '✓' : ''}
-                </p>
-              )}
-            </div>
-            <Button onClick={handleSaveEmailPhone} loading={loading} disabled={!phoneEmailValid}>
               Finalizar cadastro
             </Button>
           </div>
@@ -1779,7 +1685,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                         ${loginPhone.length > 0 ? (loginPhoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
                     {loginPhone.length > 0 && (
                       <p className={`text-[10px] font-bold mt-1 ml-1 ${loginPhoneValid ? 'text-green-600' : 'text-amber-500'}`}>
-                        {getPhoneDigits(loginPhone).length}/11 dígitos {loginPhoneValid ? '✓' : ''}
+                        {getPhoneDigits(loginPhone).length} dígitos {loginPhoneValid ? '✓' : '(precisa de 10 ou 11)'}
                       </p>
                     )}
                   </div>
@@ -1818,9 +1724,13 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                       {showLoginPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
                     </button>
                   </div>
-                  <p className="text-[9px] text-slate-400 font-bold text-center -mt-2">
-                    Se não encontrarmos sua conta, vamos pedir seu WhatsApp para criá-la
-                  </p>
+                  {noAccountHint && (
+                    <button onClick={handleGoToRegisterFromEmail}
+                      type="button"
+                      className="w-full text-xs font-bold text-blue-600 -mt-2">
+                      Não encontramos essa conta. Criar cadastro com este e-mail →
+                    </button>
+                  )}
                 </>
               )}
 
