@@ -432,6 +432,8 @@ const AdminDashboard = () => {
   const [savingTags,setSavingTags]=useState({});
   const [selectedMsg,setSelectedMsg]=useState(null);
 
+
+
   const fetchAllData=useCallback(async()=>{
     setDataLoading(true);
     try {
@@ -1342,42 +1344,81 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [loginIdentifier, setLoginIdentifier] = useState(''); // telefone OU email no login
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
+ 
   const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
-
+ 
   const nameValid = name.trim().length >= 3;
   const phoneValid = getPhoneDigits(phone).length === 11;
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const passwordValid = password.length >= 6;
   const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
-
+ 
   const handlePhoneChange = (e) => setPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
-
-  /* ── LOGIN NORMAL ── */
+ 
+  // Detecta se o campo de login é email ou telefone
+  const loginIsEmail = loginIdentifier.includes('@');
+  const loginIsPhone = !loginIsEmail && getPhoneDigits(loginIdentifier).length >= 10;
+  const loginIdentifierValid = loginIsEmail
+    ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginIdentifier.trim())
+    : getPhoneDigits(loginIdentifier).length === 11;
+  const handleLoginIdentifierChange = (e) => {
+    const val = e.target.value;
+    // Se parece telefone, aplica máscara; se parece email, deixa livre
+    if (!val.includes('@') && (val.replace(/\D/g,'').length > 0 || val === '')) {
+      setLoginIdentifier(applyPhoneMask(val));
+    } else {
+      setLoginIdentifier(val);
+    }
+  };
+ 
+  /* ── REGISTRO ── */
   const handleSubmit = async () => {
     setError('');
     if (mode === 'register') {
       if (name.trim().length < 3) { setError('Nome deve ter pelo menos 3 caracteres.'); return; }
       if (getPhoneDigits(phone).length !== 11) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
+      if (!emailValid) { setError('Digite um e-mail válido.'); return; }
       if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
+      setLoading(true);
+      try {
+        // Passa email junto ao onRegister — ajuste a assinatura no App se precisar
+        await onRegister(name.trim(), getPhoneDigits(phone), password, null, email.trim().toLowerCase());
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+      return;
     }
+ 
+    /* ── LOGIN ── */
+    if (!loginIdentifierValid) {
+      setError('Digite um WhatsApp válido (11 dígitos) ou um e-mail válido.');
+      return;
+    }
+    if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
     setLoading(true);
     try {
-      if (mode === 'login') await onLogin(getPhoneDigits(phone) || phone, password);
-      else await onRegister(name.trim(), getPhoneDigits(phone), password);
+      const identifier = loginIsEmail
+        ? loginIdentifier.trim().toLowerCase()   // email
+        : getPhoneDigits(loginIdentifier);         // só dígitos do telefone
+      await onLogin(identifier, password, null, loginIsEmail ? 'email' : 'phone');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
-
+ 
   /* ── LOGIN VIA GOOGLE ── */
   const handleGoogleLogin = async () => {
     setError('');
@@ -1393,32 +1434,26 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setGoogleLoading(false);
     }
   };
-
-  /* ── VERIFICA SESSÃO APÓS REDIRECT DO GOOGLE ──
-     Se já tem perfil no Supabase: faz login direto (onLogin com o id).
-     Se não tem: pede o telefone para criar a conta.
-  */
+ 
+  /* ── VERIFICA SESSÃO APÓS REDIRECT DO GOOGLE ── */
   useEffect(() => {
     const checkGoogleSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || user.app_metadata?.provider !== 'google') return;
-
-      // Verifica se já existe perfil cadastrado com esse id do Auth
+ 
       const { data: existingProfile } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .maybeSingle();
-
+ 
       if (existingProfile) {
-        // Conta existente: faz login direto sem pedir telefone
         try {
           await onLogin(existingProfile.phone, null, existingProfile);
         } catch (err) {
           setError(err.message || 'Erro ao entrar com Google.');
         }
       } else {
-        // Conta nova: pede o telefone
         setGoogleUser({
           id: user.id,
           email: user.email,
@@ -1427,11 +1462,10 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         });
       }
     };
-
     checkGoogleSession();
   }, []);
-
-  /* ── SALVAR TELEFONE (só conta nova) ── */
+ 
+  /* ── SALVAR TELEFONE (conta nova via Google) ── */
   const handleSaveGooglePhone = async () => {
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
     setLoading(true);
@@ -1441,7 +1475,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         googleUser.name,
         getPhoneDigits(phoneForGoogle),
         'google-' + googleUser.id,
-        googleUser
+        googleUser,
+        googleUser.email,
       );
     } catch (err) {
       setError(err.message || 'Erro ao finalizar cadastro.');
@@ -1449,8 +1484,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setLoading(false);
     }
   };
-
-  /* ── ETAPA: COMPLETAR TELEFONE (só para conta nova) ── */
+ 
+  /* ── ETAPA: COMPLETAR TELEFONE (conta nova via Google) ── */
   if (googleUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
@@ -1460,7 +1495,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             <ChevronLeft size={24}/>
           </button>
         </div>
-
+ 
         <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
           <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden mb-3 border-2 border-slate-200">
@@ -1471,18 +1506,18 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             <p className="font-black text-slate-900 text-base">{googleUser.name}</p>
             <p className="text-xs text-slate-400 font-medium">{googleUser.email}</p>
           </div>
-
+ 
           <h2 className="text-lg font-black text-center text-slate-900 mb-1">Só falta o WhatsApp</h2>
           <p className="text-center text-slate-400 text-xs mb-6">
             Precisamos do seu número para confirmar agendamentos.
           </p>
-
+ 
           {error && (
             <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">
               {error}
             </div>
           )}
-
+ 
           <div className="space-y-4">
             <div>
               <input
@@ -1501,7 +1536,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 </p>
               )}
             </div>
-
             <Button onClick={handleSaveGooglePhone} loading={loading} disabled={!phoneGoogleValid}>
               Finalizar cadastro
             </Button>
@@ -1510,7 +1544,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       </div>
     );
   }
-
+ 
   /* ── TELA PRINCIPAL ── */
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
@@ -1522,7 +1556,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       <div className="absolute top-6 right-6">
         <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
       </div>
-
+ 
       <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
         <h2 className="text-2xl font-black text-center mb-2">
           {userType === 'barber' ? 'Área Profissional' : 'Área do Cliente'}
@@ -1530,13 +1564,13 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         <p className="text-center text-slate-400 mb-6 text-sm">
           {mode === 'login' ? 'Faça login para continuar' : 'Crie sua conta agora'}
         </p>
-
+ 
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">
             {error}
           </div>
         )}
-
+ 
         <div className="space-y-4">
           {/* ── Botão Google ── */}
           <button
@@ -1556,37 +1590,77 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             )}
             {googleLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
-
+ 
           <div className="flex items-center gap-2">
             <div className="h-[1px] bg-slate-200 flex-1"/>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span>
             <div className="h-[1px] bg-slate-200 flex-1"/>
           </div>
-
+ 
+          {/* ══ REGISTRO ══ */}
           {mode === 'register' && (
+            <>
+              {/* Nome */}
+              <div>
+                <input type="text" value={name} onChange={e => setName(e.target.value)}
+                  placeholder="Nome e sobrenome ou do seu espaço (mín. 3 letras)"
+                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${name.length > 0 ? (nameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {name.length > 0 && !nameValid && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>
+                )}
+              </div>
+ 
+              {/* WhatsApp */}
+              <div>
+                <input type="tel" value={phone} onChange={handlePhoneChange}
+                  placeholder="WhatsApp: (41) 99999-9999"
+                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${phone.length > 0 ? (phoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {phone.length > 0 && (
+                  <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid ? 'text-green-600' : 'text-amber-500'}`}>
+                    {getPhoneDigits(phone).length}/11 dígitos {phoneValid ? '✓' : ''}
+                  </p>
+                )}
+              </div>
+ 
+              {/* E-mail */}
+              <div>
+                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                  placeholder="E-mail (para recuperar acesso)"
+                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${email.length > 0 ? (emailValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {email.length > 0 && !emailValid && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">E-mail inválido</p>
+                )}
+              </div>
+            </>
+          )}
+ 
+          {/* ══ LOGIN ══ */}
+          {mode === 'login' && (
             <div>
-              <input type="text" value={name} onChange={e => setName(e.target.value)}
-                placeholder="Nome e sobrenome ou do seu espaço (mín. 3 letras)"
+              <input
+                type="text"
+                value={loginIdentifier}
+                onChange={handleLoginIdentifierChange}
+                placeholder="WhatsApp ou e-mail"
                 className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                  ${name.length > 0 ? (nameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-              {name.length > 0 && !nameValid && (
-                <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>
+                  ${loginIdentifier.length > 0
+                    ? (loginIdentifierValid ? 'border-green-400' : 'border-amber-300')
+                    : 'border-slate-200 focus:border-blue-500'}`}
+              />
+              {loginIdentifier.length > 0 && (
+                <p className={`text-[10px] font-bold mt-1 ml-1 ${loginIdentifierValid ? 'text-green-600' : 'text-amber-500'}`}>
+                  {loginIsEmail
+                    ? (loginIdentifierValid ? 'E-mail válido ✓' : 'E-mail inválido')
+                    : `${getPhoneDigits(loginIdentifier).length}/11 dígitos ${loginIdentifierValid ? '✓' : ''}`}
+                </p>
               )}
             </div>
           )}
-
-          <div>
-            <input type="tel" value={phone} onChange={handlePhoneChange}
-              placeholder="WhatsApp: (41) 99999-9999"
-              className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                ${phone.length > 0 ? (phoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-            {phone.length > 0 && (
-              <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid ? 'text-green-600' : 'text-amber-500'}`}>
-                {getPhoneDigits(phone).length}/11 dígitos {phoneValid ? '✓' : ''}
-              </p>
-            )}
-          </div>
-
+ 
+          {/* Senha (ambos os modos) */}
           <div className="relative">
             <input type={showPassword ? 'text' : 'password'} value={password}
               onChange={e => setPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
@@ -1596,12 +1670,12 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
               {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
             </button>
           </div>
-
+ 
           <Button onClick={handleSubmit} loading={loading}>
             {mode === 'login' ? 'Entrar' : 'Cadastrar'}
           </Button>
-
-          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
+ 
+          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setLoginIdentifier(''); }}
             className="w-full text-blue-600 font-bold text-sm mt-2">
             {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
           </button>
@@ -4329,35 +4403,46 @@ export default function App() {
     }
   };
  
-  const handleLogin = async (phone, password) => {
-    const { data, error } = await supabase.from('profiles').select('*')
-      .eq('phone', phone).eq('password', password).eq('role', currentMode).single();
-    if (error || !data) throw new Error('Telefone ou senha incorretos.');
-    localStorage.setItem('salao_user_data', JSON.stringify(data));
-    setUser(data);
-    setIsGuestBarber(false);
-  };
+ const handleLogin = async (identifier, password, directProfile = null, loginBy = 'phone') => {
+     if (directProfile) {
+       setUser(directProfile);
+       setCurrentMode(directProfile.role);
+       localStorage.setItem('salao_user_data', JSON.stringify(directProfile));
+       return;
+     }
+     const query = supabase.from('profiles').select('*').eq('password', password).eq('role', currentMode);
+     const { data, error } = await (loginBy === 'email'
+       ? query.eq('email', identifier)
+       : query.eq('phone', identifier)
+     ).single();
+     if (error || !data) throw new Error('Dados incorretos.');
+     localStorage.setItem('salao_user_data', JSON.stringify(data));
+     setUser(data);
+     setIsGuestBarber(false);
+   };
  
-  const handleRegister = async (name, phone, password) => {
-    const slug = generateSlug(name, Date.now());
-    const { data, error } = await supabase.from('profiles').insert([{
-      name, phone, password, role: currentMode,
-      is_visible: false, has_access: false, plano_ativo: true,
-      my_services: [], available_slots: {}, available_dates: [],
-      avatar_url: '', work_photos: [], custom_services: [],
-      slug, onboarding_done: false, bio: '',
-    }]).select().single();
-    if (error) {
-      if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
-      throw new Error(error.message);
-    }
-    const realSlug = generateSlug(name, data.id);
-    await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
-    const finalData = { ...data, slug: realSlug };
-    localStorage.setItem('salao_user_data', JSON.stringify(finalData));
-    setUser(finalData);
-    setIsGuestBarber(false);
-  };
+   const handleRegister = async (name, phone, password, googleUser = null, email = '') => {
+     const slug = generateSlug(name, Date.now());
+     const { data, error } = await supabase.from('profiles').insert([{
+       name, phone, password,
+       email: email || '',          // ← campo novo na tabela
+       role: currentMode,
+       is_visible: false, has_access: false, plano_ativo: true,
+       my_services: [], available_slots: {}, available_dates: [],
+       avatar_url: googleUser?.avatar_url || '', work_photos: [], custom_services: [],
+       slug, onboarding_done: false, bio: '',
+     }]).select().single();
+     if (error) {
+       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
+       throw new Error(error.message);
+     }
+     const realSlug = generateSlug(name, data.id);
+     await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
+     const finalData = { ...data, slug: realSlug };
+     localStorage.setItem('salao_user_data', JSON.stringify(finalData));
+     setUser(finalData);
+     setIsGuestBarber(false);
+   };
  
   const handleUpdateStatus = async (appointmentId, status) => {
     if (user?.isGuest || isGuestBarber) return;
