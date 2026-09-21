@@ -1336,7 +1336,8 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
   );
 };
 
-/// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+// ─── AUTH SCREEN
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
   const [name, setName] = useState('');
@@ -1588,6 +1589,161 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
           </button>
         </div>
+      </div>
+    </div>
+  );
+};
+// ─── BARBER ONBOARDING ────────────────────────────────────────────────────────
+const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
+  const [step,setStep]=useState(1), [saving,setSaving]=useState(false);
+  const TOTAL_STEPS=4;
+  const [address,setAddress]=useState(user.address||''), [selectedServices,setSelectedServices]=useState(user.my_services||[]), [duration,setDuration]=useState(user.appointment_duration||'30min'), [capturedLocation,setCapturedLocation]=useState({lat:user.latitude,lng:user.longitude});
+  const handleCaptureLocation=()=>{ if (!navigator.geolocation) { alert('Geolocalização não disponível'); return; } navigator.geolocation.getCurrentPosition(pos=>{ setCapturedLocation({lat:pos.coords.latitude,lng:pos.coords.longitude}); alert('Localização capturada!'); },()=>alert('Erro ao capturar localização.')); };
+  const toggleService=(id,defaultPrice)=>{ const exists=selectedServices.find(s=>s.id===id); if (exists) setSelectedServices(prev=>prev.filter(s=>s.id!==id)); else setSelectedServices(prev=>[...prev,{id,price:defaultPrice}]); };
+  const handleFinish=async()=>{
+    setSaving(true);
+    try {
+      const slug=generateSlug(user.name,user.id);
+      const updateData={address,latitude:capturedLocation?.lat||null,longitude:capturedLocation?.lng||null,my_services:selectedServices,appointment_duration:duration,onboarding_done:true,slug};
+      await sb.from('profiles').update(updateData).eq('id',user.id);
+      onComplete({...user,...updateData});
+    } catch(e) { alert('Erro ao salvar: '+e.message); } finally { setSaving(false); }
+  };
+  const handleSkip=async()=>{
+    setSaving(true);
+    try { const slug=generateSlug(user.name,user.id); await sb.from('profiles').update({onboarding_done:true,slug}).eq('id',user.id); onSkip({...user,onboarding_done:true,slug}); }
+    catch(e) { onSkip({...user,onboarding_done:true}); } finally { setSaving(false); }
+  };
+  const progressPct=Math.round((step/TOTAL_STEPS)*100);
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      <div className="bg-white border-b border-slate-100 px-6 py-4 sticky top-0 z-10">
+        <div className="flex items-center justify-between mb-3">
+          <div><h1 className="font-black text-slate-900 text-base">Configure seu Perfil</h1><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Passo {step} de {TOTAL_STEPS}</p></div>
+          <button onClick={handleSkip} disabled={saving} className="text-slate-400 font-bold text-xs bg-slate-100 px-4 py-2 rounded-full">{saving?'Aguarde...':'Pular tudo'}</button>
+        </div>
+        <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-600 rounded-full transition-all duration-500" style={{width:`${progressPct}%`}}/></div>
+      </div>
+      <div className="flex-1 p-6 max-w-md mx-auto w-full pb-32">
+        {step===1&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><MapPin size={28} className="text-blue-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Onde você atende?</h2><p className="text-sm text-slate-500">Clientes vão encontrar você pelo endereço.</p></div>
+            <input type="text" value={address} onChange={e=>setAddress(e.target.value)} placeholder="Ex: Rua das Flores, 123 — Curitiba/PR"
+              className="w-full bg-white border-2 border-slate-200 rounded-2xl px-4 py-4 text-sm font-medium outline-none focus:border-blue-500 transition-colors"/>
+            <button onClick={handleCaptureLocation} className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-sm border-2 transition-all active:scale-95 ${capturedLocation?.lat?'bg-green-50 border-green-500 text-green-700':'bg-blue-50 border-blue-200 text-blue-600 hover:border-blue-400'}`}>
+              <MapPin size={18}/>{capturedLocation?.lat?'✓ Localização capturada!':'Capturar Minha Localização'}
+            </button>
+          </div>
+        )}
+        {step===2&&(
+          <div className="space-y-4">
+            <div className="w-14 h-14 bg-purple-100 rounded-2xl flex items-center justify-center mb-2"><Scissors size={28} className="text-purple-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Quais serviços você oferece?</h2><p className="text-sm text-slate-500">Selecione os serviços. Ajuste os preços depois.</p></div>
+            {MASTER_SERVICES.map(s=>{
+              const isActive=selectedServices.some(sv=>sv.id===s.id);
+              return (
+                <button key={s.id} onClick={()=>toggleService(s.id,s.defaultPrice)}
+                  className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${isActive?'border-slate-900 bg-slate-900 text-white':'border-slate-100 bg-white text-slate-700 hover:border-slate-300'}`}>
+                  <div className="flex items-center gap-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${isActive?'bg-white/20':'bg-slate-100'}`}>{React.cloneElement(s.icon,{size:16})}</div>
+                    <div><p className="font-bold text-sm">{s.name}</p><p className={`text-[10px] ${isActive?'text-slate-300':'text-slate-400'}`}>R$ {s.defaultPrice} · {s.duration}</p></div>
+                  </div>
+                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isActive?'bg-green-400 border-green-400':'border-slate-300'}`}>
+                    {isActive&&<Check size={12} className="text-white"/>}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+        {step===3&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-amber-100 rounded-2xl flex items-center justify-center mb-2"><Clock size={28} className="text-amber-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Duração dos atendimentos</h2><p className="text-sm text-slate-500">Define o intervalo mínimo entre horários.</p></div>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              {[{value:'30min',label:'30 minutos',icon:'⏱'},{value:'1h',label:'1 hora',icon:'🕐'}].map(opt=>(
+                <button key={opt.value} onClick={()=>setDuration(opt.value)}
+                  className={`p-5 rounded-2xl border-2 text-left transition-all active:scale-95 ${duration===opt.value?'border-slate-900 bg-slate-900 text-white':'border-slate-200 bg-white hover:border-slate-400'}`}>
+                  <p className="text-2xl mb-2">{opt.icon}</p><p className="font-black text-sm">{opt.label}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {step===4&&(
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600"/></div>
+            <div><h2 className="text-2xl font-black text-slate-900 mb-1">Seu link de agendamento</h2><p className="text-sm text-slate-500">Compartilhe com seus clientes!</p></div>
+            <div className="bg-slate-900 rounded-2xl p-5 text-center">
+              <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 overflow-hidden flex items-center justify-center">
+                {user.avatar_url?<img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<User size={28} className="text-slate-400"/>}
+              </div>
+              <p className="text-white font-black text-lg">{user.name}</p>
+              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name,user.id))}</p>
+            </div>
+            <button onClick={handleFinish} disabled={saving}
+              className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50">
+              {saving?<Loader2 className="animate-spin" size={22}/>:<><CheckCircle size={22}/> Finalizar e Ir ao Painel</>}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur-md border-t border-slate-100 z-10">
+        <div className="max-w-md mx-auto flex gap-3">
+          {step>1&&<button onClick={()=>setStep(s=>s-1)} className="flex-1 py-4 border-2 border-slate-200 text-slate-700 rounded-2xl font-black text-sm active:scale-95 transition-all">← Voltar</button>}
+          {step<TOTAL_STEPS&&<button onClick={()=>setStep(s=>s+1)} className="flex-1 py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Próximo →</button>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── TOP PROFESSIONALS ────────────────────────────────────────────────────────
+const TopProfessionalsSection = ({ barbers }) => {
+  const visibleBarbers=barbers.filter(b=>b.is_visible&&((b.my_services||[]).length>0||b.avatar_url));
+  const topBarbers=useMemo(()=>{
+    const featured=visibleBarbers.filter(b=>b.featured_rank).sort((a,b)=>a.featured_rank-b.featured_rank);
+    const others=visibleBarbers.filter(b=>!b.featured_rank).sort((a,b)=>getBarberRating(b)-getBarberRating(a));
+    return [...featured,...others].slice(0,3);
+  },[visibleBarbers]);
+  if (!topBarbers.length) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Melhores Profissionais</h3>
+        <div className="flex items-center gap-1"><Star size={10} className="text-amber-400 fill-amber-400"/><span className="text-[9px] font-bold text-slate-400">Top 3</span></div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {topBarbers.map(barber=>{
+          const rating=getBarberRating(barber);
+          const specs=(barber.my_services||[]).slice(0,2).map(s=>{ const m=MASTER_SERVICES.find(ms=>ms.id===s.id); return m?.name||''; }).filter(Boolean);
+          return (
+            <div key={barber.id} className="flex-shrink-0 w-[152px] bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 pt-5 pb-6 flex justify-center">
+                {barber.plano_ativo&&<div className="absolute top-2 right-2 bg-blue-600 rounded-full p-0.5"><Zap size={8} className="text-white"/></div>}
+                {barber.featured_rank&&<div className="absolute top-2 left-2 bg-amber-500 rounded-full px-1.5 py-0.5 text-[8px] font-black text-white">★{barber.featured_rank}</div>}
+                <StoryRing rating={rating} size={72} animate>
+                  {barber.avatar_url?<img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>:<div className="w-full h-full flex items-center justify-center bg-slate-700"><User size={22} className="text-slate-400"/></div>}
+                </StoryRing>
+              </div>
+              <div className="px-3 pt-3 pb-3">
+                <p className="font-black text-slate-900 text-xs leading-tight truncate">{barber.name}</p>
+                {barber.bio&&<p className="text-[9px] text-blue-500 font-bold italic mt-0.5 truncate">"{barber.bio}"</p>}
+                <div className="flex items-center gap-1.5 mt-1 mb-2"><StarRating rating={rating}/><span className="text-[9px] font-black text-amber-500">{rating}</span></div>
+                {specs.map((s,i)=><span key={i} className="text-[8px] font-bold text-slate-500 bg-slate-50 rounded-md px-1.5 py-0.5 truncate block mb-0.5">{s}</span>)}
+                {barber.distanceLabel&&<div className="flex items-center gap-0.5 mt-1"><MapPin size={9} className="text-blue-400"/><span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span></div>}
+                {(barber.admin_tags||[]).length>0&&(
+                  <div className="flex flex-wrap gap-0.5 mt-1">
+                    {(barber.admin_tags||[]).slice(0,2).map((tag,i)=>(
+                      <span key={i} className="text-[7px] font-bold bg-purple-50 text-purple-500 border border-purple-100 px-1 py-0.5 rounded-full">{tag}</span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
