@@ -1339,79 +1339,62 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 };
 
 // ─── AUTH SCREEN
-// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
-const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
+/const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [loginIdentifier, setLoginIdentifier] = useState(''); // telefone OU email no login
-  const [password, setPassword] = useState('');
+ 
+  // Registro
+  const [regPhone, setRegPhone] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPassword, setRegPassword] = useState('');
+ 
+  // Login
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loginBy, setLoginBy] = useState('phone'); // 'phone' | 'email'
+ 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [showRegPassword, setShowRegPassword] = useState(false);
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
  
+  // Google
   const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
  
-  const nameValid = name.trim().length >= 3;
-  const phoneValid = getPhoneDigits(phone).length === 11;
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const passwordValid = password.length >= 6;
+  // Validações registro
+  const regPhoneValid = getPhoneDigits(regPhone).length === 11;
+  const regEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
+  const regPasswordValid = regPassword.length >= 6;
+ 
+  // Validações login
+  const loginPhoneValid = getPhoneDigits(loginPhone).length === 11;
+  const loginEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());
+  const loginPasswordValid = loginPassword.length >= 6;
+ 
+  // Google
   const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
  
-  const handlePhoneChange = (e) => setPhone(applyPhoneMask(e.target.value));
+  const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
+  const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
  
-  // Detecta se o campo de login é email ou telefone
-  const loginIsEmail = loginIdentifier.includes('@');
-  const loginIsPhone = !loginIsEmail && getPhoneDigits(loginIdentifier).length >= 10;
-  const loginIdentifierValid = loginIsEmail
-    ? /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginIdentifier.trim())
-    : getPhoneDigits(loginIdentifier).length === 11;
-  const handleLoginIdentifierChange = (e) => {
-    const val = e.target.value;
-    // Se parece telefone, aplica máscara; se parece email, deixa livre
-    if (!val.includes('@') && (val.replace(/\D/g,'').length > 0 || val === '')) {
-      setLoginIdentifier(applyPhoneMask(val));
-    } else {
-      setLoginIdentifier(val);
-    }
-  };
- 
   /* ── REGISTRO ── */
-  const handleSubmit = async () => {
+  const handleRegister = async () => {
     setError('');
-    if (mode === 'register') {
-      if (name.trim().length < 3) { setError('Nome deve ter pelo menos 3 caracteres.'); return; }
-      if (getPhoneDigits(phone).length !== 11) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
-      if (!emailValid) { setError('Digite um e-mail válido.'); return; }
-      if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
-      setLoading(true);
-      try {
-        // Passa email junto ao onRegister — ajuste a assinatura no App se precisar
-        await onRegister(name.trim(), getPhoneDigits(phone), password, null, email.trim().toLowerCase());
-      } catch (err) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
- 
-    /* ── LOGIN ── */
-    if (!loginIdentifierValid) {
-      setError('Digite um WhatsApp válido (11 dígitos) ou um e-mail válido.');
-      return;
-    }
-    if (password.length < 6) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
+    if (!regPhoneValid) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
+    if (!regEmailValid) { setError('Digite um e-mail válido.'); return; }
+    if (!regPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
     setLoading(true);
     try {
-      const identifier = loginIsEmail
-        ? loginIdentifier.trim().toLowerCase()   // email
-        : getPhoneDigits(loginIdentifier);         // só dígitos do telefone
-      await onLogin(identifier, password, null, loginIsEmail ? 'email' : 'phone');
+      await onRegister(
+        regEmail.trim().toLowerCase(), // nome = email (ajuste no App se quiser)
+        getPhoneDigits(regPhone),
+        regPassword,
+        null,
+        regEmail.trim().toLowerCase()
+      );
     } catch (err) {
       setError(err.message);
     } finally {
@@ -1419,7 +1402,35 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
  
-  /* ── LOGIN VIA GOOGLE ── */
+  /* ── LOGIN ── */
+  const handleLogin = async () => {
+    setError('');
+    if (loginBy === 'phone') {
+      if (!loginPhoneValid) { setError('WhatsApp deve ter 11 dígitos.'); return; }
+      // senha opcional para quem criou conta antes do email existir
+      setLoading(true);
+      try {
+        await onLogin(getPhoneDigits(loginPhone), loginPassword || null, null, 'phone');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      if (!loginEmailValid) { setError('Digite um e-mail válido.'); return; }
+      if (!loginPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
+      setLoading(true);
+      try {
+        await onLogin(loginEmail.trim().toLowerCase(), loginPassword, null, 'email');
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+ 
+  /* ── GOOGLE ── */
   const handleGoogleLogin = async () => {
     setError('');
     setGoogleLoading(true);
@@ -1435,24 +1446,17 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
  
-  /* ── VERIFICA SESSÃO APÓS REDIRECT DO GOOGLE ── */
   useEffect(() => {
     const checkGoogleSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || user.app_metadata?.provider !== 'google') return;
  
       const { data: existingProfile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .maybeSingle();
+        .from('profiles').select('*').eq('id', user.id).maybeSingle();
  
       if (existingProfile) {
-        try {
-          await onLogin(existingProfile.phone, null, existingProfile);
-        } catch (err) {
-          setError(err.message || 'Erro ao entrar com Google.');
-        }
+        try { await onLogin(existingProfile.phone, null, existingProfile); }
+        catch (err) { setError(err.message || 'Erro ao entrar com Google.'); }
       } else {
         setGoogleUser({
           id: user.id,
@@ -1465,11 +1469,10 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     checkGoogleSession();
   }, []);
  
-  /* ── SALVAR TELEFONE (conta nova via Google) ── */
+  /* ── SALVAR TELEFONE — conta nova via Google ── */
   const handleSaveGooglePhone = async () => {
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
-    setLoading(true);
-    setError('');
+    setLoading(true); setError('');
     try {
       await onRegister(
         googleUser.name,
@@ -1485,17 +1488,14 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
  
-  /* ── ETAPA: COMPLETAR TELEFONE (conta nova via Google) ── */
+  /* ── TELA: COMPLETAR TELEFONE (Google novo) ── */
   if (googleUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
         <div className="absolute top-6 left-6">
           <button onClick={() => { setGoogleUser(null); supabase.auth.signOut(); }}
-            className="p-2 bg-white rounded-full shadow-sm">
-            <ChevronLeft size={24}/>
-          </button>
+            className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button>
         </div>
- 
         <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
           <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden mb-3 border-2 border-slate-200">
@@ -1504,32 +1504,17 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 : <User size={28} className="text-slate-400"/>}
             </div>
             <p className="font-black text-slate-900 text-base">{googleUser.name}</p>
-            <p className="text-xs text-slate-400 font-medium">{googleUser.email}</p>
+            <p className="text-xs text-slate-400">{googleUser.email}</p>
           </div>
- 
           <h2 className="text-lg font-black text-center text-slate-900 mb-1">Só falta o WhatsApp</h2>
-          <p className="text-center text-slate-400 text-xs mb-6">
-            Precisamos do seu número para confirmar agendamentos.
-          </p>
- 
-          {error && (
-            <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">
-              {error}
-            </div>
-          )}
- 
+          <p className="text-center text-slate-400 text-xs mb-6">Precisamos do seu número para confirmar agendamentos.</p>
+          {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
           <div className="space-y-4">
             <div>
-              <input
-                type="tel"
-                value={phoneForGoogle}
-                onChange={handlePhoneGoogleChange}
+              <input type="tel" value={phoneForGoogle} onChange={handlePhoneGoogleChange}
                 placeholder="WhatsApp: (41) 99999-9999"
                 className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                  ${phoneForGoogle.length > 0
-                    ? (phoneGoogleValid ? 'border-green-400' : 'border-amber-300')
-                    : 'border-slate-200 focus:border-blue-500'}`}
-              />
+                  ${phoneForGoogle.length > 0 ? (phoneGoogleValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
               {phoneForGoogle.length > 0 && (
                 <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneGoogleValid ? 'text-green-600' : 'text-amber-500'}`}>
                   {getPhoneDigits(phoneForGoogle).length}/11 dígitos {phoneGoogleValid ? '✓' : ''}
@@ -1549,9 +1534,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
       <div className="absolute top-6 left-6">
-        <button onClick={onBack} className="p-2 bg-white rounded-full shadow-sm">
-          <ChevronLeft size={24}/>
-        </button>
+        <button onClick={onBack} className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button>
       </div>
       <div className="absolute top-6 right-6">
         <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
@@ -1566,28 +1549,21 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         </p>
  
         {error && (
-          <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">
-            {error}
-          </div>
+          <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>
         )}
  
         <div className="space-y-4">
-          {/* ── Botão Google ── */}
-          <button
-            onClick={handleGoogleLogin}
-            disabled={googleLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm"
-          >
-            {googleLoading ? (
-              <Loader2 size={18} className="animate-spin text-slate-400"/>
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v9.02h13.204c-.572 3.048-2.3 5.628-4.9 7.356v6.108h7.932c4.644-4.272 7.296-10.572 7.296-17.78z" fill="#4285F4"/>
-                <path d="M24 48c6.48 0 11.916-2.148 15.888-5.832l-7.932-6.108c-2.148 1.44-4.896 2.292-7.956 2.292-6.12 0-11.304-4.14-13.164-9.696H2.64v6.3C6.6 42.78 14.76 48 24 48z" fill="#34A853"/>
-                <path d="M10.836 28.656A14.82 14.82 0 0 1 9.96 24c0-1.62.276-3.192.876-4.656v-6.3H2.64A23.956 23.956 0 0 0 0 24c0 3.876.924 7.548 2.64 10.956l8.196-6.3z" fill="#FBBC05"/>
-                <path d="M24 9.552c3.456 0 6.552 1.188 8.988 3.528l6.732-6.732C35.904 2.388 30.468 0 24 0 14.76 0 6.6 5.22 2.64 13.044l8.196 6.3c1.86-5.556 7.044-9.792 13.164-9.792z" fill="#EA4335"/>
-              </svg>
-            )}
+          {/* Botão Google */}
+          <button onClick={handleGoogleLogin} disabled={googleLoading}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
+            {googleLoading
+              ? <Loader2 size={18} className="animate-spin text-slate-400"/>
+              : <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v9.02h13.204c-.572 3.048-2.3 5.628-4.9 7.356v6.108h7.932c4.644-4.272 7.296-10.572 7.296-17.78z" fill="#4285F4"/>
+                  <path d="M24 48c6.48 0 11.916-2.148 15.888-5.832l-7.932-6.108c-2.148 1.44-4.896 2.292-7.956 2.292-6.12 0-11.304-4.14-13.164-9.696H2.64v6.3C6.6 42.78 14.76 48 24 48z" fill="#34A853"/>
+                  <path d="M10.836 28.656A14.82 14.82 0 0 1 9.96 24c0-1.62.276-3.192.876-4.656v-6.3H2.64A23.956 23.956 0 0 0 0 24c0 3.876.924 7.548 2.64 10.956l8.196-6.3z" fill="#FBBC05"/>
+                  <path d="M24 9.552c3.456 0 6.552 1.188 8.988 3.528l6.732-6.732C35.904 2.388 30.468 0 24 0 14.76 0 6.6 5.22 2.64 13.044l8.196 6.3c1.86-5.556 7.044-9.792 13.164-9.792z" fill="#EA4335"/>
+                </svg>}
             {googleLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
  
@@ -1597,85 +1573,121 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             <div className="h-[1px] bg-slate-200 flex-1"/>
           </div>
  
-          {/* ══ REGISTRO ══ */}
+          {/* ══════════ REGISTRO ══════════ */}
           {mode === 'register' && (
             <>
-              {/* Nome */}
+              {/* Telefone */}
               <div>
-                <input type="text" value={name} onChange={e => setName(e.target.value)}
-                  placeholder="Nome e sobrenome ou do seu espaço (mín. 3 letras)"
-                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                    ${name.length > 0 ? (nameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-                {name.length > 0 && !nameValid && (
-                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Mínimo 3 caracteres</p>
-                )}
-              </div>
- 
-              {/* WhatsApp */}
-              <div>
-                <input type="tel" value={phone} onChange={handlePhoneChange}
+                <input type="tel" value={regPhone} onChange={handleRegPhoneChange}
                   placeholder="WhatsApp: (41) 99999-9999"
                   className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                    ${phone.length > 0 ? (phoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-                {phone.length > 0 && (
-                  <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneValid ? 'text-green-600' : 'text-amber-500'}`}>
-                    {getPhoneDigits(phone).length}/11 dígitos {phoneValid ? '✓' : ''}
+                    ${regPhone.length > 0 ? (regPhoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {regPhone.length > 0 && (
+                  <p className={`text-[10px] font-bold mt-1 ml-1 ${regPhoneValid ? 'text-green-600' : 'text-amber-500'}`}>
+                    {getPhoneDigits(regPhone).length}/11 dígitos {regPhoneValid ? '✓' : ''}
                   </p>
                 )}
               </div>
  
-              {/* E-mail */}
+              {/* Email */}
               <div>
-                <input type="email" value={email} onChange={e => setEmail(e.target.value)}
-                  placeholder="E-mail (para recuperar acesso)"
+                <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)}
+                  placeholder="E-mail"
                   className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                    ${email.length > 0 ? (emailValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-                {email.length > 0 && !emailValid && (
+                    ${regEmail.length > 0 ? (regEmailValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {regEmail.length > 0 && !regEmailValid && (
                   <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">E-mail inválido</p>
                 )}
               </div>
+ 
+              {/* Senha */}
+              <div className="relative">
+                <input type={showRegPassword ? 'text' : 'password'} value={regPassword}
+                  onChange={e => setRegPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
+                  className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${regPassword.length > 0 ? (regPasswordValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                <button onClick={() => setShowRegPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  {showRegPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                </button>
+              </div>
+ 
+              <Button onClick={handleRegister} loading={loading}>Cadastrar</Button>
             </>
           )}
  
-          {/* ══ LOGIN ══ */}
+          {/* ══════════ LOGIN ══════════ */}
           {mode === 'login' && (
-            <div>
-              <input
-                type="text"
-                value={loginIdentifier}
-                onChange={handleLoginIdentifierChange}
-                placeholder="WhatsApp ou e-mail"
-                className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                  ${loginIdentifier.length > 0
-                    ? (loginIdentifierValid ? 'border-green-400' : 'border-amber-300')
-                    : 'border-slate-200 focus:border-blue-500'}`}
-              />
-              {loginIdentifier.length > 0 && (
-                <p className={`text-[10px] font-bold mt-1 ml-1 ${loginIdentifierValid ? 'text-green-600' : 'text-amber-500'}`}>
-                  {loginIsEmail
-                    ? (loginIdentifierValid ? 'E-mail válido ✓' : 'E-mail inválido')
-                    : `${getPhoneDigits(loginIdentifier).length}/11 dígitos ${loginIdentifierValid ? '✓' : ''}`}
-                </p>
+            <>
+              {/* Toggle telefone / email */}
+              <div className="flex rounded-xl overflow-hidden border-2 border-slate-200">
+                <button onClick={() => { setLoginBy('phone'); setError(''); }}
+                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-tight transition-all
+                    ${loginBy === 'phone' ? 'bg-slate-900 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                  📱 Telefone
+                </button>
+                <button onClick={() => { setLoginBy('email'); setError(''); }}
+                  className={`flex-1 py-2.5 text-xs font-black uppercase tracking-tight transition-all
+                    ${loginBy === 'email' ? 'bg-slate-900 text-white' : 'bg-white text-slate-400 hover:bg-slate-50'}`}>
+                  ✉️ E-mail
+                </button>
+              </div>
+ 
+              {loginBy === 'phone' && (
+                <>
+                  <div>
+                    <input type="tel" value={loginPhone} onChange={handleLoginPhoneChange}
+                      placeholder="WhatsApp: (41) 99999-9999"
+                      className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                        ${loginPhone.length > 0 ? (loginPhoneValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                    {loginPhone.length > 0 && (
+                      <p className={`text-[10px] font-bold mt-1 ml-1 ${loginPhoneValid ? 'text-green-600' : 'text-amber-500'}`}>
+                        {getPhoneDigits(loginPhone).length}/11 dígitos {loginPhoneValid ? '✓' : ''}
+                      </p>
+                    )}
+                  </div>
+                  {/* Senha opcional para quem criou conta antes do email */}
+                  <div className="relative">
+                    <input type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)} placeholder="Senha (opcional para contas antigas)"
+                      className="w-full p-3 pr-10 bg-slate-50 border-2 border-slate-200 rounded-xl outline-none focus:border-blue-500 transition-colors"/>
+                    <button onClick={() => setShowLoginPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      {showLoginPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-slate-400 font-bold text-center -mt-2">
+                    Contas criadas antes desta versão podem entrar só com o telefone
+                  </p>
+                </>
               )}
-            </div>
+ 
+              {loginBy === 'email' && (
+                <>
+                  <div>
+                    <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)}
+                      placeholder="E-mail"
+                      className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                        ${loginEmail.length > 0 ? (loginEmailValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                    {loginEmail.length > 0 && !loginEmailValid && (
+                      <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">E-mail inválido</p>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <input type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
+                      className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                        ${loginPassword.length > 0 ? (loginPasswordValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                    <button onClick={() => setShowLoginPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                      {showLoginPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
+                    </button>
+                  </div>
+                </>
+              )}
+ 
+              <Button onClick={handleLogin} loading={loading}>Entrar</Button>
+            </>
           )}
  
-          {/* Senha (ambos os modos) */}
-          <div className="relative">
-            <input type={showPassword ? 'text' : 'password'} value={password}
-              onChange={e => setPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
-              className={`w-full p-3 pr-10 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                ${password.length > 0 ? (passwordValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-            <button onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-              {showPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
-            </button>
-          </div>
- 
-          <Button onClick={handleSubmit} loading={loading}>
-            {mode === 'login' ? 'Entrar' : 'Cadastrar'}
-          </Button>
- 
-          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); setLoginIdentifier(''); }}
+          <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
             className="w-full text-blue-600 font-bold text-sm mt-2">
             {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
           </button>
@@ -4403,19 +4415,26 @@ export default function App() {
     }
   };
  
- const handleLogin = async (identifier, password, directProfile = null, loginBy = 'phone') => {
+  const handleLogin = async (identifier, password, directProfile = null, loginBy = 'phone') => {
      if (directProfile) {
        setUser(directProfile);
        setCurrentMode(directProfile.role);
        localStorage.setItem('salao_user_data', JSON.stringify(directProfile));
        return;
      }
-     const query = supabase.from('profiles').select('*').eq('password', password).eq('role', currentMode);
-     const { data, error } = await (loginBy === 'email'
-       ? query.eq('email', identifier)
-       : query.eq('phone', identifier)
-     ).single();
-     if (error || !data) throw new Error('Dados incorretos.');
+ 
+     let query = supabase.from('profiles').select('*').eq('role', currentMode);
+ 
+     if (loginBy === 'email') {
+       query = query.eq('email', identifier).eq('password', password);
+     } else {
+       // telefone: senha é opcional (quem criou antes não tem email)
+       query = query.eq('phone', identifier);
+       if (password) query = query.eq('password', password);
+     }
+ 
+     const { data, error } = await query.single();
+     if (error || !data) throw new Error('Dados incorretos. Verifique e tente novamente.');
      localStorage.setItem('salao_user_data', JSON.stringify(data));
      setUser(data);
      setIsGuestBarber(false);
