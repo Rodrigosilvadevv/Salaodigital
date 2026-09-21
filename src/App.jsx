@@ -1348,8 +1348,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  // Etapa de completar cadastro após login Google (adicionar telefone)
-  const [googleUser, setGoogleUser] = useState(null); // { id, email, name, avatar_url }
+  const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
 
   const nameValid = name.trim().length >= 3;
@@ -1386,9 +1385,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
+        options: { redirectTo: window.location.origin },
       });
       if (error) throw error;
     } catch (err) {
@@ -1397,10 +1394,31 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
+  /* ── VERIFICA SESSÃO APÓS REDIRECT DO GOOGLE ──
+     Se já tem perfil no Supabase: faz login direto (onLogin com o id).
+     Se não tem: pede o telefone para criar a conta.
+  */
   useEffect(() => {
-    const checkSession = async () => {
+    const checkGoogleSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (user && user.app_metadata?.provider === 'google') {
+      if (!user || user.app_metadata?.provider !== 'google') return;
+
+      // Verifica se já existe perfil cadastrado com esse id do Auth
+      const { data: existingProfile } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (existingProfile) {
+        // Conta existente: faz login direto sem pedir telefone
+        try {
+          await onLogin(existingProfile.phone, null, existingProfile);
+        } catch (err) {
+          setError(err.message || 'Erro ao entrar com Google.');
+        }
+      } else {
+        // Conta nova: pede o telefone
         setGoogleUser({
           id: user.id,
           email: user.email,
@@ -1409,10 +1427,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         });
       }
     };
-    checkSession();
+
+    checkGoogleSession();
   }, []);
 
-  /* ── SALVAR TELEFONE DO GOOGLE ── */
+  /* ── SALVAR TELEFONE (só conta nova) ── */
   const handleSaveGooglePhone = async () => {
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
     setLoading(true);
@@ -1431,18 +1450,18 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  /* ── ETAPA: COMPLETAR TELEFONE APÓS GOOGLE ── */
+  /* ── ETAPA: COMPLETAR TELEFONE (só para conta nova) ── */
   if (googleUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
         <div className="absolute top-6 left-6">
-          <button onClick={() => setGoogleUser(null)} className="p-2 bg-white rounded-full shadow-sm">
+          <button onClick={() => { setGoogleUser(null); supabase.auth.signOut(); }}
+            className="p-2 bg-white rounded-full shadow-sm">
             <ChevronLeft size={24}/>
           </button>
         </div>
 
         <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
-          {/* Avatar Google */}
           <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden mb-3 border-2 border-slate-200">
               {googleUser.avatar_url
@@ -1538,14 +1557,12 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             {googleLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
 
-          {/* Divisor */}
           <div className="flex items-center gap-2">
             <div className="h-[1px] bg-slate-200 flex-1"/>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span>
             <div className="h-[1px] bg-slate-200 flex-1"/>
           </div>
 
-          {/* ── Formulário normal ── */}
           {mode === 'register' && (
             <div>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
