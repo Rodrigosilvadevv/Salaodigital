@@ -1343,6 +1343,9 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH SCREEN — login/cadastro de barbeiros e clientes
 // ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// AUTH SCREEN — login/cadastro de barbeiros e clientes
+// ════════════════════════════════════════════════════════════════════════════
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
 
@@ -1371,6 +1374,10 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   // Login por e-mail sem conta existente -> oferece ir pro cadastro (não pede telefone sozinho)
   const [noAccountHint, setNoAccountHint] = useState(false);
 
+  // Cadastro deu duplicidade -> oferece ir pro login com o dado já preenchido
+  // 'phone' | 'email' | null
+  const [duplicateHint, setDuplicateHint] = useState(null);
+
   // Validações registro (cadastro novo sempre exige o formato completo, 11 dígitos)
   const regNameValid = regName.trim().length >= 2;
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
@@ -1390,24 +1397,30 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
 
-  /* ── Traduz erros comuns de duplicidade vindos do backend (onRegister/onLogin)
-        em mensagens amigáveis, sem precisar consultar a tabela direto daqui
-        (evita bater em RLS do Supabase, que bloqueia leitura anônima) ── */
-  const friendlyAuthError = (err, fallback) => {
+  /* ── Detecta duplicidade num erro do backend, sem consultar a tabela daqui
+        (evita bater em RLS do Supabase, que bloqueia leitura anônima) ──
+        Retorna 'phone' | 'email' | 'other' | null ── */
+  const classifyDuplicateError = (err) => {
     const msg = (err && err.message) || '';
     const lower = msg.toLowerCase();
-    if (
+    const isDup =
       lower.includes('duplicate') ||
       lower.includes('unique') ||
       lower.includes('já existe') ||
       lower.includes('already exists') ||
-      lower.includes('já cadastrado')
-    ) {
-      if (lower.includes('phone') || lower.includes('telefone')) return 'Já existe uma conta com este telefone.';
-      if (lower.includes('email') || lower.includes('e-mail')) return 'Já existe uma conta com este e-mail.';
-      return 'Já existe uma conta com esses dados.';
-    }
-    return msg || fallback;
+      lower.includes('já cadastrado');
+    if (!isDup) return null;
+    if (lower.includes('phone') || lower.includes('telefone')) return 'phone';
+    if (lower.includes('email') || lower.includes('e-mail')) return 'email';
+    return 'other';
+  };
+
+  const friendlyAuthError = (err, fallback) => {
+    const kind = classifyDuplicateError(err);
+    if (kind === 'phone') return 'Já existe uma conta com este telefone. Faça login em vez de cadastrar.';
+    if (kind === 'email') return 'Já existe uma conta com este e-mail. Faça login em vez de cadastrar.';
+    if (kind === 'other') return 'Já existe uma conta com esses dados.';
+    return (err && err.message) || fallback;
   };
 
   /* ── REGISTRO (telefone + e-mail + senha são obrigatórios) ──
@@ -1811,11 +1824,20 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [duration, setDuration] = useState(user.appointment_duration || '30min');
   const [capturedLocation, setCapturedLocation] = useState({ lat: user.latitude, lng: user.longitude });
 
+  // ── Fotos (perfil + trabalho) ──
+  const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || '');
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [workPhotos, setWorkPhotos] = useState(user.work_photos || []);
+  const [uploadingWorkPhoto, setUploadingWorkPhoto] = useState(false);
+
   // ── Agenda (horários disponíveis) ──
   const [availableSlots, setAvailableSlots] = useState(user.available_slots || {});
   const [selectedDateConfig, setSelectedDateConfig] = useState(today.toISOString().split('T')[0]);
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+
+  // ── Visibilidade do perfil ──
+  const [isVisible, setIsVisible] = useState(user.is_visible || false);
 
   const filteredTimeSlots = duration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
   const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
@@ -1881,6 +1903,59 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
     }
   };
 
+  // ── Upload foto de perfil (com a correção do arrayBuffer pro Android) ──
+  const handleUploadAvatar = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const fileName = `avatar-${user.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage
+        .from('barber-photos')
+        .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      setAvatarUrl(publicUrl);
+    } catch (err) {
+      console.error('[handleUploadAvatar onboarding]', err);
+      alert('Erro ao carregar foto: ' + (err?.message || 'tente novamente.'));
+    } finally {
+      setUploadingAvatar(false);
+      event.target.value = '';
+    }
+  };
+
+  // ── Upload fotos do trabalho (até 10) ──
+  const handleUploadWorkPhoto = async (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (workPhotos.length >= 10) { alert('Máximo 10 fotos.'); return; }
+    setUploadingWorkPhoto(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const fileName = `work-${user.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage
+        .from('barber-photos')
+        .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      setWorkPhotos(prev => [...prev, publicUrl]);
+    } catch (err) {
+      console.error('[handleUploadWorkPhoto onboarding]', err);
+      alert('Erro: ' + (err?.message || 'tente novamente.'));
+    } finally {
+      setUploadingWorkPhoto(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleRemoveWorkPhoto = (index) => {
+    setWorkPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleFinish = async () => {
     setSaving(true);
     try {
@@ -1891,7 +1966,10 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
         longitude: capturedLocation?.lng || null,
         my_services: selectedServices,
         appointment_duration: duration,
+        avatar_url: avatarUrl,
+        work_photos: workPhotos,
         available_slots: availableSlots,
+        is_visible: isVisible,
         onboarding_done: true,
         slug,
       };
@@ -2006,7 +2084,70 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
           </div>
         )}
 
+        {/* ── NOVO STEP: FOTOS (perfil + trabalho) ── */}
         {step === 4 && (
+          <div className="space-y-6">
+            <div className="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-2"><Camera size={28} className="text-pink-600"/></div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 mb-1">Mostre seu trabalho</h2>
+              <p className="text-sm text-slate-500">Foto de perfil e fotos dos seus cortes atraem mais clientes.</p>
+            </div>
+
+            {/* Foto de perfil */}
+            <div className="flex flex-col items-center py-2">
+              <div className="relative">
+                <div className="w-28 h-28 rounded-full bg-slate-100 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
+                  {avatarUrl
+                    ? <img src={avatarUrl} className="w-full h-full object-cover" alt="Foto de perfil"/>
+                    : <User size={40} className="text-slate-300"/>}
+                </div>
+                <label htmlFor="onboarding-avatar-upload"
+                  className={`absolute bottom-0 right-0 p-2.5 rounded-full cursor-pointer shadow-md transition-all
+                    ${uploadingAvatar ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700'}`}>
+                  {uploadingAvatar ? <Loader2 size={16} className="text-white animate-spin"/> : <Camera size={16} className="text-white"/>}
+                </label>
+                <input id="onboarding-avatar-upload" type="file" accept="image/*" className="hidden"
+                  onChange={handleUploadAvatar} disabled={uploadingAvatar}/>
+              </div>
+              <p className="text-[11px] text-slate-400 font-bold mt-3 text-center">
+                {avatarUrl ? '✓ Foto de perfil adicionada' : 'Toque na câmera para escolher uma foto'}
+              </p>
+            </div>
+
+            {/* Fotos do trabalho */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-slate-900 text-sm">Fotos do Trabalho</h3>
+                <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
+                  {workPhotos.length}/10
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {workPhotos.map((url, i) => (
+                  <div key={i} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
+                    <img src={url} alt={`Trabalho ${i + 1}`} className="w-full h-full object-cover"/>
+                    <button onClick={() => handleRemoveWorkPhoto(i)}
+                      className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg">
+                      <XCircle size={14}/>
+                    </button>
+                  </div>
+                ))}
+                {workPhotos.length < 10 && (
+                  <label className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all
+                    ${uploadingWorkPhoto ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-400'}`}>
+                    {uploadingWorkPhoto
+                      ? <Loader2 size={20} className="text-blue-500 animate-spin"/>
+                      : <><Image size={20} className="text-slate-400 mb-1"/><span className="text-[9px] font-black text-slate-400 uppercase">Adicionar</span></>}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadWorkPhoto} disabled={uploadingWorkPhoto}/>
+                  </label>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── NOVO STEP: HORÁRIOS (agenda) — último passo, finaliza direto no painel ── */}
+        {step === 5 && (
           <div className="space-y-5">
             <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><CalendarDays size={28} className="text-blue-600"/></div>
             <div>
@@ -2092,26 +2233,35 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
                 })}
               </div>
             </div>
-          </div>
-        )}
 
-        {step === 5 && (
-          <div className="space-y-5">
-            <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600"/></div>
-            <div>
-              <h2 className="text-2xl font-black text-slate-900 mb-1">Seu link de agendamento</h2>
-              <p className="text-sm text-slate-500">Compartilhe com seus clientes!</p>
-            </div>
-            <div className="bg-slate-900 rounded-2xl p-5 text-center">
-              <div className="w-16 h-16 rounded-full bg-slate-700 mx-auto mb-3 overflow-hidden flex items-center justify-center">
-                {user.avatar_url ? <img src={user.avatar_url} className="w-full h-full object-cover" alt="avatar"/> : <User size={28} className="text-slate-400"/>}
+            {/* Link de agendamento — informativo, sem tela própria */}
+            <div className="bg-slate-900 rounded-2xl p-4 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center flex-shrink-0">
+                {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar"/> : <User size={18} className="text-slate-400"/>}
               </div>
-              <p className="text-white font-black text-lg">{user.name}</p>
-              <p className="text-slate-400 text-xs mt-1 font-mono break-all">{getPublicUrl(generateSlug(user.name, user.id))}</p>
+              <div className="min-w-0">
+                <p className="text-white font-black text-sm truncate">{user.name}</p>
+                <p className="text-slate-400 text-[10px] font-mono break-all">{getPublicUrl(generateSlug(user.name, user.id))}</p>
+              </div>
             </div>
+
+            {/* Visibilidade do perfil */}
+            <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">Deixar perfil visível agora</h3>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {isVisible ? 'Clientes já podem ver e agendar com você' : 'Ative quando estiver pronto para receber clientes'}
+                </p>
+              </div>
+              <div onClick={() => setIsVisible(v => !v)}
+                className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors flex-shrink-0 ${isVisible ? 'bg-green-500' : 'bg-slate-300'}`}>
+                <div className={`w-4 h-4 bg-white rounded-full transition-transform ${isVisible ? 'translate-x-6' : 'translate-x-0'}`}/>
+              </div>
+            </div>
+
             <button onClick={handleFinish} disabled={saving}
               className="w-full py-5 bg-blue-600 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl shadow-blue-200 active:scale-95 transition-all disabled:opacity-50">
-              {saving ? <Loader2 className="animate-spin" size={22}/> : <><CheckCircle size={22}/> Finalizar e Ir ao Painel</>}
+              {saving ? <Loader2 className="animate-spin" size={22}/> : <><CheckCircle size={22}/> Finalizar e Ir para a Agenda</>}
             </button>
           </div>
         )}
@@ -2136,6 +2286,12 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
     </div>
   );
 };
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// BARBER ONBOARDING — configuração inicial do perfil (endereço, serviços, etc.)
+// ════════════════════════════════════════════════════════════════════════════
+
 
 // ════════════════════════════════════════════════════════════════════════════
 // TOP PROFESSIONALS — carrossel de destaque na home
