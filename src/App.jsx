@@ -17,49 +17,78 @@ import {
   Percent, Target, AlertCircle, CheckSquare, Bot
 } from 'lucide-react';
 
+
+
+
+import { PushNotifications } from '@capacitor/push-notifications';
+PushNotifications.addListener('pushNotificationReceived', (notification) => {
+  console.log('Notificação Push recebida:', notification);
+});
+
 const APP_VERSION = 'v6.2';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
-// Inicialização do cliente Supabase
+// Inicialização única do cliente Supabase para toda a aplicação
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
-// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN ───────────────────────────
-import { getMessaging, getToken } from "firebase/messaging";
-// Certifique-se de importar ou inicializar o seu app do Firebase aqui se necessário
+// Criação do canal de notificação otimizado para o Android
+const createNotificationChannel = async () => {
+  if (Capacitor.getPlatform() === 'android') {
+    await PushNotifications.createChannel({
+      id: 'salao_digital_notifications_v2',
+      name: 'Agendamentos Salão Digital',
+      importance: 5, // Importância máxima (som e vibração)
+      visibility: 1,
+      sound: 'default',
+    });
+  }
+};
 
-export const updateBarberPushToken = async (barberId) => {
+// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN (CAPACITOR) ───────────────
+export async function setupPushNotifications(barberId) {
   try {
-    // 1. Solicita permissão de notificação ao navegador do celular/PC do barbeiro
-    const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      console.warn("Permissão de notificação negada pelo usuário.");
+    // Cria o canal nativo do Android antes de pedir permissão ou registrar
+    await createNotificationChannel();
+
+    let permStatus = await PushNotifications.checkPermissions();
+
+    if (permStatus.receive === 'prompt') {
+      permStatus = await PushNotifications.requestPermissions();
+    }
+
+    if (permStatus.receive !== 'granted') {
+      console.warn('Permissão de notificação negada!');
       return;
     }
 
-    // 2. Captura o token de registro único do Firebase para o dispositivo atual
-    const messaging = getMessaging();
-    const currentToken = await getToken(messaging, { 
-      vapidKey: 'SUA_CHAVE_CHAVE_PUBLICA_VAPID_DO_FIREBASE' 
+    await PushNotifications.register();
+
+    PushNotifications.addListener('registration', async (token) => {
+      console.log('FCM Token do Dispositivo:', token.value);
+
+      if (barberId && token.value) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({ push_token: token.value })
+          .eq('id', barberId);
+
+        if (error) {
+          console.error('Erro ao salvar push_token no Supabase:', error.message);
+        } else {
+          console.log('push_token atualizado com sucesso no Supabase!');
+        }
+      }
     });
 
-    if (currentToken) {
-      // 3. Salva o token de forma totalmente automática na coluna push_token
-      const { error } = await supabase
-        .from('profiles')
-        .update({ push_token: currentToken })
-        .eq('id', barberId);
-
-      if (error) throw error;
-      console.log("Push token sincronizado com o Supabase com sucesso!");
-    } else {
-      console.warn("Nenhum token FCM disponível. Verifique as configurações do Firebase.");
-    }
+    PushNotifications.addListener('registrationError', (error) => {
+      console.error('Erro no registro de Push:', error.error);
+    });
   } catch (err) {
-    console.error("Erro ao sincronizar o push token automaticamente:", err);
+    console.error('Erro ao configurar notificações push:', err);
   }
-};
+}
 // ─── DARK MODE CSS ────────────────────────────────────────────────────────────
 const injectDarkModeCSS = (isDark) => {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
@@ -1962,6 +1991,10 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
   const [caixaComanda, setCaixaComanda] = useState(null);
   const [caixaLoading, setCaixaLoading] = useState(false);
   const [addingItemId, setAddingItemId] = useState(null);
+  const [dayModalDate, setDayModalDate] = useState(null);
+  const pressTimer = useRef(null);
+  const longPressFired = useRef(false);
+
 
   const fetchShopData = useCallback(async () => {
     if (isGuestBarber || !effectiveUser?.id) return;
@@ -2410,6 +2443,10 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [showClientHistory, setShowClientHistory] = useState(false);
   const [focusComandaId, setFocusComandaId] = useState(null);
 
+  const [dayModalDate, setDayModalDate] = useState(null);
+const pressTimer = useRef(null);
+const longPressFired = useRef(false);
+
   // Estados do suporte direto para o Painel Admin
   const [supportMessage, setSupportMessage] = useState('');
   const [sendingSupport, setSendingSupport] = useState(false);
@@ -2516,20 +2553,95 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const slotsForDay = [...(currentSlots[date] || [])];
     const isAvailable = slotsForDay.includes(slot);
-    if (isAvailable) {
-      setManualSlotTarget({ date, slot }); setManualName(''); setManualValue(''); setShowManualModal(true);
-    } else {
-      const updatedDaySlots = [...slotsForDay, slot];
-      const filteredManual = (effectiveUser.manual_appointments || []).filter(a => !(a.date === date && a.time === slot));
-      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual });
-      
-      if (!isGuestBarber) {
-        const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: filteredManual }).eq('id', effectiveUser.id);
-        if (error) console.error("Erro ao salvar slots de data:", error.message);
-      }
+ 
+    // Um toque: abre se estiver fechado, fecha se estiver aberto
+    const updatedDaySlots = isAvailable
+      ? slotsForDay.filter(s => s !== slot)
+      : [...slotsForDay, slot].sort();
+ 
+    const updatedSlots = { ...currentSlots, [date]: updatedDaySlots };
+    const filteredManual = (effectiveUser.manual_appointments || [])
+      .filter(a => !(a.date === date && a.time === slot));
+ 
+    effectiveOnUpdateProfile({
+      ...effectiveUser,
+      available_slots: updatedSlots,
+      manual_appointments: filteredManual,
+    });
+ 
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles')
+        .update({ available_slots: updatedSlots, manual_appointments: filteredManual })
+        .eq('id', effectiveUser.id);
+      if (error) console.error('Erro ao salvar horário:', error.message);
     }
   };
 
+  const getDayAppointments = (date) =>
+    allAppointments
+      .filter(a => a.date === date)
+      .filter((a, i, self) => i === self.findIndex(t => t.id === a.id))
+      .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+ 
+  // Horários já ocupados naquela data
+  const getBookedTimes = (date) => getDayAppointments(date).map(a => a.time);
+ 
+  // Vagas realmente livres do dia (abertas e sem cliente)
+  const freeSlotsCount = (date) => {
+    const abertos = effectiveUser.available_slots?.[date] || [];
+    const ocupados = getBookedTimes(date);
+    return abertos.filter(s => !ocupados.includes(s)).length;
+  };
+ 
+  const bookedForSelected = getBookedTimes(selectedDateConfig);
+  const freeForSelected = slotsForSelectedDay.filter(s => !bookedForSelected.includes(s));
+ 
+  // Long press no dia do calendário
+  const startDayPress = (fullDate) => {
+    longPressFired.current = false;
+    clearTimeout(pressTimer.current);
+    pressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      setDayModalDate(fullDate);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 450);
+  };
+  const endDayPress = () => clearTimeout(pressTimer.current);
+  const handleDayClick = (fullDate) => {
+    if (longPressFired.current) { longPressFired.current = false; return; }
+    setSelectedDateConfig(fullDate);
+  };
+ 
+  // Cancela o cliente com um toque e devolve o horário para a agenda
+  const cancelAppointmentQuick = async (app) => {
+    if (isGuestBarber) {
+      const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
+      effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
+      return;
+    }
+ 
+    const currentSlots = { ...(effectiveUser.available_slots || {}) };
+    const slotsForDay = [...(currentSlots[app.date] || [])];
+    if (app.time && !slotsForDay.includes(app.time)) slotsForDay.push(app.time);
+    slotsForDay.sort();
+    const updatedSlots = { ...currentSlots, [app.date]: slotsForDay };
+ 
+    if (app.isManual) {
+      const filteredManual = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots, manual_appointments: filteredManual });
+      const { error } = await sb.from('profiles')
+        .update({ available_slots: updatedSlots, manual_appointments: filteredManual })
+        .eq('id', effectiveUser.id);
+      if (error) console.error('Erro ao cancelar reserva manual:', error.message);
+    } else {
+      effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
+      const { error } = await sb.from('profiles')
+        .update({ available_slots: updatedSlots })
+        .eq('id', effectiveUser.id);
+      if (error) console.error('Erro ao liberar horário:', error.message);
+      await onUpdateStatus(app.id, 'rejected');
+    }
+  };
   const handleManualBookingConfirm = async (saveWithClient) => {
     if (!manualSlotTarget) return;
     const { date, slot } = manualSlotTarget;
@@ -2750,6 +2862,13 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
     setTempBio(effectiveUser?.bio || '');
     setTempAddress(effectiveUser?.address || ''); // Adicione esta linha
   }, [effectiveUser?.bio, effectiveUser?.address]); // Adicione o address aqui na lista
+  
+  useEffect(() => {
+  // Suponha que você tenha um estado 'user' que guarda os dados do barbeiro logado
+  if (user && user.id) {
+    setupPushNotifications(user.id);
+  }
+}, [user]);
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
@@ -2805,6 +2924,73 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
               </button>
               <button onClick={() => setShowManualModal(false)} className="w-full py-2 text-slate-400 font-bold text-xs">
                 Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+       {dayModalDate && (
+        <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDayModalDate(null)}/>
+          <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col shadow-2xl">
+ 
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-slate-900 text-base leading-none mb-1">
+                  {dayModalDate.split('-').reverse().join('/')}
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold uppercase">
+                  {getDayAppointments(dayModalDate).length} cliente(s) · {freeSlotsCount(dayModalDate)} vaga(s) livre(s)
+                </p>
+              </div>
+              <button onClick={() => setDayModalDate(null)}
+                className="p-2 rounded-full text-slate-400 hover:bg-slate-100 active:scale-95 transition-all">
+                <X size={18}/>
+              </button>
+            </div>
+ 
+            <div className="p-5 overflow-y-auto flex-1">
+              {getDayAppointments(dayModalDate).length === 0 ? (
+                <div className="py-10 text-center">
+                  <CalendarDays size={28} className="mx-auto text-slate-200 mb-2"/>
+                  <p className="text-xs font-bold text-slate-400">Nenhum cliente marcado nesse dia</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {getDayAppointments(dayModalDate).map(app => (
+                    <div key={app.id}
+                      className={`flex items-center gap-3 bg-white border rounded-2xl p-3 shadow-sm
+                        ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
+                      <div className="bg-blue-600 text-white rounded-xl px-2.5 py-2 text-[11px] font-black">
+                        {app.time}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-black text-slate-900 truncate">
+                          {app.client_name || app.client || 'Cliente'}
+                        </p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase truncate">
+                          {app.service_name || app.service || 'Serviço'}
+                          {app.isManual && ' · Manual'}
+                        </p>
+                        {Number(app.price) > 0 && (
+                          <p className="text-[10px] text-green-600 font-black mt-0.5">R$ {app.price}</p>
+                        )}
+                      </div>
+                      <button onClick={() => cancelAppointmentQuick(app)}
+                        title="Cancelar cliente"
+                        className="w-9 h-9 rounded-full bg-red-500 text-white flex items-center justify-center active:scale-90 hover:bg-red-600 transition-all flex-shrink-0">
+                        <X size={16}/>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+ 
+            <div className="p-5 border-t border-slate-100">
+              <button onClick={() => { setSelectedDateConfig(dayModalDate); setDayModalDate(null); }}
+                className="w-full py-3.5 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-tight active:scale-95 transition-all">
+                Editar horários desse dia
               </button>
             </div>
           </div>
@@ -3494,7 +3680,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
  
             {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
  
-            {/* ── Agenda ── */}
+             {/* ── Agenda ── */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
               <div onClick={() => setShowCalendar(!showCalendar)}
                 className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
@@ -3516,13 +3702,24 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <ChevronRight size={18}/>
                     </button>
                   </div>
-                  <div className="flex gap-2 mb-4">
+ 
+                  <div className="flex gap-2 mb-3">
                     <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
                     <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
                   </div>
+ 
+                  {/* Aviso do toque longo */}
+                  <div className="flex items-center justify-center gap-1.5 mb-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
+                    <Clock size={12} className="text-blue-500"/>
+                    <span className="text-[9px] font-black text-blue-600 uppercase tracking-tight">
+                      Segure em um dia para ver os clientes
+                    </span>
+                  </div>
+ 
                   <div className="grid grid-cols-7 gap-1 mb-1">
                     {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
                   </div>
+ 
                   <div className="grid grid-cols-7 gap-1 mb-6">
                     {Array.from({length: new Date(configCalYear, configCalMonth, 1).getDay()}, (_, i) => (
                       <div key={`vazio-${i}`} className="aspect-square"/>
@@ -3530,24 +3727,39 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     {Array.from({length: daysInConfigMonth}, (_,i) => {
                       const fullDate = formatDate(configCalYear, configCalMonth, i+1);
                       const isSelected = selectedDateConfig === fullDate;
-                      const slotsQty = effectiveUser.available_slots?.[fullDate]?.length || 0;
+                      const slotsQty = freeSlotsCount(fullDate);
+                      const agendados = getDayAppointments(fullDate).length;
                       const isAvail = slotsQty > 0;
                       const isLow = slotsQty > 0 && slotsQty < 4;
                       return (
-                        <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
-                          className={`aspect-square rounded-xl text-xs font-bold border transition-all relative
+                        <button key={i}
+                          onClick={() => handleDayClick(fullDate)}
+                          onTouchStart={() => startDayPress(fullDate)}
+                          onTouchEnd={endDayPress}
+                          onTouchMove={endDayPress}
+                          onTouchCancel={endDayPress}
+                          onMouseDown={() => startDayPress(fullDate)}
+                          onMouseUp={endDayPress}
+                          onMouseLeave={endDayPress}
+                          onContextMenu={(e) => e.preventDefault()}
+                          className={`aspect-square rounded-xl text-xs font-bold border transition-all relative select-none
                             ${isSelected ? 'ring-2 ring-blue-500' : ''}
                             ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-green-600 text-white border-green-600') : 'bg-red-500 text-white border-red-500'}`}>
                           {i+1}
-                          {isLow && !isSelected && (
+                          {agendados > 0 ? (
+                            <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[8px] font-black rounded-full border border-white flex items-center justify-center">
+                              {agendados}
+                            </span>
+                          ) : isLow && !isSelected ? (
                             <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white"/>
-                          )}
+                          ) : null}
                         </button>
                       );
                     })}
                   </div>
+ 
                   {/* Legenda */}
-                  <div className="flex gap-3 mb-4">
+                  <div className="flex flex-wrap gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
                       <div className="w-3 h-3 bg-green-600 rounded-sm"/>
                       <span className="text-[9px] text-slate-500 font-bold">Livre</span>
@@ -3560,14 +3772,22 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       <div className="w-3 h-3 bg-red-500 rounded-sm"/>
                       <span className="text-[9px] text-slate-500 font-bold">Fechado</span>
                     </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-3 bg-blue-600 rounded-sm"/>
+                      <span className="text-[9px] text-slate-500 font-bold">Agendado</span>
+                    </div>
                   </div>
+ 
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
                       <div>
                         <h4 className="font-bold text-xs text-slate-900">Horários — {selectedDateConfig.split('-').reverse().join('/')}</h4>
                         <p className="text-[9px] text-slate-400 font-bold mt-0.5">
-                          {slotsForSelectedDay.length} de {filteredTimeSlots.length} abertos
-                          {slotsForSelectedDay.length > 0 && slotsForSelectedDay.length < 4 && (
+                          {freeForSelected.length} de {filteredTimeSlots.length} abertos
+                          {bookedForSelected.length > 0 && (
+                            <span className="ml-1 text-blue-500 font-black">· {bookedForSelected.length} agendado(s)</span>
+                          )}
+                          {freeForSelected.length > 0 && freeForSelected.length < 4 && (
                             <span className="ml-1 text-amber-500 font-black">· Poucas vagas!</span>
                           )}
                         </p>
@@ -3578,42 +3798,47 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                       </div>
                     </div>
                     <div className="h-[1px] bg-slate-200 mb-3"/>
+ 
                     <div className="grid grid-cols-4 gap-2">
                       {filteredTimeSlots.map(slot => {
                         const isOpen = effectiveUser.available_slots?.[selectedDateConfig]?.includes(slot);
-                        
-                        // Lógica para bloquear horários passados de hoje
+                        const isBooked = bookedForSelected.includes(slot); // já tem cliente = travado
+ 
+                        // Bloqueia horários passados de hoje
                         const now = new Date();
                         const [selYear, selMonth, selDay] = selectedDateConfig.split('-').map(Number);
-                        
-                        const isToday = 
-                          selYear === now.getFullYear() && 
-                          (selMonth - 1) === now.getMonth() && 
+ 
+                        const isToday =
+                          selYear === now.getFullYear() &&
+                          (selMonth - 1) === now.getMonth() &&
                           selDay === now.getDate();
-
+ 
                         let isPastSlot = false;
-
+ 
                         if (isToday) {
                           const [slotHour, slotMinute] = slot.split(':').map(Number);
                           const currentHour = now.getHours();
                           const currentMinute = now.getMinutes();
-
+ 
                           if (slotHour < currentHour || (slotHour === currentHour && slotMinute <= currentMinute)) {
                             isPastSlot = true;
                           }
                         }
-
+ 
                         return (
-                          <button 
-                            key={slot} 
-                            disabled={isPastSlot}
+                          <button
+                            key={slot}
+                            disabled={isPastSlot || isBooked}
                             onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                            title={isBooked ? 'Horário com cliente agendado' : undefined}
                             className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95
-                              ${isPastSlot 
-                                ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-70' 
-                                : isOpen 
-                                  ? 'bg-green-600 text-white border-green-600 shadow-sm' 
-                                  : 'bg-red-500 text-white border-red-500 hover:bg-red-600'}`}>
+                              ${isBooked
+                                ? 'bg-blue-600 text-white border-blue-600 cursor-not-allowed'
+                                : isPastSlot
+                                  ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-70'
+                                  : isOpen
+                                    ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                                    : 'bg-red-500 text-white border-red-500 hover:bg-red-600'}`}>
                             {slot}
                           </button>
                         );
@@ -3623,6 +3848,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               )}
             </section>
+ 
 
             
             {/* Status do plano */}
