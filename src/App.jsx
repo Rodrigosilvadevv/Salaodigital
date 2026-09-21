@@ -1340,10 +1340,14 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH SCREEN — login/cadastro de barbeiros e clientes
 // ════════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+// AUTH SCREEN — login/cadastro de barbeiros e clientes
+// ════════════════════════════════════════════════════════════════════════════
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
 
   // Registro
+  const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
@@ -1368,6 +1372,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [noAccountHint, setNoAccountHint] = useState(false);
 
   // Validações registro (cadastro novo sempre exige o formato completo, 11 dígitos)
+  const regNameValid = regName.trim().length >= 2;
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
   const regEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
   const regPasswordValid = regPassword.length >= 6;
@@ -1411,6 +1416,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         traduzimos o erro que ele devolver. ── */
   const handleRegister = async () => {
     setError('');
+    if (!regNameValid) { setError('Digite seu nome (pelo menos 2 letras).'); return; }
     if (!regPhoneValid) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
     if (!regEmailValid) { setError('Digite um e-mail válido.'); return; }
     if (!regPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
@@ -1420,7 +1426,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       const email = regEmail.trim().toLowerCase();
       const phone = getPhoneDigits(regPhone);
       await onRegister(
-        email, // nome = email (ajuste no App se quiser)
+        regName.trim(),
         phone,
         regPassword,
         null,
@@ -1474,6 +1480,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
 
   /* ── Ir do login (e-mail sem conta) direto pro cadastro, já preenchido ── */
   const handleGoToRegisterFromEmail = () => {
+    setRegName('');
     setRegEmail(loginEmail.trim());
     setRegPassword(loginPassword);
     setRegPhone('');
@@ -1511,7 +1518,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       //    telefone/e-mail, do mesmo tipo de usuário). Se já tiver telefone
       //    preenchido, não pede de novo — loga direto.
       if (!existingProfile && user.email) {
-        const { data: byEmail } = await supabase
+        const { data: byEmail, error: emailLookupErr } = await supabase
           .from('profiles')
           .select('*')
           .eq('email', user.email)
@@ -1519,6 +1526,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
           .not('phone', 'is', null)
           .neq('phone', '')
           .maybeSingle();
+        if (emailLookupErr) {
+          // Log pra depuração: se aparecer no console, é RLS ou coluna errada
+          // impedindo a busca — sem isso o erro fica mudo e parece "esquecimento".
+          console.error('[AuthScreen] Falha ao buscar perfil por e-mail (Google):', emailLookupErr);
+        }
         existingProfile = byEmail || null;
       }
 
@@ -1644,6 +1656,18 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
           {/* ══════════ REGISTRO ══════════ */}
           {mode === 'register' && (
             <>
+              {/* Nome */}
+              <div>
+                <input type="text" value={regName} onChange={e => setRegName(e.target.value)}
+                  placeholder="Seu nome (aparece pros clientes)"
+                  maxLength={60}
+                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${regName.length > 0 ? (regNameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {regName.length > 0 && !regNameValid && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Digite pelo menos 2 letras</p>
+                )}
+              </div>
+
               {/* Telefone */}
               <div>
                 <input type="tel" value={regPhone} onChange={handleRegPhoneChange}
@@ -1778,12 +1802,64 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
-  const TOTAL_STEPS = 4;
+  const TOTAL_STEPS = 5;
+
+  const today = new Date();
 
   const [address, setAddress] = useState(user.address || '');
   const [selectedServices, setSelectedServices] = useState(user.my_services || []);
   const [duration, setDuration] = useState(user.appointment_duration || '30min');
   const [capturedLocation, setCapturedLocation] = useState({ lat: user.latitude, lng: user.longitude });
+
+  // ── Agenda (horários disponíveis) ──
+  const [availableSlots, setAvailableSlots] = useState(user.available_slots || {});
+  const [selectedDateConfig, setSelectedDateConfig] = useState(today.toISOString().split('T')[0]);
+  const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
+  const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+
+  const filteredTimeSlots = duration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
+  const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
+  const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
+  const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
+  const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
+  const slotsForSelectedDay = availableSlots[selectedDateConfig] || [];
+
+  const toggleSlotForDate = (date, slot) => {
+    const slotsForDay = [...(availableSlots[date] || [])];
+    const isOpen = slotsForDay.includes(slot);
+    const updatedDaySlots = isOpen ? slotsForDay.filter(s => s !== slot) : [...slotsForDay, slot].sort();
+    setAvailableSlots(prev => ({ ...prev, [date]: updatedDaySlots }));
+  };
+
+  const selectAllSlotsForDay = (date) => {
+    setAvailableSlots(prev => ({ ...prev, [date]: [...filteredTimeSlots] }));
+  };
+
+  const deselectAllSlotsForDay = (date) => {
+    setAvailableSlots(prev => ({ ...prev, [date]: [] }));
+  };
+
+  const markAllDaysInMonth = () => {
+    setAvailableSlots(prev => {
+      const next = { ...prev };
+      for (let i = 1; i <= daysInConfigMonth; i++) {
+        const date = formatDate(configCalYear, configCalMonth, i);
+        next[date] = [...filteredTimeSlots];
+      }
+      return next;
+    });
+  };
+
+  const unmarkAllDaysInMonth = () => {
+    setAvailableSlots(prev => {
+      const next = { ...prev };
+      for (let i = 1; i <= daysInConfigMonth; i++) {
+        const date = formatDate(configCalYear, configCalMonth, i);
+        next[date] = [];
+      }
+      return next;
+    });
+  };
 
   const handleCaptureLocation = () => {
     if (!navigator.geolocation) { alert('Geolocalização não disponível'); return; }
@@ -1815,6 +1891,7 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
         longitude: capturedLocation?.lng || null,
         my_services: selectedServices,
         appointment_duration: duration,
+        available_slots: availableSlots,
         onboarding_done: true,
         slug,
       };
@@ -1930,6 +2007,95 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
         )}
 
         {step === 4 && (
+          <div className="space-y-5">
+            <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><CalendarDays size={28} className="text-blue-600"/></div>
+            <div>
+              <h2 className="text-2xl font-black text-slate-900 mb-1">Configure sua agenda</h2>
+              <p className="text-sm text-slate-500">Marque os dias e horários em que você atende. Ajuste depois quando quiser.</p>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <button onClick={goConfigPrev} disabled={isPrevConfigDisabled}
+                className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
+                <ChevronLeft size={18}/>
+              </button>
+              <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
+              <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
+                <ChevronRight size={18}/>
+              </button>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
+              <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
+            </div>
+
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {['D','S','T','Q','Q','S','S'].map((d, i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: new Date(configCalYear, configCalMonth, 1).getDay() }, (_, i) => (
+                <div key={`vazio-${i}`} className="aspect-square"/>
+              ))}
+              {Array.from({ length: daysInConfigMonth }, (_, i) => {
+                const fullDate = formatDate(configCalYear, configCalMonth, i + 1);
+                const isSelected = selectedDateConfig === fullDate;
+                const slotsQty = (availableSlots[fullDate] || []).length;
+                const isAvail = slotsQty > 0;
+                const isLow = slotsQty > 0 && slotsQty < 4;
+                return (
+                  <button key={i} onClick={() => setSelectedDateConfig(fullDate)}
+                    className={`aspect-square rounded-xl text-xs font-bold border transition-all
+                      ${isSelected ? 'ring-2 ring-blue-500' : ''}
+                      ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-green-600 text-white border-green-600') : 'bg-red-500 text-white border-red-500'}`}>
+                    {i + 1}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-green-600 rounded-sm"/>
+                <span className="text-[9px] text-slate-500 font-bold">Livre</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-amber-500 rounded-sm"/>
+                <span className="text-[9px] text-slate-500 font-bold">Poucas vagas</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 bg-red-500 rounded-sm"/>
+                <span className="text-[9px] text-slate-500 font-bold">Fechado</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-xs text-slate-900">Horários — {selectedDateConfig.split('-').reverse().join('/')}</h4>
+                <div className="flex gap-1.5">
+                  <button onClick={() => selectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95">+ Todos</button>
+                  <button onClick={() => deselectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[9px] font-black uppercase active:scale-95 hover:bg-red-600">− Todos</button>
+                </div>
+              </div>
+              <div className="h-[1px] bg-slate-200 mb-3"/>
+              <div className="grid grid-cols-4 gap-2">
+                {filteredTimeSlots.map(slot => {
+                  const isOpen = slotsForSelectedDay.includes(slot);
+                  return (
+                    <button key={slot} onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                      className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95
+                        ${isOpen ? 'bg-green-600 text-white border-green-600 shadow-sm' : 'bg-red-500 text-white border-red-500 hover:bg-red-600'}`}>
+                      {slot}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 5 && (
           <div className="space-y-5">
             <div className="w-14 h-14 bg-green-100 rounded-2xl flex items-center justify-center mb-2"><Link size={28} className="text-green-600"/></div>
             <div>
