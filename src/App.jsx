@@ -1340,53 +1340,53 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
- 
+
   // Registro
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
- 
+
   // Login
   const [loginPhone, setLoginPhone] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [loginBy, setLoginBy] = useState('phone'); // 'phone' | 'email'
- 
+
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
- 
+
   // Google
   const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
- 
+
   // Login por e-mail sem conta existente -> precisa completar telefone p/ criar conta
   const [completeEmailData, setCompleteEmailData] = useState(null); // { email, password }
   const [phoneForEmail, setPhoneForEmail] = useState('');
- 
+
   // Validações registro
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
   const regEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
   const regPasswordValid = regPassword.length >= 6;
- 
+
   // Validações login
   const loginPhoneValid = getPhoneDigits(loginPhone).length === 11;
   const loginEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());
   const loginPasswordValid = loginPassword.length >= 6;
- 
+
   // Google
   const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
- 
+
   // Completar telefone após login por e-mail sem conta
   const phoneEmailValid = getPhoneDigits(phoneForEmail).length === 11;
- 
+
   const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
   const handlePhoneEmailChange = (e) => setPhoneForEmail(applyPhoneMask(e.target.value));
- 
+
   /* ── HELPERS: checar duplicidade (telefone/e-mail são chaves de login,
         únicos DENTRO do mesmo tipo de usuário — 'barber' ou 'client') ── */
   const checkAccountByEmail = async (email) => {
@@ -1394,49 +1394,49 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       .from('profiles')
       .select('id, phone, email')
       .eq('email', email)
-      .eq('user_type', userType)
+      .eq('role', userType)
       .maybeSingle();
     if (qErr) throw new Error('Erro ao verificar e-mail. Tente novamente.');
     return data;
   };
- 
+
   const checkAccountByPhone = async (phone) => {
     const { data, error: qErr } = await supabase
       .from('profiles')
       .select('id, phone, email')
       .eq('phone', phone)
-      .eq('user_type', userType)
+      .eq('role', userType)
       .maybeSingle();
     if (qErr) throw new Error('Erro ao verificar telefone. Tente novamente.');
     return data;
   };
- 
+
   /* ── REGISTRO (telefone + e-mail + senha são obrigatórios) ── */
   const handleRegister = async () => {
     setError('');
     if (!regPhoneValid) { setError('WhatsApp deve ter 11 dígitos (DDD + número com 9).'); return; }
     if (!regEmailValid) { setError('Digite um e-mail válido.'); return; }
     if (!regPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
- 
+
     setLoading(true);
     try {
       const email = regEmail.trim().toLowerCase();
       const phone = getPhoneDigits(regPhone);
- 
+
       const emailExists = await checkAccountByEmail(email);
       if (emailExists) {
         setError('Já existe uma conta com este e-mail.');
         setLoading(false);
         return;
       }
- 
+
       const phoneExists = await checkAccountByPhone(phone);
       if (phoneExists) {
         setError('Já existe uma conta com este telefone.');
         setLoading(false);
         return;
       }
- 
+
       await onRegister(
         email, // nome = email (ajuste no App se quiser)
         phone,
@@ -1450,11 +1450,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setLoading(false);
     }
   };
- 
+
   /* ── LOGIN ── */
   const handleLogin = async () => {
     setError('');
- 
+
     if (loginBy === 'phone') {
       // Login por telefone: aceito SOMENTE para entrar, nunca cria conta aqui.
       // Senha é opcional (contas antigas criadas antes de o e-mail existir).
@@ -1469,16 +1469,16 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       }
       return;
     }
- 
+
     // loginBy === 'email'
     if (!loginEmailValid) { setError('Digite um e-mail válido.'); return; }
     if (!loginPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
- 
+
     setLoading(true);
     try {
       const email = loginEmail.trim().toLowerCase();
       const existing = await checkAccountByEmail(email);
- 
+
       if (existing) {
         // Já existe conta com esse e-mail (para este tipo de usuário) -> loga
         await onLogin(email, loginPassword, existing, 'email');
@@ -1493,7 +1493,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setLoading(false);
     }
   };
- 
+
   /* ── GOOGLE ── */
   const handleGoogleLogin = async () => {
     setError('');
@@ -1509,15 +1509,15 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setGoogleLoading(false);
     }
   };
- 
+
   useEffect(() => {
     const checkGoogleSession = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || user.app_metadata?.provider !== 'google') return;
- 
+
       const { data: existingProfile } = await supabase
         .from('profiles').select('*').eq('id', user.id).maybeSingle();
- 
+
       if (existingProfile) {
         try { await onLogin(existingProfile.phone, null, existingProfile); }
         catch (err) { setError(err.message || 'Erro ao entrar com Google.'); }
@@ -1532,7 +1532,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     };
     checkGoogleSession();
   }, []);
- 
+
   /* ── SALVAR TELEFONE — conta nova via Google ── */
   const handleSaveGooglePhone = async () => {
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
@@ -1545,7 +1545,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         setLoading(false);
         return;
       }
- 
+
       await onRegister(
         googleUser.name,
         phone,
@@ -1559,7 +1559,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setLoading(false);
     }
   };
- 
+
   /* ── SALVAR TELEFONE — conta nova via login com e-mail sem cadastro ── */
   const handleSaveEmailPhone = async () => {
     if (!phoneEmailValid) { setError('WhatsApp inválido.'); return; }
@@ -1572,7 +1572,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         setLoading(false);
         return;
       }
- 
+
       await onRegister(
         completeEmailData.email, // nome = email (ajuste no App se quiser)
         phone,
@@ -1586,7 +1586,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       setLoading(false);
     }
   };
- 
+
   /* ── TELA: COMPLETAR TELEFONE (Google novo) ── */
   if (googleUser) {
     return (
@@ -1628,7 +1628,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       </div>
     );
   }
- 
+
   /* ── TELA: COMPLETAR TELEFONE (login por e-mail sem conta ainda) ── */
   if (completeEmailData) {
     return (
@@ -1667,7 +1667,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       </div>
     );
   }
- 
+
   /* ── TELA PRINCIPAL ── */
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
@@ -1677,7 +1677,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       <div className="absolute top-6 right-6">
         <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
       </div>
- 
+
       <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
         <h2 className="text-2xl font-black text-center mb-2">
           {userType === 'barber' ? 'Área Profissional' : 'Área do Cliente'}
@@ -1685,11 +1685,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         <p className="text-center text-slate-400 mb-6 text-sm">
           {mode === 'login' ? 'Faça login para continuar' : 'Crie sua conta agora'}
         </p>
- 
+
         {error && (
           <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>
         )}
- 
+
         <div className="space-y-4">
           {/* Botão Google */}
           <button onClick={handleGoogleLogin} disabled={googleLoading}
@@ -1704,13 +1704,13 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 </svg>}
             {googleLoading ? 'Conectando...' : 'Continuar com Google'}
           </button>
- 
+
           <div className="flex items-center gap-2">
             <div className="h-[1px] bg-slate-200 flex-1"/>
             <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">ou</span>
             <div className="h-[1px] bg-slate-200 flex-1"/>
           </div>
- 
+
           {/* ══════════ REGISTRO ══════════ */}
           {mode === 'register' && (
             <>
@@ -1726,7 +1726,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   </p>
                 )}
               </div>
- 
+
               {/* Email */}
               <div>
                 <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)}
@@ -1737,7 +1737,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">E-mail inválido</p>
                 )}
               </div>
- 
+
               {/* Senha */}
               <div className="relative">
                 <input type={showRegPassword ? 'text' : 'password'} value={regPassword}
@@ -1748,11 +1748,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   {showRegPassword ? <EyeOff size={18}/> : <Eye size={18}/>}
                 </button>
               </div>
- 
+
               <Button onClick={handleRegister} loading={loading}>Cadastrar</Button>
             </>
           )}
- 
+
           {/* ══════════ LOGIN ══════════ */}
           {mode === 'login' && (
             <>
@@ -1769,7 +1769,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   ✉️ E-mail
                 </button>
               </div>
- 
+
               {loginBy === 'phone' && (
                 <>
                   <div>
@@ -1797,7 +1797,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   </p>
                 </>
               )}
- 
+
               {loginBy === 'email' && (
                 <>
                   <div>
@@ -1823,11 +1823,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   </p>
                 </>
               )}
- 
+
               <Button onClick={handleLogin} loading={loading}>Entrar</Button>
             </>
           )}
- 
+
           <button onClick={() => { setMode(mode === 'login' ? 'register' : 'login'); setError(''); }}
             className="w-full text-blue-600 font-bold text-sm mt-2">
             {mode === 'login' ? 'Criar nova conta' : 'Já tenho conta'}
@@ -1837,7 +1837,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     </div>
   );
 };
- 
 // ─── BARBER ONBOARDING ────────────────────────────────────────────────────────
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [step,setStep]=useState(1), [saving,setSaving]=useState(false);
