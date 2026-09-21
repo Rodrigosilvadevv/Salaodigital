@@ -1343,23 +1343,18 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH SCREEN — login/cadastro de barbeiros e clientes
 // ════════════════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════════════════
-// AUTH SCREEN — login/cadastro de barbeiros e clientes
-// ════════════════════════════════════════════════════════════════════════════
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
 
-  // Registro
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
 
-  // Login
   const [loginPhone, setLoginPhone] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const [loginBy, setLoginBy] = useState('phone'); // 'phone' | 'email'
+  const [loginBy, setLoginBy] = useState('phone');
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -1367,39 +1362,29 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Google
   const [googleUser, setGoogleUser] = useState(null);
   const [phoneForGoogle, setPhoneForGoogle] = useState('');
 
-  // Login por e-mail sem conta existente -> oferece ir pro cadastro (não pede telefone sozinho)
   const [noAccountHint, setNoAccountHint] = useState(false);
 
-  // Cadastro deu duplicidade -> oferece ir pro login com o dado já preenchido
-  // 'phone' | 'email' | null
   const [duplicateHint, setDuplicateHint] = useState(null);
 
-  // Validações registro (cadastro novo sempre exige o formato completo, 11 dígitos)
   const regNameValid = regName.trim().length >= 2;
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
   const regEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(regEmail.trim());
   const regPasswordValid = regPassword.length >= 6;
 
-  // Validações login (aceita 10 ou 11 dígitos: contas antigas podem não ter o 9º dígito)
   const loginPhoneDigits = getPhoneDigits(loginPhone).length;
   const loginPhoneValid = loginPhoneDigits === 10 || loginPhoneDigits === 11;
   const loginEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());
   const loginPasswordValid = loginPassword.length >= 6;
 
-  // Google
   const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
 
   const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
 
-  /* ── Detecta duplicidade num erro do backend, sem consultar a tabela daqui
-        (evita bater em RLS do Supabase, que bloqueia leitura anônima) ──
-        Retorna 'phone' | 'email' | 'other' | null ── */
   const classifyDuplicateError = (err) => {
     const msg = (err && err.message) || '';
     const lower = msg.toLowerCase();
@@ -1423,10 +1408,31 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     return (err && err.message) || fallback;
   };
 
-  /* ── REGISTRO (telefone + e-mail + senha são obrigatórios) ──
-        A checagem de duplicidade (telefone/e-mail únicos por tipo de usuário)
-        é responsabilidade do backend em onRegister — aqui só chamamos e
-        traduzimos o erro que ele devolver. ── */
+  const getPhoneVariants = (digits) => {
+    const variants = [digits];
+    if (digits.length === 11 && digits[2] === '9') {
+      variants.push(digits.slice(0, 2) + digits.slice(3));
+    }
+    return variants;
+  };
+
+  const phoneAlreadyRegistered = async (digits) => {
+    const { data, error } = await supabase.rpc('phone_exists', {
+      p_phones: getPhoneVariants(digits),
+    });
+    if (error) throw new Error('Não foi possível verificar o telefone. Tente novamente.');
+    return data === true;
+  };
+
+  const redirectToLoginWithPhone = (digits) => {
+    setLoginBy('phone');
+    setLoginPhone(applyPhoneMask(digits));
+    setLoginPassword('');
+    setNoAccountHint(false);
+    setMode('login');
+    setError('Este telefone já tem uma conta cadastrada. Faça login para continuar.');
+  };
+
   const handleRegister = async () => {
     setError('');
     if (!regNameValid) { setError('Digite seu nome (pelo menos 2 letras).'); return; }
@@ -1438,6 +1444,12 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     try {
       const email = regEmail.trim().toLowerCase();
       const phone = getPhoneDigits(regPhone);
+
+      if (await phoneAlreadyRegistered(phone)) {
+        redirectToLoginWithPhone(phone);
+        return;
+      }
+
       await onRegister(
         regName.trim(),
         phone,
@@ -1452,17 +1464,11 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  /* ── LOGIN ──
-        Telefone é o eixo principal: login por telefone sempre tentado direto.
-        Login por e-mail também tenta direto; só se falhar (conta não existe)
-        oferecemos ir para o cadastro — sem pedir telefone à toa a cada login. ── */
   const handleLogin = async () => {
     setError('');
     setNoAccountHint(false);
 
     if (loginBy === 'phone') {
-      // Login por telefone: aceito SOMENTE para entrar, nunca cria conta aqui.
-      // Senha é opcional (contas antigas criadas antes de o e-mail existir).
       if (!loginPhoneValid) { setError('WhatsApp deve ter 10 ou 11 dígitos.'); return; }
       setLoading(true);
       try {
@@ -1475,7 +1481,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       return;
     }
 
-    // loginBy === 'email'
     if (!loginEmailValid) { setError('Digite um e-mail válido.'); return; }
     if (!loginPasswordValid) { setError('Senha deve ter pelo menos 6 caracteres.'); return; }
 
@@ -1491,7 +1496,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  /* ── Ir do login (e-mail sem conta) direto pro cadastro, já preenchido ── */
   const handleGoToRegisterFromEmail = () => {
     setRegName('');
     setRegEmail(loginEmail.trim());
@@ -1502,7 +1506,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     setMode('register');
   };
 
-  /* ── GOOGLE ── */
   const handleGoogleLogin = async () => {
     setError('');
     setGoogleLoading(true);
@@ -1523,13 +1526,9 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       const { data: { user } } = await supabase.auth.getUser();
       if (!user || user.app_metadata?.provider !== 'google') return;
 
-      // 1) Tenta achar o perfil pelo id do Google (conta já criada via Google antes)
       let { data: existingProfile } = await supabase
         .from('profiles').select('*').eq('id', user.id).maybeSingle();
 
-      // 2) Se não achou por id, tenta achar pelo e-mail (conta criada antes por
-      //    telefone/e-mail, do mesmo tipo de usuário). Se já tiver telefone
-      //    preenchido, não pede de novo — loga direto.
       if (!existingProfile && user.email) {
         const { data: byEmail, error: emailLookupErr } = await supabase
           .from('profiles')
@@ -1540,8 +1539,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
           .neq('phone', '')
           .maybeSingle();
         if (emailLookupErr) {
-          // Log pra depuração: se aparecer no console, é RLS ou coluna errada
-          // impedindo a busca — sem isso o erro fica mudo e parece "esquecimento".
           console.error('[AuthScreen] Falha ao buscar perfil por e-mail (Google):', emailLookupErr);
         }
         existingProfile = byEmail || null;
@@ -1562,14 +1559,23 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     checkGoogleSession();
   }, []);
 
-  /* ── SALVAR TELEFONE — conta nova via Google ── */
   const handleSaveGooglePhone = async () => {
     if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
     setLoading(true); setError('');
     try {
+      const digits = getPhoneDigits(phoneForGoogle);
+
+      if (await phoneAlreadyRegistered(digits)) {
+        await supabase.auth.signOut();
+        setGoogleUser(null);
+        setPhoneForGoogle('');
+        redirectToLoginWithPhone(digits);
+        return;
+      }
+
       await onRegister(
         googleUser.name,
-        getPhoneDigits(phoneForGoogle),
+        digits,
         'google-' + googleUser.id,
         googleUser,
         googleUser.email,
@@ -1581,7 +1587,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  /* ── TELA: COMPLETAR TELEFONE (Google novo) ── */
   if (googleUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
@@ -1623,7 +1628,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     );
   }
 
-  /* ── TELA PRINCIPAL ── */
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
       <div className="absolute top-6 left-6">
@@ -1646,7 +1650,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         )}
 
         <div className="space-y-4">
-          {/* Botão Google */}
           <button onClick={handleGoogleLogin} disabled={googleLoading}
             className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
             {googleLoading
@@ -1666,10 +1669,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             <div className="h-[1px] bg-slate-200 flex-1"/>
           </div>
 
-          {/* ══════════ REGISTRO ══════════ */}
           {mode === 'register' && (
             <>
-              {/* Nome */}
               <div>
                 <input type="text" value={regName} onChange={e => setRegName(e.target.value)}
                   placeholder="Seu nome (aparece pros clientes)"
@@ -1681,7 +1682,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 )}
               </div>
 
-              {/* Telefone */}
               <div>
                 <input type="tel" value={regPhone} onChange={handleRegPhoneChange}
                   placeholder="WhatsApp: (41) 99999-9999"
@@ -1694,7 +1694,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 )}
               </div>
 
-              {/* Email */}
               <div>
                 <input type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)}
                   placeholder="E-mail"
@@ -1705,7 +1704,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                 )}
               </div>
 
-              {/* Senha */}
               <div className="relative">
                 <input type={showRegPassword ? 'text' : 'password'} value={regPassword}
                   onChange={e => setRegPassword(e.target.value)} placeholder="Senha (mín. 6 caracteres)"
@@ -1720,10 +1718,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
             </>
           )}
 
-          {/* ══════════ LOGIN ══════════ */}
           {mode === 'login' && (
             <>
-              {/* Toggle telefone / email */}
               <div className="flex rounded-xl overflow-hidden border-2 border-slate-200">
                 <button onClick={() => { setLoginBy('phone'); setError(''); }}
                   className={`flex-1 py-2.5 text-xs font-black uppercase tracking-tight transition-all
@@ -1750,7 +1746,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                       </p>
                     )}
                   </div>
-                  {/* Senha opcional para quem criou conta antes do email */}
                   <div className="relative">
                     <input type={showLoginPassword ? 'text' : 'password'} value={loginPassword}
                       onChange={e => setLoginPassword(e.target.value)} placeholder="Senha (opcional para contas antigas)"
@@ -1809,9 +1804,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   );
 };
 
-// ════════════════════════════════════════════════════════════════════════════
-// BARBER ONBOARDING — configuração inicial do perfil (endereço, serviços, etc.)
-// ════════════════════════════════════════════════════════════════════════════
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -1824,19 +1816,16 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [duration, setDuration] = useState(user.appointment_duration || '30min');
   const [capturedLocation, setCapturedLocation] = useState({ lat: user.latitude, lng: user.longitude });
 
-  // ── Fotos (perfil + trabalho) ──
   const [avatarUrl, setAvatarUrl] = useState(user.avatar_url || '');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [workPhotos, setWorkPhotos] = useState(user.work_photos || []);
   const [uploadingWorkPhoto, setUploadingWorkPhoto] = useState(false);
 
-  // ── Agenda (horários disponíveis) ──
   const [availableSlots, setAvailableSlots] = useState(user.available_slots || {});
   const [selectedDateConfig, setSelectedDateConfig] = useState(today.toISOString().split('T')[0]);
   const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
 
-  // ── Visibilidade do perfil ──
   const [isVisible, setIsVisible] = useState(user.is_visible || false);
 
   const filteredTimeSlots = duration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
@@ -1903,7 +1892,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
     }
   };
 
-  // ── Upload foto de perfil (com a correção do arrayBuffer pro Android) ──
   const handleUploadAvatar = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -1927,7 +1915,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
     }
   };
 
-  // ── Upload fotos do trabalho (até 10) ──
   const handleUploadWorkPhoto = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
@@ -2084,7 +2071,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
           </div>
         )}
 
-        {/* ── NOVO STEP: FOTOS (perfil + trabalho) ── */}
         {step === 4 && (
           <div className="space-y-6">
             <div className="w-14 h-14 bg-pink-100 rounded-2xl flex items-center justify-center mb-2"><Camera size={28} className="text-pink-600"/></div>
@@ -2093,7 +2079,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
               <p className="text-sm text-slate-500">Foto de perfil e fotos dos seus cortes atraem mais clientes.</p>
             </div>
 
-            {/* Foto de perfil */}
             <div className="flex flex-col items-center py-2">
               <div className="relative">
                 <div className="w-28 h-28 rounded-full bg-slate-100 border-4 border-white shadow-xl overflow-hidden flex items-center justify-center">
@@ -2114,7 +2099,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
               </p>
             </div>
 
-            {/* Fotos do trabalho */}
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-bold text-slate-900 text-sm">Fotos do Trabalho</h3>
@@ -2146,7 +2130,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
           </div>
         )}
 
-        {/* ── NOVO STEP: HORÁRIOS (agenda) — último passo, finaliza direto no painel ── */}
         {step === 5 && (
           <div className="space-y-5">
             <div className="w-14 h-14 bg-blue-100 rounded-2xl flex items-center justify-center mb-2"><CalendarDays size={28} className="text-blue-600"/></div>
@@ -2234,7 +2217,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
               </div>
             </div>
 
-            {/* Link de agendamento — informativo, sem tela própria */}
             <div className="bg-slate-900 rounded-2xl p-4 flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-slate-700 overflow-hidden flex items-center justify-center flex-shrink-0">
                 {avatarUrl ? <img src={avatarUrl} className="w-full h-full object-cover" alt="avatar"/> : <User size={18} className="text-slate-400"/>}
@@ -2245,7 +2227,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
               </div>
             </div>
 
-            {/* Visibilidade do perfil */}
             <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center justify-between">
               <div>
                 <h3 className="font-bold text-slate-900 text-sm">Deixar perfil visível agora</h3>
@@ -2286,7 +2267,6 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
     </div>
   );
 };
-
 
 // ════════════════════════════════════════════════════════════════════════════
 // BARBER ONBOARDING — configuração inicial do perfil (endereço, serviços, etc.)
