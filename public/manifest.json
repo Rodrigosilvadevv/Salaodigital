@@ -4,13 +4,13 @@
   "description": "Sistema de agendamento e gestão para barbearias.",
   "icons": [
     {
-      "src": "icon-192.png",
+      "src": "icon.png",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "icon-512.png",
+      "src": "icon.png",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable" 
