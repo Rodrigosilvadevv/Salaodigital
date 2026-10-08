@@ -2354,23 +2354,99 @@ const TopProfessionalsSection = ({ barbers }) => {
   );
 };
 // ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
+
+// Helpers (pode deixar fora do componente)
+const timeToMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+
+// Converte "30 min", "1h", "1h30", "1h 30min" em minutos (fallback 30)
+const parseDuration = (str) => {
+  if (!str) return 30;
+  const s = String(str).toLowerCase();
+  const h = s.match(/(\d+)\s*h/);
+  const m = s.match(/(\d+)\s*(?:min|m(?!\w)|$)/) || (h ? s.match(/h\s*(\d+)/) : null);
+  const total = (h ? parseInt(h[1]) * 60 : 0) + (m ? parseInt(m[1]) : 0);
+  return total > 0 ? total : (parseInt(s) || 30);
+};
+
+const formatDuration = (min) => {
+  const h = Math.floor(min / 60), m = min % 60;
+  if (h && m) return `${h}h${String(m).padStart(2, '0')}`;
+  if (h) return `${h}h`;
+  return `${m} min`;
+};
+
 const PublicBarberPage = ({ barber }) => {
-  const [bookStep,setBookStep]=useState(0), [selectedService,setSelectedService]=useState(null), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
+  const [bookStep,setBookStep]=useState(0), [selectedServices,setSelectedServices]=useState([]), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
   const rating=getBarberRating(barber), badges=getBadges(barber), workPhotos=barber.work_photos||[];
   const masterServices=(barber.my_services||[]).map(s=>{ const master=MASTER_SERVICES.find(m=>m.id===s.id); return master?{...master,price:s.price}:null; }).filter(Boolean);
   const customServices=(barber.custom_services||[]).map(cs=>({...cs,icon:<Scissors size={20}/>,isCustom:true}));
   const services=[...masterServices,...customServices];
+
+  // ── Totais dos serviços escolhidos ──
+  const totalPrice = selectedServices.reduce((acc, s) => acc + (Number(s.price) || 0), 0);
+  const totalMinutes = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
+  const servicesLabel = selectedServices.map(s => s.name).join(' + ');
+  const isSelected = (service) => selectedServices.some(s => s.id === service.id);
+
+  // ── Intervalo entre os horários e quantos blocos o atendimento ocupa ──
+  const slotInterval = GLOBAL_TIME_SLOTS.length > 1
+    ? (timeToMin(GLOBAL_TIME_SLOTS[1]) - timeToMin(GLOBAL_TIME_SLOTS[0])) || 30
+    : 30;
+  const slotsNeeded = Math.max(1, Math.ceil(totalMinutes / slotInterval));
+
+  const isPastSlot = (date, time) => {
+    if (!date) return false;
+    const [y, m, d] = date.split('-').map(Number);
+    const now = new Date();
+    if (y === now.getFullYear() && (m - 1) === now.getMonth() && d === now.getDate()) {
+      const [th, tm] = time.split(':').map(Number);
+      return th < now.getHours() || (th === now.getHours() && tm <= now.getMinutes());
+    }
+    return false;
+  };
+
+  // Horário só é válido se TODOS os blocos seguidos estiverem livres
+  const isTimeAvailable = (date, startIdx) => {
+    const free = barber.available_slots?.[date] || [];
+    const start = GLOBAL_TIME_SLOTS[startIdx];
+    if (!start || isPastSlot(date, start)) return false;
+    for (let i = 0; i < slotsNeeded; i++) {
+      const slot = GLOBAL_TIME_SLOTS[startIdx + i];
+      if (!slot) return false;
+      if (timeToMin(slot) - timeToMin(start) !== i * slotInterval) return false; // sem "buracos" (ex: almoço)
+      if (!free.includes(slot)) return false;
+    }
+    return true;
+  };
+
   const handleCopyLink=()=>{ navigator.clipboard.writeText(window.location.href).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); }); };
-  const handleServiceClick=(service)=>{ setSelectedService(service); setSelectedDate(null); setSelectedTime(null); setBookStep(2); };
+
+  // Adiciona/remove serviço da seleção (e zera data/hora, pois a duração mudou)
+  const handleToggleService=(service)=>{
+    setSelectedServices(prev => prev.some(s=>s.id===service.id) ? prev.filter(s=>s.id!==service.id) : [...prev, service]);
+    setSelectedDate(null); setSelectedTime(null);
+  };
+
+  // Clique na lista de baixo: seleciona e abre a etapa 1 para o cliente poder somar mais serviços
+  const handleServiceClick=(service)=>{
+    handleToggleService(service);
+    if (bookStep===0) setBookStep(1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetBooking=()=>{ setBookStep(0); setSelectedServices([]); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); };
+
   const handleSubmitBooking=async()=>{
     if (!clientName.trim()||!clientPhone.trim()) { alert('Preencha seu nome e WhatsApp.'); return; }
+    if (selectedServices.length===0||!selectedDate||!selectedTime) { alert('Escolha serviço, data e horário.'); return; }
     setSubmitting(true);
     try {
-      const {error}=await supabase.from('appointments').insert([{date:selectedDate,time:selectedTime,barber_id:barber.id,client_id:null,client_name:clientName.trim(),phone:clientPhone.trim(),service_name:selectedService.name,price:selectedService.price,status:'pending'}]);
+      const {error}=await supabase.from('appointments').insert([{date:selectedDate,time:selectedTime,barber_id:barber.id,client_id:null,client_name:clientName.trim(),phone:clientPhone.trim(),service_name:servicesLabel,price:totalPrice,status:'pending'}]);
       if (error) throw error;
       setBookStep(4);
     } catch(e) { alert('Erro ao agendar: '+e.message); } finally { setSubmitting(false); }
   };
+
   if (bookStep===4) return (
     <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
       <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600"/></div>
@@ -2378,12 +2454,13 @@ const PublicBarberPage = ({ barber }) => {
       <p className="text-slate-500 text-sm mb-2">Sua solicitação foi enviada para <b>{barber.name}</b>.</p>
       <p className="text-slate-500 text-sm mb-8">Aguarde a confirmação pelo WhatsApp.</p>
       <div className="bg-slate-50 rounded-2xl p-4 w-full max-w-xs text-left space-y-2 mb-8 border border-slate-100">
-        <div className="flex justify-between"><span className="text-xs text-slate-400">Serviço</span><span className="text-xs font-black text-slate-900">{selectedService?.name}</span></div>
+        <div className="flex justify-between gap-4"><span className="text-xs text-slate-400">{selectedServices.length>1?'Serviços':'Serviço'}</span><span className="text-xs font-black text-slate-900 text-right">{servicesLabel}</span></div>
         <div className="flex justify-between"><span className="text-xs text-slate-400">Data</span><span className="text-xs font-black text-slate-900">{selectedDate?.split('-').reverse().join('/')}</span></div>
         <div className="flex justify-between"><span className="text-xs text-slate-400">Horário</span><span className="text-xs font-black text-slate-900">{selectedTime}</span></div>
-        <div className="flex justify-between"><span className="text-xs text-slate-400">Valor</span><span className="text-xs font-black text-green-600">R$ {selectedService?.price}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Duração</span><span className="text-xs font-black text-slate-900">{formatDuration(totalMinutes)}</span></div>
+        <div className="flex justify-between"><span className="text-xs text-slate-400">Valor</span><span className="text-xs font-black text-green-600">R$ {totalPrice}</span></div>
       </div>
-      <button onClick={()=>{ setBookStep(0); setSelectedService(null); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); }} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
+      <button onClick={resetBooking} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
     </div>
   );
   return (
@@ -2412,40 +2489,51 @@ const PublicBarberPage = ({ barber }) => {
         {bookStep>0&&bookStep<4&&(
           <div className="bg-white mt-4 rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-              <h3 className="font-black text-slate-900 text-sm">{bookStep===1?'Escolha o serviço':bookStep===2?'Data e horário':'Seus dados'}</h3>
-              <button onClick={()=>setBookStep(0)} className="text-slate-400 font-bold text-xs">Cancelar</button>
+              <h3 className="font-black text-slate-900 text-sm">{bookStep===1?'Escolha os serviços':bookStep===2?'Data e horário':'Seus dados'}</h3>
+              <button onClick={resetBooking} className="text-slate-400 font-bold text-xs">Cancelar</button>
             </div>
             <div className="p-4">
-              {bookStep===1&&<div className="space-y-2">{services.map(s=>(
-                <button key={s.id} onClick={()=>{ setSelectedService(s); setBookStep(2); }} className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-slate-100 hover:border-slate-300 transition-all active:scale-95 text-left">
-                  <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
-                  <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
-                </button>
-              ))}</div>}
+              {bookStep===1&&(
+                <div>
+                  <p className="text-[10px] text-slate-400 font-bold mb-3">Você pode marcar mais de um serviço no mesmo horário.</p>
+                  <div className="space-y-2">{services.map(s=>{
+                    const sel=isSelected(s);
+                    return (
+                      <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full flex items-center justify-between p-4 rounded-xl border-2 transition-all active:scale-95 text-left ${sel?'border-blue-600 bg-blue-50':'border-slate-100 hover:border-slate-300'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${sel?'bg-blue-600 text-white':'bg-slate-100'}`}>{sel?<CheckCircle size={16}/>:React.cloneElement(s.icon,{size:16})}</div>
+                          <div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div>
+                        </div>
+                        <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
+                      </button>
+                    );
+                  })}</div>
+                  {selectedServices.length>0&&(
+                    <div className="mt-4 bg-slate-50 rounded-xl p-3 flex justify-between items-center border border-slate-100">
+                      <div><p className="font-black text-slate-900 text-xs">{selectedServices.length} {selectedServices.length>1?'serviços':'serviço'} · {formatDuration(totalMinutes)}</p><p className="text-[10px] text-slate-400 truncate max-w-[180px]">{servicesLabel}</p></div>
+                      <p className="font-black text-green-600">R$ {totalPrice}</p>
+                    </div>
+                  )}
+                  <button onClick={()=>setBookStep(2)} disabled={selectedServices.length===0} className="w-full mt-4 py-4 bg-blue-600 text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    {selectedServices.length===0?'Selecione ao menos um serviço':`Continuar → R$ ${totalPrice}`}
+                  </button>
+                </div>
+              )}
               {bookStep===2&&(
                 <div>
-                  <button onClick={()=>setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1"><ChevronLeft size={14}/> {selectedService?.name} · R$ {selectedService?.price}</button>
+                  <button onClick={()=>setBookStep(1)} className="text-xs text-slate-400 font-bold mb-4 flex items-center gap-1 text-left"><ChevronLeft size={14} className="shrink-0"/> <span>{servicesLabel} · {formatDuration(totalMinutes)} · R$ {totalPrice}</span></button>
                   <MonthCalendar availableSlots={barber.available_slots} selectedDate={selectedDate} onSelectDate={d=>{ setSelectedDate(d); setSelectedTime(null); }}/>
                   {selectedDate&&(
                     <div className="mt-5">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Horários disponíveis</p>
                       <div className="grid grid-cols-4 gap-2">
-                        {GLOBAL_TIME_SLOTS.map(t=>{ 
-                          let isPast = false;
-                          if (selectedDate) {
-                            const [y, m, d] = selectedDate.split('-').map(Number);
-                            const now = new Date();
-                            if (y === now.getFullYear() && (m - 1) === now.getMonth() && d === now.getDate()) {
-                              const [th, tm] = t.split(':').map(Number);
-                              if (th < now.getHours() || (th === now.getHours() && tm <= now.getMinutes())) {
-                                isPast = true;
-                              }
-                            }
-                          }
-                          const avail = barber.available_slots?.[selectedDate]?.includes(t) && !isPast; 
-                          return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-lg font-bold text-xs transition-all ${selectedTime===t?'bg-slate-900 text-white shadow-lg scale-105':avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>; 
+                        {GLOBAL_TIME_SLOTS.map((t,idx)=>{
+                          const avail = isTimeAvailable(selectedDate, idx);
+                          return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-lg font-bold text-xs transition-all ${selectedTime===t?'bg-slate-900 text-white shadow-lg scale-105':avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>;
                         })}
                       </div>
+                      {slotsNeeded>1&&<p className="text-[10px] text-slate-400 mt-3">Mostrando apenas horários com {formatDuration(totalMinutes)} livres em sequência.</p>}
+                      {GLOBAL_TIME_SLOTS.every((_,idx)=>!isTimeAvailable(selectedDate, idx))&&<p className="text-xs text-amber-600 font-bold mt-3">Sem horário suficiente nesse dia. Tente outra data ou remova um serviço.</p>}
                     </div>
                   )}
                   {selectedTime&&selectedDate&&<button onClick={()=>setBookStep(3)} className="w-full mt-5 py-4 bg-blue-600 text-white rounded-xl font-black text-sm active:scale-95 transition-all">Próximo → {selectedDate.split('-').reverse().join('/')} às {selectedTime}</button>}
@@ -2454,9 +2542,16 @@ const PublicBarberPage = ({ barber }) => {
               {bookStep===3&&(
                 <div className="space-y-4">
                   <button onClick={()=>setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><ChevronLeft size={14}/> {selectedDate?.split('-').reverse().join('/')} às {selectedTime}</button>
-                  <div className="bg-blue-50 rounded-xl p-3 flex justify-between items-center">
-                    <div><p className="font-black text-slate-900 text-sm">{selectedService?.name}</p><p className="text-[10px] text-slate-500">{selectedDate?.split('-').reverse().join('/')} às {selectedTime}</p></div>
-                    <p className="font-black text-green-600">R$ {selectedService?.price}</p>
+                  <div className="bg-blue-50 rounded-xl p-3">
+                    <div className="space-y-1.5">
+                      {selectedServices.map(s=>(
+                        <div key={s.id} className="flex justify-between items-center"><p className="font-bold text-slate-900 text-xs">{s.name} <span className="text-slate-400 font-normal">· {s.duration}</span></p><p className="font-bold text-slate-600 text-xs">R$ {s.price}</p></div>
+                      ))}
+                    </div>
+                    <div className="border-t border-blue-100 mt-2 pt-2 flex justify-between items-center">
+                      <div><p className="font-black text-slate-900 text-sm">Total · {formatDuration(totalMinutes)}</p><p className="text-[10px] text-slate-500">{selectedDate?.split('-').reverse().join('/')} às {selectedTime}</p></div>
+                      <p className="font-black text-green-600">R$ {totalPrice}</p>
+                    </div>
                   </div>
                   <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
                   <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
@@ -2476,12 +2571,15 @@ const PublicBarberPage = ({ barber }) => {
         )}
         <div className="mt-5">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Serviços · <span className="text-blue-500 normal-case font-bold">toque para agendar</span></p>
-          <div className="space-y-2">{services.map(s=>(
-            <button key={s.id} onClick={()=>handleServiceClick(s)} className="w-full bg-white rounded-xl border border-slate-100 p-4 flex items-center justify-between active:scale-[0.98] transition-all hover:border-blue-200 hover:bg-blue-50/30 cursor-pointer">
-              <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
-              <div className="flex items-center gap-2"><p className="font-black text-green-600 text-sm">R$ {s.price}</p><div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center"><CalendarDays size={11} className="text-white"/></div></div>
-            </button>
-          ))}</div>
+          <div className="space-y-2">{services.map(s=>{
+            const sel=isSelected(s);
+            return (
+              <button key={s.id} onClick={()=>handleServiceClick(s)} className={`w-full rounded-xl border p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer ${sel?'bg-blue-50 border-blue-400':'bg-white border-slate-100 hover:border-blue-200 hover:bg-blue-50/30'}`}>
+                <div className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">{React.cloneElement(s.icon,{size:16})}</div><div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div></div>
+                <div className="flex items-center gap-2"><p className="font-black text-green-600 text-sm">R$ {s.price}</p><div className={`w-6 h-6 rounded-full flex items-center justify-center ${sel?'bg-green-500':'bg-blue-600'}`}>{sel?<CheckCircle size={11} className="text-white"/>:<CalendarDays size={11} className="text-white"/>}</div></div>
+              </button>
+            );
+          })}</div>
         </div>
         <div className="mt-8 text-center">
           <p className="text-[10px] text-slate-300 font-bold uppercase tracking-widest">Agendamento via</p>
