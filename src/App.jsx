@@ -231,7 +231,7 @@ const AdminSupport = () => {
   const selected = messages.find(m => m.id === selectedId) || null;
 
   const load = async () => {
-    const { data, error } = await sb.from('support_messages').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('support_messages').select('*').order('created_at', { ascending: false });
     if (error) { console.error('Erro ao carregar suporte:', error); return; }
     setMessages(data || []);
   };
@@ -242,7 +242,7 @@ const AdminSupport = () => {
   const handleSaveReply = async () => {
     if (!selected || !replyText.trim()) return;
     setSaving(true);
-    const { error } = await sb.from('support_messages').update({ reply: replyText.trim(), replied_at: new Date().toISOString() }).eq('id', selected.id);
+    const { error } = await supabase.from('support_messages').update({ reply: replyText.trim(), replied_at: new Date().toISOString() }).eq('id', selected.id);
     setSaving(false);
     if (error) { alert('Erro ao salvar: ' + error.message); return; }
     load();
@@ -251,7 +251,7 @@ const AdminSupport = () => {
   const handleDelete = async () => {
     if (!selected) return;
     if (!window.confirm('Excluir esta mensagem? Ela também some para o profissional.')) return;
-    const { error } = await sb.from('support_messages').delete().eq('id', selected.id);
+    const { error } = await supabase.from('support_messages').delete().eq('id', selected.id);
     if (error) { alert('Erro ao excluir: ' + error.message); return; }
     setSelectedId(null);
     load();
