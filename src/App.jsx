@@ -143,18 +143,18 @@ const getPhoneDigits = (phone) => phone.replace(/\D/g,'');
 
 // ─── MASTER SERVICES ──────────────────────────────────────────────────────────
 const MASTER_SERVICES = [
-  { id:1,name:'Corte Degradê',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'hair' },
+  { id:1,name:'Corte Degradê',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'hair' },
   { id:2,name:'Barba Terapia',defaultPrice:40,duration:'30min',icon:<User size={20}/>,category:'beard' },
-  { id:3,name:'Combo Completo',defaultPrice:80,duration:'1h 15min',icon:<Star size={20}/>,category:'combo' },
+  { id:3,name:'Combo Completo',defaultPrice:80,duration:'1h 00min',icon:<Star size={20}/>,category:'combo' },
   { id:4,name:'Luzes / Platinado',defaultPrice:120,duration:'2h',icon:<Sparkles size={20}/>,category:'chemical' },
   { id:6,name:'Design Sobrancelhas',defaultPrice:35,duration:'30min',icon:<Eye size={20}/>,category:'eyebrow' },
-  { id:7,name:'Nail design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'nail' },
-  { id:8,name:'Manicure/Pedicure',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'foot' },
-  { id:9,name:'Limpeza facial',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
-  { id:10,name:'Massagem e drenagem',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'dren' },
-  { id:12,name:'Lash design',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'lash' },
-  { id:13,name:'Micro Pig Sobrancelha',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
-  { id:14,name:'Designer com Henna',defaultPrice:50,duration:'45min',icon:<Scissors size={20}/>,category:'face' },
+  { id:7,name:'Nail design',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'nail' },
+  { id:8,name:'Manicure/Pedicure',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'foot' },
+  { id:9,name:'Limpeza facial',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'face' },
+  { id:10,name:'Massagem e drenagem',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'dren' },
+  { id:12,name:'Lash design',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'lash' },
+  { id:13,name:'Micro Pig Sobrancelha',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'face' },
+  { id:14,name:'Designer com Henna',defaultPrice:50,duration:'30min',icon:<Scissors size={20}/>,category:'face' },
 ];
 
 const GLOBAL_TIME_SLOTS = [
@@ -2353,7 +2353,7 @@ const TopProfessionalsSection = ({ barbers }) => {
     </div>
   );
 };
-// ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
+/// ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
 
 // Helpers (pode deixar fora do componente)
 const timeToMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
@@ -2441,7 +2441,17 @@ const PublicBarberPage = ({ barber }) => {
     if (selectedServices.length===0||!selectedDate||!selectedTime) { alert('Escolha serviço, data e horário.'); return; }
     setSubmitting(true);
     try {
-      const {error}=await supabase.from('appointments').insert([{date:selectedDate,time:selectedTime,barber_id:barber.id,client_id:null,client_name:clientName.trim(),phone:clientPhone.trim(),service_name:servicesLabel,price:totalPrice,status:'pending'}]);
+      // Uma linha por bloco ocupado (ex: 2 serviços de 30min = 14:00 e 14:30)
+      const startIdx = GLOBAL_TIME_SLOTS.indexOf(selectedTime);
+      const blocks = GLOBAL_TIME_SLOTS.slice(startIdx, startIdx + slotsNeeded);
+      const base = { date:selectedDate, barber_id:barber.id, client_id:null, client_name:clientName.trim(), phone:clientPhone.trim(), status:'pending' };
+      const rows = blocks.map((t,i)=>({
+        ...base,
+        time: t,
+        service_name: i===0 ? servicesLabel : `${servicesLabel} (continuação)`,
+        price: i===0 ? totalPrice : 0
+      }));
+      const {error}=await supabase.from('appointments').insert(rows);
       if (error) throw error;
       setBookStep(4);
     } catch(e) { alert('Erro ao agendar: '+e.message); } finally { setSubmitting(false); }
@@ -2466,6 +2476,7 @@ const PublicBarberPage = ({ barber }) => {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="bg-slate-900 pb-8 pt-10 px-6 relative overflow-hidden">
+        <a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-slate-500 hover:text-slate-300 transition-colors">Login</a>
         <div className="absolute inset-0 opacity-10"><div className="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-blue-500 rounded-full blur-3xl"/></div>
         <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
           <div className="mb-4">
@@ -2589,7 +2600,6 @@ const PublicBarberPage = ({ barber }) => {
     </div>
   );
 };
-
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
 // ─── VITRINE PÚBLICA DA COMANDA (acesso via nº ou QR Code) ────────────────────
 const ComandaStorefrontPage = ({ numero }) => {
