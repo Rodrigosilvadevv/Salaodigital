@@ -684,8 +684,9 @@ const AdminDashboard = () => {
     if (!loginUser.trim()||!loginPass.trim()) { setLoginError('Preencha usuário e senha.'); return; }
     setLoginLoading(true); setLoginError('');
     try {
-      const {data,error}=await supabase.from('admin_users').select('*').eq('username',loginUser.trim()).eq('password',loginPass.trim()).maybeSingle();
-      if (data&&!error) { localStorage.setItem('sd_admin_session','true'); setIsLoggedIn(true); }
+      const {data,error}=await supabase.rpc('admin_login',{p_user:loginUser.trim(),p_pass:loginPass.trim()});
+      if (error) setLoginError('Erro: '+error.message);
+      else if (data===true) { localStorage.setItem('sd_admin_session','true'); setIsLoggedIn(true); }
       else setLoginError('Usuário ou senha incorretos.');
     } catch(e) { setLoginError('Erro de conexão: '+e.message); }
     setLoginLoading(false);
