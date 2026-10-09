@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salao-digital-v1';
+const CACHE_NAME = 'salao-digital-v150';
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
