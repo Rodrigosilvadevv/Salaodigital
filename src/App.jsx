@@ -136,7 +136,7 @@ const SupportChat = ({ user, isGuest }) => {
 
   const load = async () => {
     if (!user?.id) return;
-    const { data, error } = await sb.from('support_messages').select('*').eq('barber_id', user.id).order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('support_messages').select('*').eq('barber_id', user.id).order('created_at', { ascending: true });
     if (error) console.error('Erro ao carregar suporte:', error);
     else setMsgs(data || []);
   };
@@ -152,7 +152,7 @@ const SupportChat = ({ user, isGuest }) => {
     e.preventDefault();
     if (!text.trim()) return;
     setSending(true);
-    const { error } = await sb.from('support_messages').insert([{
+    const { error } = await supabase.from('support_messages').insert([{
       barber_id: user.id,
       barber_name: user.name || 'Profissional',
       barber_phone: user.phone || null,
