@@ -4162,6 +4162,7 @@ const handleUploadWorkPhoto = async (event) => {
             const conts = unique.filter(_isCont);
             const used = new Set();
 
+            // Cada atendimento principal vira UM card; as continuações ficam dentro dele (não aparecem separadas)
             const groupedAppointments = mains.map(m => {
               const blocks = [m];
               let last = m;
@@ -4179,8 +4180,6 @@ const handleUploadWorkPhoto = async (event) => {
               }
               return { ...m, blocks };
             });
-            // Continuações órfãs continuam aparecendo, para não ficarem invisíveis
-            conts.filter(c => !used.has(c.id)).forEach(c => groupedAppointments.push({ ...c, blocks: [c] }));
 
             return (
           <section>
@@ -4251,7 +4250,6 @@ const handleUploadWorkPhoto = async (event) => {
           })()}
         </div>
       )}
- 
       {/* ══════════════════════════ SERVICES TAB ══════════════════════════ */}
       {activeTab === 'services' && (
         <div className="space-y-4">
