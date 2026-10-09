@@ -3505,12 +3505,35 @@ const longPressFired = useRef(false);
   
   const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
+  const isContApp = (a) => typeof a.service_name === 'string' && a.service_name.endsWith(' (continuação)');
+  const _tm = (t) => { const [h, m] = String(t || '00:00').split(':').map(Number); return h * 60 + m; };
+  const _step = GLOBAL_TIME_SLOTS.length > 1 ? (_tm(GLOBAL_TIME_SLOTS[1]) - _tm(GLOBAL_TIME_SLOTS[0])) || 30 : 30;
+
+  // Devolve o atendimento principal + as linhas de continuação dele (mesmo cliente, mesma data, horários seguidos)
+  const getBlocks = (main, pool) => {
+    const blocks = [main];
+    if (!main.time) return blocks;
+    const conts = pool.filter(isContApp);
+    const used = new Set();
+    let last = main;
+    while (true) {
+      const next = conts.find(c => !used.has(c.id) && c.time && c.date === main.date && c.client_name === main.client_name && _tm(c.time) - _tm(last.time) === _step);
+      if (!next) break;
+      used.add(next.id);
+      blocks.push(next);
+      last = next;
+    }
+    return blocks;
+  };
 
   const myAppointments = (appointments || []).filter(a => String(a.barber_id || a.barberId) === String(effectiveUser.id) && a.status !== 'rejected');
-  const pending = myAppointments.filter(a => a.status === 'pending').sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
-  const confirmed = myAppointments.filter(a => a.status === 'confirmed');
+  const pendingAll = myAppointments.filter(a => a.status === 'pending').sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+  const pending = pendingAll.filter(a => !isContApp(a));
+  const confirmedAll = myAppointments.filter(a => a.status === 'confirmed');
+  const confirmed = confirmedAll.filter(a => !isContApp(a));
   const manualAppointments = effectiveUser.manual_appointments || [];
   const allAppointments = [...confirmed, ...manualAppointments].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
+  const allAppointmentsFull = [...confirmedAll, ...manualAppointments].sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`));
   const revenue = confirmed.reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
   const dedupedPending = pending.filter((app, index, self) => index === self.findIndex(t => t.id === app.id));
   const pendingToShow = showAllPending ? dedupedPending : dedupedPending.slice(0, 3);
@@ -3550,6 +3573,24 @@ const longPressFired = useRef(false);
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id);
       if (error) console.error("Erro ao salvar horários:", error.message);
+    }
+  };
+
+
+    // Abre/fecha VÁRIOS horários do mesmo dia de uma vez (evita uma chamada sobrescrever a outra)
+  const setSlotsAvailability = async (date, times, makeAvailable) => {
+    const currentSlots = effectiveUser.available_slots || {};
+    let day = [...(currentSlots[date] || [])];
+    times.forEach(t => {
+      if (makeAvailable) { if (!day.includes(t)) day.push(t); }
+      else day = day.filter(s => s !== t);
+    });
+    day.sort();
+    const updated = { ...currentSlots, [date]: day };
+    effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updated });
+    if (!isGuestBarber) {
+      const { error } = await sb.from('profiles').update({ available_slots: updated }).eq('id', effectiveUser.id);
+      if (error) console.error('Erro ao salvar horários:', error.message);
     }
   };
 
@@ -3616,20 +3657,20 @@ const longPressFired = useRef(false);
     setSelectedDateConfig(fullDate);
   };
  
-  // Cancela o cliente com um toque e devolve o horário para a agenda
   const cancelAppointmentQuick = async (app) => {
     if (isGuestBarber) {
       const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
       effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
       return;
     }
- 
+
+    const blocks = app.isManual ? [app] : getBlocks(app, allAppointmentsFull);
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const slotsForDay = [...(currentSlots[app.date] || [])];
-    if (app.time && !slotsForDay.includes(app.time)) slotsForDay.push(app.time);
+    blocks.forEach(b => { if (b.time && !slotsForDay.includes(b.time)) slotsForDay.push(b.time); });
     slotsForDay.sort();
     const updatedSlots = { ...currentSlots, [app.date]: slotsForDay };
- 
+
     if (app.isManual) {
       const filteredManual = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots, manual_appointments: filteredManual });
@@ -3643,9 +3684,12 @@ const longPressFired = useRef(false);
         .update({ available_slots: updatedSlots })
         .eq('id', effectiveUser.id);
       if (error) console.error('Erro ao liberar horário:', error.message);
-      await onUpdateStatus(app.id, 'rejected');
+      for (const b of blocks) await onUpdateStatus(b.id, 'rejected');
     }
   };
+
+
+
   const handleManualBookingConfirm = async (saveWithClient) => {
     if (!manualSlotTarget) return;
     const { date, slot } = manualSlotTarget;
@@ -4350,8 +4394,10 @@ const handleUploadWorkPhoto = async (event) => {
                       if (isGuestBarber) { alert('Para aceitar agendamentos, faça login!'); return; }
                       if (!app.id) return;
                       try {
-                        await onUpdateStatus(app.id, 'confirmed');
-                        if (app.date && app.time) await setSlotAvailability(app.date, app.time, false);
+                        const blocks = getBlocks(app, pendingAll);
+                        for (const b of blocks) await onUpdateStatus(b.id, 'confirmed');
+                        const times = blocks.map(b => b.time).filter(Boolean);
+                        if (app.date && times.length) await setSlotsAvailability(app.date, times, false);
                         const msg = `Olá ${app.client_name || app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
                         const fone = app.phone?.toString().replace(/\D/g,'');
                         if (fone) window.location.href = `https://wa.me/55${fone}?text=${msg}`;
@@ -4359,7 +4405,7 @@ const handleUploadWorkPhoto = async (event) => {
                     }} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
                       <CheckCircle size={14}/> Aceitar
                     </button>
-                    <button onClick={() => !isGuestBarber && onUpdateStatus(app.id, 'rejected')}
+                    <button onClick={() => !isGuestBarber && getBlocks(app, pendingAll).forEach(b => onUpdateStatus(b.id, 'rejected'))}
                       className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
                       <XCircle size={18}/>
                     </button>
