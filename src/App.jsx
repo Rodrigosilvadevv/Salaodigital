@@ -2726,115 +2726,170 @@ const PublicBarberPage = ({ barber }) => {
   );
 };
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
-// ─── VITRINE PÚBLICA DA COMANDA (acesso via nº ou QR Code) ────────────────────
-const ComandaStorefrontPage = ({ numero }) => {
-  const [loading, setLoading] = useState(true);
-  const [comanda, setComanda] = useState(null);
+// ─── CARDÁPIO PÚBLICO (CLIENTE) ───────────────────────────────────────────────
+const PublicMenuPage = ({ slug }) => {
   const [barber, setBarber] = useState(null);
+  const [categories, setCategories] = useState([]);
   const [products, setProducts] = useState([]);
-  const [items, setItems] = useState([]);
-  const [addingId, setAddingId] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [activeCat, setActiveCat] = useState('all');
+  const [cart, setCart] = useState({});
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [clientName, setClientName] = useState(() => { try { return localStorage.getItem('menu_client_name') || ''; } catch (_) { return ''; } });
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
 
-  const loadAll = useCallback(async () => {
-    try {
-      const { data: c } = await supabase.from('comandas').select('*').eq('numero', numero).eq('status', 'aberta').maybeSingle();
-      if (!c) { setComanda(null); setLoading(false); return; }
-      setComanda(c);
-      const [{ data: b }, { data: p }, { data: it }] = await Promise.all([
-        supabase.from('profiles').select('*').eq('id', c.barber_id).maybeSingle(),
-        supabase.from('products').select('*').eq('barber_id', c.barber_id).order('created_at', { ascending: false }),
-        supabase.from('comanda_items').select('*').eq('comanda_id', c.id).order('created_at', { ascending: true }),
-      ]);
-      setBarber(b); setProducts(p || []); setItems(it || []);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  }, [numero]);
+  const load = async () => {
+    const { data: prof } = await supabase.from('profiles').select('id,name,avatar_url,bio,menu_color').eq('slug', slug).maybeSingle();
+    if (!prof) { setNotFound(true); setLoading(false); return; }
+    setBarber(prof);
+    const [p, c] = await Promise.all([
+      supabase.from('products').select('*').eq('barber_id', prof.id).order('created_at', { ascending: false }),
+      supabase.from('product_categories').select('*').eq('barber_id', prof.id).order('created_at', { ascending: true }),
+    ]);
+    setProducts(p.data || []); setCategories(c.data || []); setLoading(false);
+  };
+  useEffect(() => { load(); }, [slug]);
 
-  useEffect(() => {
-    loadAll();
-    const t = setInterval(loadAll, 8000);
-    return () => clearInterval(t);
-  }, [loadAll]);
+  const theme = MENU_THEMES[barber?.menu_color] || MENU_THEMES.blue;
+  const hasStock = (p) => p.stock === null || p.stock === undefined || p.stock > 0;
 
-  const addToOrder = async (product) => {
-    if (!comanda) return;
-    setAddingId(product.id);
-    try {
-      const { data, error } = await supabase.from('comanda_items').insert({
-        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
-      }).select().single();
-      if (error) throw error;
-      setItems(prev => [...prev, data]);
-    } catch (err) { console.error(err); alert('Não foi possível enviar o pedido. Tente novamente.'); }
-    finally { setAddingId(null); }
+  const add = (p) => setCart(prev => {
+    const cur = prev[p.id] || 0;
+    if (p.stock !== null && p.stock !== undefined && cur >= p.stock) return prev;
+    return { ...prev, [p.id]: cur + 1 };
+  });
+  const remove = (p) => setCart(prev => {
+    const cur = prev[p.id] || 0;
+    const n = { ...prev };
+    if (cur <= 1) delete n[p.id]; else n[p.id] = cur - 1;
+    return n;
+  });
+
+  const cartItems = products.filter(p => cart[p.id]).map(p => ({ ...p, qty: cart[p.id] }));
+  const total = cartItems.reduce((s, i) => s + Number(i.price) * i.qty, 0);
+  const count = cartItems.reduce((s, i) => s + i.qty, 0);
+  const visible = activeCat === 'all' ? products : products.filter(p => p.category_id === activeCat);
+
+  const submit = async () => {
+    if (!clientName.trim()) { alert('Digite seu nome.'); return; }
+    setSending(true);
+    try { localStorage.setItem('menu_client_name', clientName.trim()); } catch (_) {}
+    const { error } = await supabase.rpc('place_menu_order', {
+      p_barber: String(barber.id),
+      p_client: clientName.trim(),
+      p_items: cartItems.map(i => ({ product_id: String(i.id), qty: i.qty })),
+    });
+    setSending(false);
+    if (error) { alert(error.message); load(); return; }
+    setCart({}); setShowCheckout(false); setDone(true); load();
   };
 
-  const total = items.reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={28}/></div>;
+  if (notFound) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-center"><p className="text-slate-500 font-bold">Cardápio não encontrado.</p></div>;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-slate-400" size={32}/>
-      </div>
-    );
-  }
-
-  if (!comanda) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
-        <XCircle size={40} className="text-red-400 mb-3"/>
-        <p className="font-black text-slate-700">Comanda não encontrada</p>
-        <p className="text-xs text-slate-400 mt-1">Verifique o número ou peça uma nova ao atendente.</p>
-      </div>
-    );
-  }
+  if (done) return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600"/></div>
+      <h2 className="text-2xl font-black text-slate-900 mb-2">Pedido enviado!</h2>
+      <p className="text-slate-500 text-sm mb-8">{barber.name} já recebeu o seu pedido.</p>
+      <button onClick={() => setDone(false)} className={`px-6 py-3 ${theme.solid} text-white rounded-xl font-black text-sm active:scale-95 transition-all`}>Fazer outro pedido</button>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-10">
-      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-10">
-        <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest">Comanda #{comanda.numero}</p>
-        <h1 className="text-lg font-black text-slate-900">{barber?.name || 'Loja'}</h1>
-        <p className="text-xs text-slate-400">Cliente: {comanda.client_name}</p>
-      </header>
-      <main className="p-4 max-w-md mx-auto space-y-3">
-        <p className="text-[11px] font-black text-slate-400 uppercase tracking-tight px-1">Cardápio</p>
-        {products.length === 0
-          ? <p className="text-center text-slate-400 text-sm py-10">Nenhum produto disponível no momento.</p>
-          : products.map(p => (
-            <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex items-center gap-3">
-              <div className="w-14 h-14 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
-                {p.photo_url
-                  ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
-                  : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={18}/></div>}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
-                <p className="text-xs text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
-              </div>
-              <button onClick={() => addToOrder(p)} disabled={addingId === p.id}
-                className="px-3 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all disabled:opacity-50">
-                {addingId === p.id ? '...' : 'Pedir'}
-              </button>
-            </div>
-          ))}
+    <div className="min-h-screen bg-slate-50 pb-28">
+      <div className={`${theme.solid} px-6 pt-10 pb-8 text-center`}>
+        <div className="w-20 h-20 rounded-full overflow-hidden bg-white/20 mx-auto mb-3 border-4 border-white/40">
+          {barber.avatar_url ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>
+            : <div className="w-full h-full flex items-center justify-center"><User size={30} className="text-white"/></div>}
+        </div>
+        <h1 className="text-white font-black text-xl leading-tight">{barber.name}</h1>
+        <p className="text-white/80 text-xs font-bold uppercase tracking-widest mt-1">Cardápio</p>
+      </div>
 
-        {items.length > 0 && (
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mt-4">
-            <p className="font-black text-slate-900 text-sm mb-2">Seus pedidos</p>
-            <div className="space-y-1 mb-2">
-              {items.map(i => (
-                <div key={i.id} className="flex justify-between text-xs text-slate-600">
-                  <span>{i.qty}x {i.product_name}</span>
-                  <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex justify-between border-t border-slate-100 pt-2 font-black text-slate-900">
-              <span>Total</span><span>R$ {total.toFixed(2)}</span>
-            </div>
+      <div className="max-w-md mx-auto px-4">
+        {categories.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto py-4">
+            {[{ id: 'all', name: 'Todos' }, ...categories].map(c => (
+              <button key={c.id} onClick={() => setActiveCat(c.id)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-black transition-all ${activeCat === c.id ? `${theme.solid} text-white` : 'bg-white border border-slate-200 text-slate-500'}`}>{c.name}</button>
+            ))}
           </div>
         )}
-      </main>
+
+        {visible.length === 0 ? (
+          <p className="text-center text-slate-400 text-sm py-16">Nenhum produto disponível.</p>
+        ) : (
+          <div className="space-y-3 mt-2">
+            {visible.map(p => {
+              const qty = cart[p.id] || 0;
+              const ok = hasStock(p);
+              return (
+                <div key={p.id} className={`flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 ${ok ? '' : 'opacity-50'}`}>
+                  <div className="w-20 h-20 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                    {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                      : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={22}/></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 text-sm leading-tight">{p.name}</p>
+                    <p className={`font-black text-sm mt-1 ${theme.text}`}>R$ {Number(p.price).toFixed(2)}</p>
+                    {!ok && <p className="text-[10px] font-black text-red-500 uppercase mt-0.5">Esgotado</p>}
+                  </div>
+                  {ok && (qty === 0 ? (
+                    <button onClick={() => add(p)} className={`w-10 h-10 rounded-full ${theme.solid} text-white text-xl font-black active:scale-90 transition-all`}>+</button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => remove(p)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-black active:scale-90">−</button>
+                      <span className="w-5 text-center font-black text-sm">{qty}</span>
+                      <button onClick={() => add(p)} className={`w-8 h-8 rounded-full ${theme.solid} text-white font-black active:scale-90`}>+</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {count > 0 && !showCheckout && (
+        <div className="fixed bottom-0 inset-x-0 p-4 z-40">
+          <button onClick={() => setShowCheckout(true)} className={`max-w-md mx-auto w-full ${theme.solid} text-white rounded-2xl py-4 px-5 flex items-center justify-between font-black text-sm shadow-xl active:scale-95 transition-all`}>
+            <span>🛒 {count} {count > 1 ? 'itens' : 'item'}</span>
+            <span>Ver pedido · R$ {total.toFixed(2)}</span>
+          </button>
+        </div>
+      )}
+
+      {showCheckout && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-slate-900/70" onClick={() => setShowCheckout(false)}/>
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto">
+            <h3 className="font-black text-slate-900 text-lg mb-4">Seu pedido</h3>
+            <div className="space-y-2 mb-4">
+              {cartItems.map(i => (
+                <div key={i.id} className="flex justify-between text-sm">
+                  <span className="text-slate-700">{i.qty}x {i.name}</span>
+                  <span className="font-bold text-slate-900">R$ {(Number(i.price) * i.qty).toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between pt-2 border-t border-slate-100">
+                <span className="font-black text-slate-900">Total</span>
+                <span className={`font-black ${theme.text}`}>R$ {total.toFixed(2)}</span>
+              </div>
+            </div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label>
+            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Como podemos te chamar?"
+              className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-slate-400 mb-4"/>
+            <button onClick={submit} disabled={sending || !clientName.trim()}
+              className={`w-full py-4 ${theme.solid} text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2`}>
+              {sending ? <Loader2 className="animate-spin" size={18}/> : 'Enviar pedido'}
+            </button>
+            <button onClick={() => setShowCheckout(false)} className="w-full text-slate-400 font-bold text-xs mt-3">Voltar ao cardápio</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -3012,171 +3067,155 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
 };
 
 // ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
-// ─── LOJA / BAR + COMANDAS ─────────────────────────────────────────────────────
-const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, focusComandaId, setFocusComandaId }) => {
+// ─── CORES DO CARDÁPIO ────────────────────────────────────────────────────────
+const MENU_THEMES = {
+  blue:  { label: 'Azul',   solid: 'bg-blue-600',  text: 'text-blue-600',  soft: 'bg-blue-50',  border: 'border-blue-600' },
+  green: { label: 'Verde',  solid: 'bg-green-600', text: 'text-green-600', soft: 'bg-green-50', border: 'border-green-600' },
+  gray:  { label: 'Cinza',  solid: 'bg-slate-500', text: 'text-slate-600', soft: 'bg-slate-100', border: 'border-slate-500' },
+  pink:  { label: 'Rosa',   solid: 'bg-pink-500',  text: 'text-pink-600',  soft: 'bg-pink-50',  border: 'border-pink-500' },
+  black: { label: 'Preto',  solid: 'bg-slate-900', text: 'text-slate-900', soft: 'bg-slate-100', border: 'border-slate-900' },
+};
+
+// ─── LOJA / CARDÁPIO (PAINEL DO PROFISSIONAL) ─────────────────────────────────
+const ShopBarSection = ({ effectiveUser, isGuestBarber, sb }) => {
+  const [tab, setTab] = useState('orders');
   const [products, setProducts] = useState([]);
-  const [comandas, setComandas] = useState([]);
-  const [loadingShop, setLoadingShop] = useState(false);
+  const [categories, setCategories] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [flash, setFlash] = useState(false);
+
+  const [newCatName, setNewCatName] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [prodName, setProdName] = useState('');
   const [prodPrice, setProdPrice] = useState('');
+  const [prodCat, setProdCat] = useState('');
+  const [prodStock, setProdStock] = useState('');
   const [prodPhotoFile, setProdPhotoFile] = useState(null);
   const [prodPhotoPreview, setProdPhotoPreview] = useState('');
   const [savingProduct, setSavingProduct] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [caixaInput, setCaixaInput] = useState('');
-  const [caixaComanda, setCaixaComanda] = useState(null);
-  const [caixaLoading, setCaixaLoading] = useState(false);
-  const [addingItemId, setAddingItemId] = useState(null);
-  const [dayModalDate, setDayModalDate] = useState(null);
-  const pressTimer = useRef(null);
-  const longPressFired = useRef(false);
 
+  const [period, setPeriod] = useState('today');
+  const [salesOrders, setSalesOrders] = useState([]);
+  const [loadingSales, setLoadingSales] = useState(false);
 
-  const fetchShopData = useCallback(async () => {
-    if (isGuestBarber || !effectiveUser?.id) return;
-    setLoadingShop(true);
+  const [color, setColor] = useState(effectiveUser?.menu_color || 'blue');
+  const [copied, setCopied] = useState(false);
+
+  const barberId = effectiveUser?.id;
+  const menuUrl = effectiveUser?.slug ? `${window.location.origin}/cardapio/${effectiveUser.slug}` : '';
+  const qrUrl = menuUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(menuUrl)}` : '';
+
+  const beep = () => {
     try {
-      const [{ data: prod }, { data: com }] = await Promise.all([
-        sb.from('products').select('*').eq('barber_id', effectiveUser.id).order('created_at', { ascending: false }),
-        sb.from('comandas').select('*, comanda_items(*)').eq('barber_id', effectiveUser.id).eq('status', 'aberta').order('created_at', { ascending: false }),
+      const C = window.AudioContext || window.webkitAudioContext;
+      const ctx = new C(); const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start();
+      setTimeout(() => { o.stop(); ctx.close(); }, 250);
+    } catch (_) {}
+  };
+
+  const fetchShop = useCallback(async (silent) => {
+    if (isGuestBarber || !barberId) return;
+    if (!silent) setLoading(true);
+    try {
+      const [p, c, o] = await Promise.all([
+        sb.from('products').select('*').eq('barber_id', barberId).order('created_at', { ascending: false }),
+        sb.from('product_categories').select('*').eq('barber_id', barberId).order('created_at', { ascending: true }),
+        sb.from('menu_orders').select('*, menu_order_items(*)').eq('barber_id', barberId).eq('status', 'novo').order('created_at', { ascending: false }),
       ]);
-      if (prod) setProducts(prod);
-      if (com) setComandas(com);
+      if (p.data) setProducts(p.data);
+      if (c.data) setCategories(c.data);
+      if (o.data) setOrders(o.data);
     } catch (err) { console.error('Erro ao carregar loja:', err); }
-    finally { setLoadingShop(false); }
-  }, [sb, effectiveUser?.id, isGuestBarber]);
+    finally { if (!silent) setLoading(false); }
+  }, [sb, barberId, isGuestBarber]);
 
-  useEffect(() => { fetchShopData(); }, [fetchShopData]);
+  useEffect(() => { fetchShop(false); }, [fetchShop]);
 
+  // Pedidos em tempo real (+ atualização a cada 20s como garantia)
   useEffect(() => {
-    if (isGuestBarber || !effectiveUser?.id) return;
-    const channel = sb.channel(`shop-rt-${effectiveUser.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comanda_items' }, fetchShopData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'comandas', filter: `barber_id=eq.${effectiveUser.id}` }, fetchShopData)
+    if (isGuestBarber || !barberId) return;
+    const channel = sb.channel(`menu-rt-${barberId}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'menu_orders', filter: `barber_id=eq.${barberId}` }, () => {
+        fetchShop(true); beep(); setFlash(true); setTimeout(() => setFlash(false), 5000);
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'menu_orders', filter: `barber_id=eq.${barberId}` }, () => fetchShop(true))
       .subscribe();
-    return () => sb.removeChannel(channel);
-  }, [sb, effectiveUser?.id, isGuestBarber, fetchShopData]);
+    const t = setInterval(() => fetchShop(true), 20000);
+    return () => { sb.removeChannel(channel); clearInterval(t); };
+  }, [sb, barberId, isGuestBarber, fetchShop]);
 
-  const generateComandaNumber = () => String(Math.floor(1000 + Math.random() * 9000));
-
-  // Função para criar comanda avulsa solicitando o nome via prompt
-  const handleCreateManualComanda = async () => {
-    if (isGuestBarber) {
-      alert('A comanda com QR Code fica disponível após criar sua conta.');
-      return;
-    }
-    const clientName = window.prompt('Digite o nome do cliente para a nova comanda:');
-    if (!clientName || !clientName.trim()) return;
-
-    setGenerating(true);
+  // ── Vendas ──
+  const fetchSales = useCallback(async () => {
+    if (isGuestBarber || !barberId) return;
+    setLoadingSales(true);
     try {
-      let numero = generateComandaNumber();
-      for (let i = 0; i < 5 && comandas.some(c => c.numero === numero); i++) {
-        numero = generateComandaNumber();
-      }
-      const { data, error } = await sb.from('comandas').insert({
-        barber_id: effectiveUser.id,
-        appointment_id: null,
-        client_name: clientName.trim(),
-        numero,
-        status: 'aberta',
-      }).select().single();
+      const d = new Date();
+      if (period === 'today') d.setHours(0, 0, 0, 0);
+      else d.setDate(d.getDate() - (period === '7' ? 7 : 30));
+      const { data } = await sb.from('menu_orders').select('*, menu_order_items(*)')
+        .eq('barber_id', barberId).neq('status', 'cancelado').gte('created_at', d.toISOString())
+        .order('created_at', { ascending: false });
+      setSalesOrders(data || []);
+    } catch (err) { console.error(err); }
+    finally { setLoadingSales(false); }
+  }, [sb, barberId, isGuestBarber, period]);
 
-      if (error) throw error;
-      setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-      setFocusComandaId(data.id);
-    } catch (err) {
-      console.error(err);
-      alert('Não foi possível gerar a comanda. Verifique se a tabela "comandas" existe no Supabase.');
-    } finally {
-      setGenerating(false);
-    }
+  useEffect(() => { if (tab === 'sales') fetchSales(); }, [tab, fetchSales]);
+
+  const salesByProduct = (() => {
+    const map = {};
+    salesOrders.forEach(o => (o.menu_order_items || []).forEach(i => {
+      const k = i.product_name || 'Produto';
+      if (!map[k]) map[k] = { name: k, qty: 0, total: 0 };
+      map[k].qty += Number(i.qty || 1);
+      map[k].total += Number(i.price || 0) * Number(i.qty || 1);
+    }));
+    return Object.values(map).sort((a, b) => b.total - a.total);
+  })();
+  const salesTotal = salesOrders.reduce((s, o) => s + Number(o.total || 0), 0);
+  const salesItems = salesByProduct.reduce((s, p) => s + p.qty, 0);
+
+  // ── Pedidos ──
+  const markDelivered = async (o) => {
+    await sb.from('menu_orders').update({ status: 'entregue' }).eq('id', o.id);
+    fetchShop(true);
+  };
+  const cancelOrder = async (o) => {
+    if (!window.confirm(`Cancelar o pedido de ${o.client_name}? O estoque volta.`)) return;
+    const { error } = await sb.rpc('cancel_menu_order', { p_order: String(o.id) });
+    if (error) alert('Erro: ' + error.message);
+    fetchShop(true);
   };
 
-  // Resolve o pedido "__open__<appointmentId>" vindo do botão "Bar" da Agenda
-  useEffect(() => {
-    const resolveOpenRequest = async () => {
-      if (!focusComandaId || !focusComandaId.toString().startsWith('__open__')) return;
-      const appointmentId = focusComandaId.replace('__open__', '');
-      if (isGuestBarber) {
-        alert('A comanda com QR Code fica disponível após criar sua conta.');
-        setFocusComandaId(null);
-        return;
-      }
-      const existing = comandas.find(c => String(c.appointment_id) === String(appointmentId));
-      if (existing) { setFocusComandaId(existing.id); return; }
-      const app = activeAppointments.find(a => String(a.id) === String(appointmentId));
-      setGenerating(true);
-      try {
-        let numero = generateComandaNumber();
-        for (let i = 0; i < 5 && comandas.some(c => c.numero === numero); i++) numero = generateComandaNumber();
-        const { data, error } = await sb.from('comandas').insert({
-          barber_id: effectiveUser.id,
-          appointment_id: appointmentId,
-          client_name: app?.client_name || app?.client || 'Cliente',
-          numero,
-          status: 'aberta',
-        }).select().single();
-        if (error) throw error;
-        setComandas(prev => [{ ...data, comanda_items: [] }, ...prev]);
-        setFocusComandaId(data.id);
-      } catch (err) {
-        console.error(err);
-        alert('Não foi possível gerar a comanda. Verifique se a tabela "comandas" existe no Supabase.');
-        setFocusComandaId(null);
-      } finally { setGenerating(false); }
-    };
-    resolveOpenRequest();
-  }, [focusComandaId, comandas, activeAppointments, isGuestBarber, effectiveUser?.id, sb, setFocusComandaId]);
-
-  const focusedComanda = comandas.find(c => c.id === focusComandaId);
-  const comandaTotal = (c) => (c?.comanda_items || []).reduce((s, i) => s + Number(i.price || 0) * Number(i.qty || 1), 0);
-
-  const closeComanda = async (c) => {
-    if (!window.confirm(`Fechar comanda #${c.numero}? Total: R$ ${comandaTotal(c).toFixed(2)}`)) return;
-    try {
-      await sb.from('comandas').update({ status: 'fechada' }).eq('id', c.id);
-      setComandas(prev => prev.filter(x => x.id !== c.id));
-      if (focusComandaId === c.id) setFocusComandaId(null);
-      if (caixaComanda?.id === c.id) { setCaixaComanda(null); setCaixaInput(''); }
-    } catch (err) { console.error(err); alert('Erro ao fechar comanda.'); }
+  // ── Categorias ──
+  const addCategory = async () => {
+    if (isGuestBarber) { alert('Crie sua conta para usar o cardápio.'); return; }
+    if (!newCatName.trim()) return;
+    const { data, error } = await sb.from('product_categories').insert({ barber_id: barberId, name: newCatName.trim() }).select().single();
+    if (error) { alert('Erro: ' + error.message); return; }
+    setCategories(prev => [...prev, data]); setNewCatName('');
   };
-
-  // ── Caixa: busca comanda por número e adiciona itens ──
-  const searchComanda = async () => {
-    if (!caixaInput.trim()) return;
-    setCaixaLoading(true);
-    try {
-      const local = comandas.find(c => c.numero === caixaInput.trim());
-      if (local) { setCaixaComanda(local); return; }
-      const { data, error } = await sb.from('comandas').select('*, comanda_items(*)')
-        .eq('barber_id', effectiveUser.id).eq('numero', caixaInput.trim()).eq('status', 'aberta').maybeSingle();
-      if (error) throw error;
-      if (!data) { alert('Comanda não encontrada ou já fechada.'); setCaixaComanda(null); return; }
-      setCaixaComanda(data);
-    } catch (err) { console.error(err); alert('Erro ao buscar comanda.'); }
-    finally { setCaixaLoading(false); }
-  };
-
-  const addItemToComanda = async (comanda, product, setter) => {
-    setAddingItemId(product.id);
-    try {
-      const { data, error } = await sb.from('comanda_items').insert({
-        comanda_id: comanda.id, product_id: product.id, product_name: product.name, price: product.price, qty: 1,
-      }).select().single();
-      if (error) throw error;
-      const updated = { ...comanda, comanda_items: [...(comanda.comanda_items || []), data] };
-      setter(updated);
-      setComandas(prev => prev.map(c => c.id === comanda.id ? updated : c));
-    } catch (err) { console.error(err); alert('Erro ao lançar item. Verifique a tabela "comanda_items".'); }
-    finally { setAddingItemId(null); }
+  const deleteCategory = async (c) => {
+    if (!window.confirm(`Excluir a categoria "${c.name}"? Os produtos dela ficam sem categoria.`)) return;
+    await sb.from('products').update({ category_id: null }).eq('category_id', c.id);
+    await sb.from('product_categories').delete().eq('id', c.id);
+    setCategories(prev => prev.filter(x => x.id !== c.id));
+    setProducts(prev => prev.map(p => p.category_id === c.id ? { ...p, category_id: null } : p));
   };
 
   // ── Produtos ──
-  const openNewProduct = () => { setEditingProduct(null); setProdName(''); setProdPrice(''); setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true); };
-  const openEditProduct = (p) => { setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true); };
+  const openNewProduct = () => {
+    setEditingProduct(null); setProdName(''); setProdPrice(''); setProdCat(''); setProdStock('');
+    setProdPhotoFile(null); setProdPhotoPreview(''); setShowProductModal(true);
+  };
+  const openEditProduct = (p) => {
+    setEditingProduct(p); setProdName(p.name); setProdPrice(String(p.price)); setProdCat(p.category_id || '');
+    setProdStock(p.stock === null || p.stock === undefined ? '' : String(p.stock));
+    setProdPhotoFile(null); setProdPhotoPreview(p.photo_url || ''); setShowProductModal(true);
+  };
   const handleProductPhotoChange = (e) => {
     const file = e.target.files?.[0]; if (!file) return;
     setProdPhotoFile(file); setProdPhotoPreview(URL.createObjectURL(file));
@@ -3184,271 +3223,310 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb, activeAppointments, 
 
   const saveProduct = async () => {
     if (isGuestBarber) { alert('Cadastre produtos após criar sua conta.'); return; }
-    if (!prodName.trim() || !prodPrice) { alert('Preencha nome e valor do produto.'); return; }
+    const price = parseFloat(String(prodPrice).replace(',', '.'));
+    if (!prodName.trim() || isNaN(price)) { alert('Preencha nome e valor do produto.'); return; }
     setSavingProduct(true);
     try {
       let photo_url = editingProduct?.photo_url || '';
       if (prodPhotoFile) {
-        const ext = prodPhotoFile.name.split('.').pop();
-        const fileName = `product-${effectiveUser.id}-${Date.now()}.${ext}`;
-        const { error: upErr } = await sb.storage.from('barber-photos').upload(fileName, prodPhotoFile);
+        const buf = await prodPhotoFile.arrayBuffer();
+        const ext = (prodPhotoFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const fileName = `product-${barberId}-${Date.now()}.${ext}`;
+        const { error: upErr } = await sb.storage.from('barber-photos').upload(fileName, buf, { contentType: prodPhotoFile.type || 'image/jpeg' });
         if (upErr) throw upErr;
-        const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
-        photo_url = publicUrl;
+        photo_url = sb.storage.from('barber-photos').getPublicUrl(fileName).data.publicUrl;
       }
+      const stock = prodStock.trim() === '' ? null : Math.max(0, parseInt(prodStock, 10) || 0);
+      const payload = { name: prodName.trim(), price, photo_url, category_id: prodCat || null, stock };
       if (editingProduct) {
-        const { data, error } = await sb.from('products')
-          .update({ name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
-          .eq('id', editingProduct.id).select().single();
+        const { data, error } = await sb.from('products').update(payload).eq('id', editingProduct.id).select().single();
         if (error) throw error;
         setProducts(prev => prev.map(p => p.id === data.id ? data : p));
       } else {
-        const { data, error } = await sb.from('products')
-          .insert({ barber_id: effectiveUser.id, name: prodName.trim(), price: parseFloat(prodPrice), photo_url })
-          .select().single();
+        const { data, error } = await sb.from('products').insert({ ...payload, barber_id: barberId }).select().single();
         if (error) throw error;
         setProducts(prev => [data, ...prev]);
       }
       setShowProductModal(false);
-    } catch (err) { console.error(err); alert('Erro ao salvar produto. Verifique se a tabela "products" existe no Supabase.'); }
+    } catch (err) { console.error(err); alert('Erro ao salvar produto: ' + (err?.message || '')); }
     finally { setSavingProduct(false); }
   };
 
   const deleteProductItem = async (p) => {
-    if (!window.confirm(`Remover "${p.name}" da loja?`)) return;
-    try { await sb.from('products').delete().eq('id', p.id); setProducts(prev => prev.filter(x => x.id !== p.id)); }
-    catch (err) { console.error(err); alert('Erro ao remover produto.'); }
+    if (!window.confirm(`Remover "${p.name}" do cardápio?`)) return;
+    const { error } = await sb.from('products').delete().eq('id', p.id);
+    if (error) { alert('Erro ao remover: ' + error.message); return; }
+    setProducts(prev => prev.filter(x => x.id !== p.id));
   };
 
-  const comandaPublicUrl = (numero) => `${window.location.origin}/comanda/${numero}`;
-  const qrImgUrl = (numero) => `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(comandaPublicUrl(numero))}`;
+  const adjustStock = async (p, delta) => {
+    if (p.stock === null || p.stock === undefined) return;
+    const next = Math.max(0, p.stock + delta);
+    setProducts(prev => prev.map(x => x.id === p.id ? { ...x, stock: next } : x));
+    await sb.from('products').update({ stock: next }).eq('id', p.id);
+  };
+
+  // ── Cardápio: cor e link ──
+  const changeColor = async (key) => {
+    setColor(key);
+    if (isGuestBarber) return;
+    const { error } = await sb.from('profiles').update({ menu_color: key }).eq('id', barberId);
+    if (error) alert('Erro ao salvar a cor: ' + error.message);
+  };
+  const copyLink = () => {
+    navigator.clipboard.writeText(menuUrl).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  };
+
+  const catName = (id) => categories.find(c => c.id === id)?.name;
+  const timeOf = (iso) => new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+  const TABS = [
+    { id: 'orders', label: 'Pedidos' },
+    { id: 'products', label: 'Produtos' },
+    { id: 'sales', label: 'Vendas' },
+    { id: 'menu', label: 'Cardápio' },
+  ];
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
-            <Tag size={20} className="text-amber-500"/> Loja
-          </h2>
-          <p className="text-xs text-slate-400">Comandas com QR Code, caixa e produtos do estabelecimento</p>
-        </div>
-        <button onClick={handleCreateManualComanda} disabled={generating}
-          className="flex items-center gap-1.5 px-3 py-2 bg-amber-500 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all shadow-sm disabled:opacity-50 flex-shrink-0">
-          <PlusCircle size={14}/> Nova Comanda
-        </button>
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
+          <Tag size={20} className="text-amber-500"/> Loja
+        </h2>
+        <p className="text-xs text-slate-400">Cardápio digital com QR Code, estoque e vendas</p>
       </div>
 
       {isGuestBarber && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
-          ⚠️ Crie sua conta para gerar comandas reais e cadastrar produtos.
+          ⚠️ Crie sua conta para ter seu cardápio e receber pedidos.
         </div>
       )}
 
-      {/* ── Comanda em destaque (gerada pela Agenda ou Avulsa) ── */}
-      {(generating || focusedComanda) && (
-        <section className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-5 text-center">
-          {generating ? (
-            <div className="py-6 flex flex-col items-center gap-2">
-              <Loader2 className="animate-spin text-amber-500" size={24}/>
-              <p className="text-xs text-slate-400 font-bold">Gerando comanda...</p>
+      <div className="grid grid-cols-4 gap-1.5 bg-slate-100 p-1 rounded-2xl">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`relative py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all ${tab === t.id ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}>
+            {t.label}
+            {t.id === 'orders' && orders.length > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center animate-pulse">{orders.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ PEDIDOS ══ */}
+      {tab === 'orders' && (
+        <section className="space-y-3">
+          {flash && (
+            <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs text-green-700 font-black text-center animate-pulse">
+              🔔 Novo pedido recebido!
             </div>
-          ) : (
-            <>
-              <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">Comanda Ativa</p>
-              <p className="text-2xl font-black text-slate-900 mb-1">#{focusedComanda.numero}</p>
-              <p className="text-xs text-slate-500 font-bold mb-3">{focusedComanda.client_name}</p>
-              <img src={qrImgUrl(focusedComanda.numero)} alt={`QR Code comanda ${focusedComanda.numero}`}
-                className="w-36 h-36 mx-auto rounded-2xl border border-slate-100 mb-3"/>
-              <p className="text-[10px] text-slate-400 mb-3">O cliente escaneia o QR ou acessa com o número da comanda para ver o cardápio e pedir.</p>
-              <div className="flex items-center justify-between bg-slate-50 rounded-xl px-3 py-2 mb-3">
-                <span className="text-[11px] font-bold text-slate-500">Consumo até agora</span>
-                <span className="text-sm font-black text-slate-900">R$ {comandaTotal(focusedComanda).toFixed(2)}</span>
+          )}
+          {loading ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+          : orders.length === 0 ? (
+            <div className="py-10 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+              <p className="text-slate-400 text-sm">Nenhum pedido novo.</p>
+              <p className="text-[10px] text-slate-300 mt-1">Os pedidos aparecem aqui na hora.</p>
+            </div>
+          ) : orders.map(o => (
+            <div key={o.id} className="bg-white rounded-2xl border border-slate-100 border-l-4 border-l-amber-500 shadow-sm p-4">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <p className="font-black text-slate-900">{o.client_name}</p>
+                  <p className="text-[10px] text-slate-400 font-bold flex items-center gap-1"><Clock size={10}/> {timeOf(o.created_at)}</p>
+                </div>
+                <p className="font-black text-green-600">R$ {Number(o.total).toFixed(2)}</p>
+              </div>
+              <div className="space-y-0.5 mb-3">
+                {(o.menu_order_items || []).map(i => (
+                  <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
+                    <span>{i.qty}x {i.product_name}</span>
+                    <span className="font-bold">R$ {(Number(i.price) * Number(i.qty)).toFixed(2)}</span>
+                  </div>
+                ))}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => { setCaixaInput(focusedComanda.numero); setCaixaComanda(focusedComanda); }}
-                  className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
-                  Lançar consumo
+                <button onClick={() => markDelivered(o)} className="flex-1 bg-green-600 text-white py-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all">
+                  <CheckCircle size={14}/> Entregue
                 </button>
-                <button onClick={() => closeComanda(focusedComanda)}
-                  className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
-                  Fechar comanda
+                <button onClick={() => cancelOrder(o)} className="p-2.5 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
+                  <XCircle size={18}/>
                 </button>
               </div>
-              <button onClick={() => setFocusComandaId(null)} className="text-[10px] text-slate-400 font-bold mt-3 underline">
-                Ocultar
-              </button>
-            </>
-          )}
+            </div>
+          ))}
         </section>
       )}
 
-      {/* ── Caixa: buscar comanda por número ── */}
-      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
-        <h3 className="font-black text-slate-900 text-sm mb-3 flex items-center gap-2">
-          <QrCode size={16} className="text-blue-500"/> Caixa — Lançar Consumo
-        </h3>
-        <div className="flex gap-2 mb-3">
-          <input value={caixaInput} onChange={(e) => setCaixaInput(e.target.value.replace(/\D/g,'').slice(0,4))}
-            placeholder="Nº da comanda" inputMode="numeric"
-            className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"/>
-          <button onClick={searchComanda} disabled={caixaLoading || !caixaInput.trim()}
-            className="px-4 bg-blue-600 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50 active:scale-95 transition-all">
-            {caixaLoading ? '...' : 'Buscar'}
-          </button>
-        </div>
-        <p className="text-[10px] text-slate-400 mb-2">Digite o número informado pelo cliente ou escaneado do QR Code.</p>
-
-        {caixaComanda && (
-          <div className="mt-2 border-t border-slate-100 pt-3">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="font-black text-slate-900 text-sm">Comanda #{caixaComanda.numero}</p>
-                <p className="text-[10px] text-slate-400">{caixaComanda.client_name}</p>
-              </div>
-              <p className="text-sm font-black text-blue-600">R$ {comandaTotal(caixaComanda).toFixed(2)}</p>
+      {/* ══ PRODUTOS ══ */}
+      {tab === 'products' && (
+        <div className="space-y-5">
+          <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+            <h3 className="font-black text-slate-900 text-sm mb-3">Categorias</h3>
+            <div className="flex gap-2 mb-3">
+              <input value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="Ex: Bebidas, Petiscos..."
+                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400"/>
+              <button onClick={addCategory} disabled={!newCatName.trim()}
+                className="px-4 bg-slate-900 text-white rounded-xl text-xs font-black uppercase disabled:opacity-40 active:scale-95 transition-all">Adicionar</button>
             </div>
-            {(caixaComanda.comanda_items || []).length > 0 && (
-              <div className="space-y-1 mb-3">
-                {caixaComanda.comanda_items.map(i => (
-                  <div key={i.id} className="flex justify-between text-[11px] text-slate-600">
-                    <span>{i.qty}x {i.product_name}</span>
-                    <span className="font-bold">R$ {(Number(i.price) * Number(i.qty || 1)).toFixed(2)}</span>
+            {categories.length === 0 ? <p className="text-[11px] text-slate-400">Nenhuma categoria ainda.</p> : (
+              <div className="flex flex-wrap gap-2">
+                {categories.map(c => (
+                  <span key={c.id} className="flex items-center gap-1.5 bg-slate-100 text-slate-700 text-[11px] font-bold pl-3 pr-1.5 py-1.5 rounded-full">
+                    {c.name}
+                    <button onClick={() => deleteCategory(c)} className="w-5 h-5 rounded-full bg-white text-slate-400 hover:text-red-500 flex items-center justify-center"><X size={11}/></button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-black text-slate-900 text-sm">Produtos ({products.length})</h3>
+              <button onClick={openNewProduct} className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
+                <PlusCircle size={12}/> Novo
+              </button>
+            </div>
+            {loading ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+            : products.length === 0 ? (
+              <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl"><p className="text-slate-400 text-sm">Nenhum produto cadastrado ainda.</p></div>
+            ) : (
+              <div className="space-y-2">
+                {products.map(p => {
+                  const tracked = p.stock !== null && p.stock !== undefined;
+                  return (
+                    <div key={p.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0">
+                          {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                            : <div className="w-full h-full flex items-center justify-center text-slate-400"><Tag size={16}/></div>}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
+                          <p className="text-[11px] text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}
+                            {catName(p.category_id) && <span className="text-slate-400 font-bold"> · {catName(p.category_id)}</span>}
+                          </p>
+                        </div>
+                        <button onClick={() => openEditProduct(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500"><Edit3 size={14}/></button>
+                        <button onClick={() => deleteProductItem(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-red-500"><Trash2 size={14}/></button>
+                      </div>
+                      <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+                        <span className="text-[10px] font-black uppercase text-slate-400">Estoque</span>
+                        {tracked ? (
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => adjustStock(p, -1)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 font-black text-slate-600 active:scale-90">−</button>
+                            <span className={`min-w-[28px] text-center text-sm font-black ${p.stock === 0 ? 'text-red-500' : 'text-slate-900'}`}>{p.stock}</span>
+                            <button onClick={() => adjustStock(p, 1)} className="w-7 h-7 rounded-lg bg-white border border-slate-200 font-black text-slate-600 active:scale-90">+</button>
+                          </div>
+                        ) : <span className="text-[10px] text-slate-400 font-bold">Sem controle</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
+
+      {/* ══ VENDAS ══ */}
+      {tab === 'sales' && (
+        <section className="space-y-4">
+          <div className="grid grid-cols-3 gap-2">
+            {[{ id: 'today', l: 'Hoje' }, { id: '7', l: '7 dias' }, { id: '30', l: '1 mês' }].map(p => (
+              <button key={p.id} onClick={() => setPeriod(p.id)}
+                className={`py-2.5 rounded-xl text-[11px] font-black uppercase transition-all ${period === p.id ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>{p.l}</button>
+            ))}
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="bg-slate-900 text-white rounded-2xl p-3"><p className="text-[9px] text-slate-400 font-bold uppercase">Vendido</p><p className="text-base font-black">R$ {salesTotal.toFixed(2)}</p></div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-3"><p className="text-[9px] text-slate-400 font-bold uppercase">Pedidos</p><p className="text-base font-black text-slate-900">{salesOrders.length}</p></div>
+            <div className="bg-white border border-slate-200 rounded-2xl p-3"><p className="text-[9px] text-slate-400 font-bold uppercase">Itens</p><p className="text-base font-black text-slate-900">{salesItems}</p></div>
+          </div>
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+            <h3 className="font-black text-slate-900 text-sm mb-3">Produtos vendidos</h3>
+            {loadingSales ? <div className="py-6 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
+            : salesByProduct.length === 0 ? <p className="text-center text-slate-400 text-sm py-6">Nenhuma venda nesse período.</p>
+            : (
+              <div className="space-y-2">
+                {salesByProduct.map(p => (
+                  <div key={p.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                    <div className="min-w-0"><p className="font-bold text-sm text-slate-900 truncate">{p.name}</p><p className="text-[10px] text-slate-400">{p.qty} vendido(s)</p></div>
+                    <p className="font-black text-green-600 text-sm">R$ {p.total.toFixed(2)}</p>
                   </div>
                 ))}
               </div>
             )}
-            <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Adicionar produto</p>
-            <div className="grid grid-cols-2 gap-2 mb-3">
-              {products.map(p => (
-                <button key={p.id} onClick={() => addItemToComanda(caixaComanda, p, setCaixaComanda)} disabled={addingItemId === p.id}
-                  className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl p-2 text-left active:scale-95 transition-all disabled:opacity-50">
-                  <div className="w-8 h-8 rounded-lg bg-slate-200 overflow-hidden flex-shrink-0">
-                    {p.photo_url && <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>}
+            <p className="text-[9px] text-slate-400 mt-3">Pedidos cancelados não entram na conta.</p>
+          </div>
+        </section>
+      )}
+
+      {/* ══ CARDÁPIO (link, QR, cor) ══ */}
+      {tab === 'menu' && (
+        <section className="space-y-5">
+          <div className="bg-white rounded-3xl border-2 border-amber-300 shadow-sm p-5 text-center">
+            <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">Seu cardápio</p>
+            {menuUrl ? (
+              <>
+                <img src={qrUrl} alt="QR Code do cardápio" className="w-48 h-48 mx-auto rounded-2xl border border-slate-100 mb-3"/>
+                <p className="text-[10px] text-slate-400 mb-3">Este QR Code e este link são fixos: nunca mudam. Pode imprimir e colar no balcão.</p>
+                <div className="bg-slate-50 rounded-xl px-3 py-2 mb-3"><p className="text-[11px] font-bold text-slate-600 break-all">{menuUrl}</p></div>
+                <div className="flex gap-2">
+                  <button onClick={copyLink} className={`flex-1 py-2.5 rounded-xl text-xs font-black uppercase flex items-center justify-center gap-1.5 active:scale-95 transition-all ${copied ? 'bg-green-500 text-white' : 'bg-slate-900 text-white'}`}>
+                    {copied ? <CheckCircle size={14}/> : <Copy size={14}/>} {copied ? 'Copiado' : 'Copiar link'}
+                  </button>
+                  <a href={menuUrl} target="_blank" rel="noopener noreferrer" className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-xl text-xs font-black uppercase text-center active:scale-95 transition-all">Abrir</a>
+                </div>
+                <a href={qrUrl} target="_blank" rel="noopener noreferrer" className="block text-[10px] text-blue-600 font-bold mt-3 underline">Abrir QR Code em tela cheia (para imprimir)</a>
+              </>
+            ) : <p className="text-sm text-slate-400 py-6">Seu perfil ainda não tem um endereço (slug). Saia e entre de novo; se continuar, me avise.</p>}
+          </div>
+
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+            <h3 className="font-black text-slate-900 text-sm mb-3">Cor do cardápio</h3>
+            <div className="grid grid-cols-5 gap-2">
+              {Object.entries(MENU_THEMES).map(([key, t]) => (
+                <button key={key} onClick={() => changeColor(key)} className="flex flex-col items-center gap-1.5 active:scale-95 transition-all">
+                  <div className={`w-11 h-11 rounded-full ${t.solid} flex items-center justify-center ${color === key ? 'ring-4 ring-offset-2 ring-slate-300' : ''}`}>
+                    {color === key && <CheckCircle size={18} className="text-white"/>}
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] font-bold text-slate-700 truncate">{p.name}</p>
-                    <p className="text-[9px] text-blue-600 font-black">R$ {Number(p.price).toFixed(2)}</p>
-                  </div>
+                  <span className="text-[9px] font-black text-slate-500 uppercase">{t.label}</span>
                 </button>
               ))}
             </div>
-            <button onClick={() => closeComanda(caixaComanda)}
-              className="w-full py-2.5 bg-green-600 text-white rounded-xl text-xs font-black uppercase active:scale-95 transition-all">
-              Fechar comanda e somar ao atendimento
-            </button>
           </div>
-        )}
-      </section>
-
-      {/* ── Gestão de Produtos ── */}
-      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-            <Camera size={16} className="text-purple-500"/> Produtos da Loja
-          </h3>
-          <button onClick={openNewProduct}
-            className="flex items-center gap-1 text-[10px] font-black text-white bg-slate-900 px-3 py-2 rounded-xl active:scale-95 transition-all">
-            <PlusCircle size={12}/> Novo
-          </button>
-        </div>
-        {loadingShop
-          ? <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
-          : products.length === 0
-          ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-              <p className="text-slate-400 text-sm">Nenhum produto cadastrado ainda.</p>
-            </div>
-          : <div className="space-y-2">
-              {products.map(p => (
-                <div key={p.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="w-12 h-12 rounded-xl bg-slate-200 overflow-hidden flex-shrink-0">
-                    {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
-                      : <div className="w-full h-full flex items-center justify-center text-slate-400"><Tag size={16}/></div>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-black text-slate-900 text-sm truncate">{p.name}</p>
-                    <p className="text-[11px] text-blue-600 font-bold">R$ {Number(p.price).toFixed(2)}</p>
-                  </div>
-                  <button onClick={() => openEditProduct(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500">
-                    <Edit3 size={14}/>
-                  </button>
-                  <button onClick={() => deleteProductItem(p)} className="p-2 bg-white border border-slate-200 rounded-lg text-red-500">
-                    <Trash2 size={14}/>
-                  </button>
-                </div>
-              ))}
-            </div>}
-      </section>
-
-      {/* ── Comandas Abertas no Salão ── */}
-      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-black text-slate-900 text-sm flex items-center gap-2">
-            <Tag size={16} className="text-amber-500"/> Comandas Abertas ({comandas.length})
-          </h3>
-        </div>
-        {loadingShop ? (
-          <div className="py-8 flex justify-center"><Loader2 className="animate-spin text-slate-300" size={22}/></div>
-        ) : comandas.length === 0 ? (
-          <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-            <p className="text-slate-400 text-sm">Nenhuma comanda aberta no momento.</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {comandas.map(c => {
-              const total = comandaTotal(c);
-              return (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="font-black text-slate-900 text-sm">#{c.numero}</span>
-                      <span className="text-xs font-bold text-slate-600 truncate">{c.client_name}</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 mt-0.5">
-                      {(c.comanda_items || []).length} iten(s) • <span className="font-black text-blue-600">R$ {total.toFixed(2)}</span>
-                    </p>
-                  </div>
-                  <div className="flex gap-1.5 flex-shrink-0">
-                    <button onClick={() => { setFocusComandaId(c.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                      className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
-                      Ver / Caixa
-                    </button>
-                    <button onClick={() => closeComanda(c)}
-                      className="px-3 py-1.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
-                      Fechar
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+        </section>
+      )}
 
       {/* ── Modal Produto ── */}
       {showProductModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setShowProductModal(false)}/>
-          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <h3 className="font-black text-slate-900 text-lg mb-4">{editingProduct ? 'Editar Produto' : 'Novo Produto'}</h3>
             <label className="block mb-4">
               <div className="w-24 h-24 mx-auto rounded-2xl bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center overflow-hidden cursor-pointer">
-                {prodPhotoPreview
-                  ? <img src={prodPhotoPreview} className="w-full h-full object-cover" alt="Prévia"/>
-                  : <Camera size={22} className="text-slate-400"/>}
+                {prodPhotoPreview ? <img src={prodPhotoPreview} className="w-full h-full object-cover" alt="Prévia"/> : <Camera size={22} className="text-slate-400"/>}
               </div>
               <input type="file" accept="image/*" className="hidden" onChange={handleProductPhotoChange}/>
-              <p className="text-center text-[10px] text-slate-400 font-bold mt-2">Toque para escolher foto</p>
+              <p className="text-center text-[10px] text-slate-400 font-bold mt-2">Toque para escolher a foto</p>
             </label>
-            <input value={prodName} onChange={(e) => setProdName(e.target.value)} placeholder="Nome do produto"
+            <input value={prodName} onChange={e => setProdName(e.target.value)} placeholder="Nome do produto"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
-            <input value={prodPrice} onChange={(e) => setProdPrice(e.target.value.replace(/[^0-9.,]/g,''))} placeholder="Valor (R$)" inputMode="decimal"
+            <input value={prodPrice} onChange={e => setProdPrice(e.target.value.replace(/[^0-9.,]/g, ''))} placeholder="Valor (R$)" inputMode="decimal"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3"/>
+            <select value={prodCat} onChange={e => setProdCat(e.target.value)}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-3">
+              <option value="">Sem categoria</option>
+              {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+            <input value={prodStock} onChange={e => setProdStock(e.target.value.replace(/\D/g, ''))} placeholder="Estoque (vazio = sem controle)" inputMode="numeric"
               className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-blue-400 mb-5"/>
             <div className="flex gap-2">
-              <button onClick={() => setShowProductModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">
-                Cancelar
-              </button>
-              <button onClick={saveProduct} disabled={savingProduct}
-                className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50">
+              <button onClick={() => setShowProductModal(false)} className="flex-1 py-2.5 bg-slate-100 text-slate-500 rounded-xl text-xs font-black uppercase">Cancelar</button>
+              <button onClick={saveProduct} disabled={savingProduct} className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase disabled:opacity-50">
                 {savingProduct ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
@@ -5071,6 +5149,7 @@ export default function App() {
   const [isGuestBarber, setIsGuestBarber] = useState(false);
   const [publicBarber, setPublicBarber] = useState(null);
   const [publicComandaNumero, setPublicComandaNumero] = useState(null);
+  const [publicMenuSlug, setPublicMenuSlug] = useState(null); // ← NOVO
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('salao_dark_mode');
     if (saved !== null) return saved === 'true';
@@ -5106,6 +5185,12 @@ export default function App() {
  
       // Rota admin
       if (path === '/estrela2016-v2') { setLoading(false); return; }
+
+      // Rota do cardápio público ← NOVO
+      if (path.startsWith('/cardapio/')) {
+        const s = path.split('/cardapio/')[1]?.replace(/\/$/, '');
+        if (s) { setPublicMenuSlug(s); setLoading(false); return; }
+      }
 
       // Rota da vitrine da comanda (acesso via QR Code ou número)
       if (path.startsWith('/comanda/')) {
@@ -5291,6 +5376,7 @@ export default function App() {
   }
  
   if (isAdminRoute) return <AdminDashboard/>;
+  if (publicMenuSlug) return <PublicMenuPage slug={publicMenuSlug}/>; // ← NOVO
   if (publicComandaNumero) return <ComandaStorefrontPage numero={publicComandaNumero}/>;
   if (publicBarber) return <PublicBarberPage barber={publicBarber}/>;
  
