@@ -472,17 +472,7 @@ const AdminDashboard = () => {
 
   const handleLogout=()=>{ localStorage.removeItem('sd_admin_session'); setIsLoggedIn(false); };
 
-  const handleSendReply=async(msgId)=>{
-    const reply=replyTexts[msgId]||'';
-    if (!reply.trim()) return;
-    setSendingReply(p=>({...p,[msgId]:true}));
-    try {
-      await supabase.from('support_messages').update({reply:reply.trim(),replied_at:new Date().toISOString()}).eq('id',msgId);
-      setSupportMessages(prev=>prev.map(m=>m.id===msgId?{...m,reply:reply.trim(),replied_at:new Date().toISOString()}:m));
-      setReplyTexts(p=>({...p,[msgId]:''}));
-    } catch(e) { alert('Erro: '+e.message); }
-    setSendingReply(p=>({...p,[msgId]:false}));
-  };
+  
 
   const handleSaveTags=async(profileId,tags)=>{
     setSavingTags(p=>({...p,[profileId]:true}));
@@ -881,94 +871,7 @@ const AdminDashboard = () => {
         )}
 
         {/* ── SUPPORT ── */}
-        {activeSection==='support'&&(
-          <div className="space-y-5">
-            <h2 className="text-lg font-black text-white flex items-center gap-2"><MessageSquare size={20} className="text-blue-400"/> Central de Suporte</h2>
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
-              <p className="text-[10px] text-slate-400 font-bold">As mensagens abaixo foram enviadas pelos profissionais via chat IA. Use o WhatsApp para responder diretamente.</p>
-            </div>
-            {supportMessages.length===0
-              ? <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center"><p className="text-slate-400">Nenhuma mensagem de suporte ainda.</p></div>
-              : (
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-                    <div className="p-4 border-b border-slate-800 flex items-center justify-between">
-                      <h3 className="font-black text-white text-sm">Mensagens ({supportMessages.length})</h3>
-                      {unreadSupport>0&&<span className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">{unreadSupport} novas</span>}
-                    </div>
-                    <div className="overflow-y-auto max-h-[500px]">
-                      {supportMessages.map(msg=>(
-                        <button key={msg.id} onClick={()=>setSelectedMsg(msg)}
-                          className={`w-full text-left p-4 border-b border-slate-800 hover:bg-slate-800 transition-colors ${selectedMsg?.id===msg.id?'bg-slate-800':''}`}>
-                          <div className="flex items-start gap-2">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                <p className="font-bold text-white text-sm truncate">{msg.barber_name||'Profissional'}</p>
-                                {!msg.reply&&<span className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0"/>}
-                              </div>
-                              <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{msg.message}</p>
-                              <p className="text-[9px] text-slate-600 mt-1">{new Date(msg.created_at).toLocaleString('pt-BR')}</p>
-                            </div>
-                            {msg.reply&&<CheckSquare size={14} className="text-green-400 flex-shrink-0 mt-1"/>}
-                          </div>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
-                    {selectedMsg?(
-                      <>
-                        <div className="p-4 border-b border-slate-800">
-                          <p className="font-black text-white text-sm">{selectedMsg.barber_name}</p>
-                          <p className="text-[10px] text-slate-400">{new Date(selectedMsg.created_at).toLocaleString('pt-BR')}</p>
-                        </div>
-                        <div className="flex-1 p-4 space-y-3 overflow-y-auto">
-                          <div className="bg-slate-800 rounded-xl p-3">
-                            <p className="text-[10px] text-slate-400 font-bold mb-1">MENSAGEM DO PROFISSIONAL</p>
-                            <p className="text-sm text-white">{selectedMsg.message}</p>
-                          </div>
-                          {selectedMsg.reply&&(
-                            <div className="bg-blue-900/30 border border-blue-800 rounded-xl p-3">
-                              <p className="text-[10px] text-blue-400 font-bold mb-1">SUA NOTA INTERNA</p>
-                              <p className="text-sm text-white">{selectedMsg.reply}</p>
-                              <p className="text-[9px] text-slate-500 mt-1">{selectedMsg.replied_at&&new Date(selectedMsg.replied_at).toLocaleString('pt-BR')}</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="p-4 border-t border-slate-800 space-y-2">
-                          <textarea
-                            value={replyTexts[selectedMsg.id]||''}
-                            onChange={e=>setReplyTexts(p=>({...p,[selectedMsg.id]:e.target.value}))}
-                            placeholder="Anotação interna ou resposta..."
-                            rows={3}
-                            className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-colors resize-none placeholder-slate-500"/>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={()=>handleSendReply(selectedMsg.id)}
-                              disabled={!replyTexts[selectedMsg.id]?.trim()||sendingReply[selectedMsg.id]}
-                              className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all">
-                              {sendingReply[selectedMsg.id]?<Loader2 size={14} className="animate-spin"/>:<><Reply size={14}/> Salvar Nota</>}
-                            </button>
-                            {selectedMsg.barber_phone&&(
-                              <a href={`https://wa.me/55${String(selectedMsg.barber_phone).replace(/\D/g,'')}?text=${encodeURIComponent(`Olá ${selectedMsg.barber_name}! Equipe Salão Digital aqui. `)}`}
-                                target="_blank" rel="noopener noreferrer"
-                                className="p-2.5 bg-green-700 text-white rounded-xl flex items-center justify-center hover:bg-green-600 transition-colors">
-                                <Phone size={16}/>
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ):(
-                      <div className="flex-1 flex items-center justify-center p-8 text-center">
-                        <div><MessageSquare size={32} className="text-slate-600 mx-auto mb-3"/><p className="text-slate-400 text-sm">Selecione uma mensagem para ver detalhes</p></div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-          </div>
-        )}
+         {activeSection==='support' && <AdminSupport />}
 
         {/* ── PROFESSIONALS ── */}
         {activeSection==='professionals'&&(
@@ -3360,9 +3263,6 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
 const pressTimer = useRef(null);
 const longPressFired = useRef(false);
 
-  // Estados do suporte direto para o Painel Admin
-  const [supportMessage, setSupportMessage] = useState('');
-  const [sendingSupport, setSendingSupport] = useState(false);
 
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
@@ -3381,37 +3281,7 @@ const longPressFired = useRef(false);
   const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
   const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
 
-  // ✉️ LÓGICA DE ENVIO DIRETO AO ADMIN (Declarada no topo para evitar ReferenceError)
-  const handleSendSupport = async (e) => {
-    e.preventDefault();
-    if (!supportMessage.trim() || isGuestBarber) return;
-
-    setSendingSupport(true);
-    try {
-      const { error } = await sb
-        .from('support_messages')
-        .insert([
-          {
-            barber_id: effectiveUser.id,
-            barber_name: effectiveUser.name || 'Nome não informado',
-            message: supportMessage.trim(),
-            created_at: new Date().toISOString(),
-            status: 'pending'
-          }
-        ]);
-
-      if (error) throw error;
-
-      alert('Mensagem enviada com sucesso ao administrador!');
-      setSupportMessage('');
-    } catch (err) {
-      console.error(err);
-      alert('Erro ao enviar mensagem.');
-    } finally {
-      setSendingSupport(false);
-    }
-  };
-
+  
   const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
 
@@ -4871,7 +4741,7 @@ const handleUploadWorkPhoto = async (event) => {
             )}
           </div>
         )}
-      {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
+     {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
       {activeTab === 'reports' && (
         <div className="space-y-4">
           <div className="mb-2">
@@ -4885,7 +4755,7 @@ const handleUploadWorkPhoto = async (event) => {
               ⚠️ Modo demo — os dados são simulados.
             </div>
           )}
- 
+
           <ReportsSection
             appointments={appointments}
             user={effectiveUser}
@@ -4893,47 +4763,16 @@ const handleUploadWorkPhoto = async (event) => {
             onUpdateProfile={effectiveOnUpdateProfile}
             supabase={sb}
           />
- 
+
           {/* ── Meta dos 30 ── */}
           <GoalCard
             totalAppointments={totalAppointmentsForGoal}
             slug={effectiveUser.slug}
             isGuest={isGuestBarber}
           />
- 
-         {/* ── Suporte Direto ao Administrador ── */}
-          <section className="pb-6">
-            <div className="flex items-center gap-2 mb-3">
-              <MessageSquare size={16} className="text-purple-500"/>
-              <h3 className="font-bold text-sm text-slate-900">Suporte — Falar com Administrador</h3>
-            </div>
-            {isGuestBarber ? (
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
-                <p className="text-xs text-amber-700 font-bold">Faça login para usar o suporte.</p>
-              </div>
-            ) : (
-              <form onSubmit={handleSendSupport} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
-                <p className="text-[11px] text-slate-400 font-medium">
-                  Precisa de ajuda com o aplicativo ou quer relatar um problema? Escreva abaixo para o nosso time de suporte.
-                </p>
-                <textarea
-                  value={supportMessage}
-                  onChange={(e) => setSupportMessage(e.target.value)}
-                  placeholder="Digite sua dúvida ou mensagem aqui..."
-                  rows={3}
-                  maxLength={500}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs outline-none focus:border-purple-400 transition-colors resize-none font-medium text-slate-700"
-                />
-                <button
-                  type="submit"
-                  disabled={sendingSupport || !supportMessage.trim()}
-                  className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-purple-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all flex items-center justify-center gap-1.5"
-                >
-                  {sendingSupport ? 'Enviando...' : '✉ Enviar Mensagem'}
-                </button>
-              </form>
-            )}
-          </section>
+
+          {/* ── Suporte Direto ao Administrador ── */}
+          <SupportChat user={effectiveUser} isGuest={isGuestBarber} />
         </div>
       )}
 
