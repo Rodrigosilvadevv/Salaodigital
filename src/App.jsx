@@ -126,6 +126,227 @@ const injectDarkModeCSS = (isDark) => {
   `;
 };
 
+
+
+// ─── CHAT DO PROFISSIONAL ───
+const SupportChat = ({ user, isGuest }) => {
+  const [msgs, setMsgs] = useState([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  const load = async () => {
+    if (!user?.id) return;
+    const { data, error } = await sb.from('support_messages').select('*').eq('barber_id', user.id).order('created_at', { ascending: true });
+    if (error) console.error('Erro ao carregar suporte:', error);
+    else setMsgs(data || []);
+  };
+
+  useEffect(() => {
+    if (isGuest || !user?.id) return;
+    load();
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
+  }, [user?.id, isGuest]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    setSending(true);
+    const { error } = await sb.from('support_messages').insert([{
+      barber_id: user.id,
+      barber_name: user.name || 'Profissional',
+      barber_phone: user.phone || null,
+      message: text.trim()
+    }]);
+    setSending(false);
+    if (error) { alert('Erro ao enviar: ' + error.message); return; }
+    setText('');
+    load();
+  };
+
+  return (
+    <section className="pb-6">
+      <div className="flex items-center gap-2 mb-3">
+        <MessageSquare size={16} className="text-purple-500"/>
+        <h3 className="font-bold text-sm text-slate-900">Suporte — Falar com Administrador</h3>
+      </div>
+      {isGuest ? (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl text-center">
+          <p className="text-xs text-amber-700 font-bold">Faça login para usar o suporte.</p>
+        </div>
+      ) : (
+        <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm space-y-3">
+          {msgs.length > 0 && (
+            <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+              {msgs.map(m => (
+                <div key={m.id} className="space-y-1.5">
+                  <div className="flex justify-end">
+                    <div className="max-w-[85%] bg-purple-600 text-white rounded-2xl rounded-br-sm px-3 py-2">
+                      <p className="text-xs whitespace-pre-wrap">{m.message}</p>
+                      <p className="text-[9px] text-purple-200 mt-1 text-right">{new Date(m.created_at).toLocaleString('pt-BR')}</p>
+                    </div>
+                  </div>
+                  {m.reply && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[85%] bg-slate-100 text-slate-800 rounded-2xl rounded-bl-sm px-3 py-2">
+                        <p className="text-[9px] font-black text-purple-600 mb-0.5">SUPORTE</p>
+                        <p className="text-xs whitespace-pre-wrap">{m.reply}</p>
+                        {m.replied_at && <p className="text-[9px] text-slate-400 mt-1">{new Date(m.replied_at).toLocaleString('pt-BR')}</p>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          <form onSubmit={handleSend} className="space-y-3">
+            <p className="text-[11px] text-slate-400 font-medium">
+              Precisa de ajuda com o aplicativo ou quer relatar um problema? Escreva abaixo para o nosso time de suporte.
+            </p>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="Digite sua dúvida ou mensagem aqui..."
+              rows={3}
+              maxLength={500}
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs outline-none focus:border-purple-400 transition-colors resize-none font-medium text-slate-700"
+            />
+            <button type="submit" disabled={sending || !text.trim()}
+              className="w-full py-2.5 bg-purple-600 text-white rounded-xl text-xs font-black uppercase tracking-wider hover:bg-purple-700 active:scale-95 disabled:opacity-50 disabled:active:scale-100 transition-all flex items-center justify-center gap-1.5">
+              {sending ? 'Enviando...' : '✉ Enviar Mensagem'}
+            </button>
+          </form>
+        </div>
+      )}
+    </section>
+  );
+};
+
+// ─── SUPORTE NO PAINEL ADM ───
+const AdminSupport = () => {
+  const [messages, setMessages] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const [saving, setSaving] = useState(false);
+  const selected = messages.find(m => m.id === selectedId) || null;
+
+  const load = async () => {
+    const { data, error } = await sb.from('support_messages').select('*').order('created_at', { ascending: false });
+    if (error) { console.error('Erro ao carregar suporte:', error); return; }
+    setMessages(data || []);
+  };
+
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t); }, []);
+  useEffect(() => { setReplyText(selected?.reply || ''); }, [selectedId]);
+
+  const handleSaveReply = async () => {
+    if (!selected || !replyText.trim()) return;
+    setSaving(true);
+    const { error } = await sb.from('support_messages').update({ reply: replyText.trim(), replied_at: new Date().toISOString() }).eq('id', selected.id);
+    setSaving(false);
+    if (error) { alert('Erro ao salvar: ' + error.message); return; }
+    load();
+  };
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    if (!window.confirm('Excluir esta mensagem? Ela também some para o profissional.')) return;
+    const { error } = await sb.from('support_messages').delete().eq('id', selected.id);
+    if (error) { alert('Erro ao excluir: ' + error.message); return; }
+    setSelectedId(null);
+    load();
+  };
+
+  const unread = messages.filter(m => !m.reply).length;
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-black text-white flex items-center gap-2"><MessageSquare size={20} className="text-blue-400"/> Central de Suporte</h2>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+        <p className="text-[10px] text-slate-400 font-bold">As mensagens ficam salvas até você excluir. A resposta que você escrever aparece para o profissional no chat dele. Use o WhatsApp para falar direto.</p>
+      </div>
+      {messages.length === 0
+        ? <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center"><p className="text-slate-400">Nenhuma mensagem de suporte ainda.</p></div>
+        : (
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 className="font-black text-white text-sm">Mensagens ({messages.length})</h3>
+                {unread > 0 && <span className="bg-red-500 text-white text-[9px] font-black px-2 py-0.5 rounded-full">{unread} sem resposta</span>}
+              </div>
+              <div className="overflow-y-auto max-h-[500px]">
+                {messages.map(msg => (
+                  <button key={msg.id} onClick={() => setSelectedId(msg.id)}
+                    className={`w-full text-left p-4 border-b border-slate-800 hover:bg-slate-800 transition-colors ${selectedId === msg.id ? 'bg-slate-800' : ''}`}>
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-white text-sm truncate">{msg.barber_name || 'Profissional'}</p>
+                          {!msg.reply && <span className="w-1.5 h-1.5 bg-blue-400 rounded-full flex-shrink-0"/>}
+                        </div>
+                        <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">{msg.message}</p>
+                        <p className="text-[9px] text-slate-600 mt-1">{new Date(msg.created_at).toLocaleString('pt-BR')}</p>
+                      </div>
+                      {msg.reply && <CheckSquare size={14} className="text-green-400 flex-shrink-0 mt-1"/>}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+              {selected ? (
+                <>
+                  <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div>
+                      <p className="font-black text-white text-sm">{selected.barber_name}</p>
+                      <p className="text-[10px] text-slate-400">{new Date(selected.created_at).toLocaleString('pt-BR')}</p>
+                    </div>
+                    <button onClick={handleDelete} className="px-3 py-1.5 rounded-lg bg-red-900/40 text-red-400 text-[10px] font-black uppercase hover:bg-red-900/70 transition-colors">Excluir</button>
+                  </div>
+                  <div className="flex-1 p-4 space-y-3 overflow-y-auto">
+                    <div className="bg-slate-800 rounded-xl p-3">
+                      <p className="text-[10px] text-slate-400 font-bold mb-1">MENSAGEM DO PROFISSIONAL</p>
+                      <p className="text-sm text-white whitespace-pre-wrap">{selected.message}</p>
+                    </div>
+                    {selected.reply && (
+                      <div className="bg-blue-900/30 border border-blue-800 rounded-xl p-3">
+                        <p className="text-[10px] text-blue-400 font-bold mb-1">SUA RESPOSTA (o profissional vê)</p>
+                        <p className="text-sm text-white whitespace-pre-wrap">{selected.reply}</p>
+                        <p className="text-[9px] text-slate-500 mt-1">{selected.replied_at && new Date(selected.replied_at).toLocaleString('pt-BR')}</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="p-4 border-t border-slate-800 space-y-2">
+                    <textarea value={replyText} onChange={e => setReplyText(e.target.value)}
+                      placeholder="Escreva sua resposta..." rows={3}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-colors resize-none placeholder-slate-500"/>
+                    <div className="flex gap-2">
+                      <button onClick={handleSaveReply} disabled={!replyText.trim() || saving}
+                        className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all">
+                        {saving ? <Loader2 size={14} className="animate-spin"/> : <><Reply size={14}/> Enviar Resposta</>}
+                      </button>
+                      {selected.barber_phone && (
+                        <a href={`https://wa.me/55${String(selected.barber_phone).replace(/\D/g, '')}?text=${encodeURIComponent(`Olá ${selected.barber_name}! Equipe Salão Digital aqui. `)}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="p-2.5 bg-green-700 text-white rounded-xl flex items-center justify-center hover:bg-green-600 transition-colors">
+                          <Phone size={16}/>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="flex-1 flex items-center justify-center p-8 text-center">
+                  <div><MessageSquare size={32} className="text-slate-600 mx-auto mb-3"/><p className="text-slate-400 text-sm">Selecione uma mensagem para ver detalhes</p></div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+    </div>
+  );
+};
+
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 const generateSlug = (name, id) => {
   const normalized = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'-');
