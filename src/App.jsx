@@ -4278,16 +4278,56 @@ const handleUploadWorkPhoto = async (event) => {
           </section>
  
           {/* ── Agenda do dia / próximos ── */}
+          {(() => {
+            // ── Agrupa blocos "(continuação)" no atendimento principal ──
+            const _toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+            const _toTime = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+            const _interval = GLOBAL_TIME_SLOTS.length > 1
+              ? (_toMin(GLOBAL_TIME_SLOTS[1]) - _toMin(GLOBAL_TIME_SLOTS[0])) || 30
+              : 30;
+            const _isCont = (a) => typeof a.service_name === 'string' && a.service_name.endsWith(' (continuação)');
+
+            const unique = allAppointments.filter((app, i, self) => i === self.findIndex(t => t.id === app.id));
+            const mains = unique.filter(a => !_isCont(a));
+            const conts = unique.filter(_isCont);
+            const used = new Set();
+
+            const groupedAppointments = mains.map(m => {
+              const blocks = [m];
+              let last = m;
+              while (true) {
+                const next = conts.find(c =>
+                  !used.has(c.id) &&
+                  c.date === m.date &&
+                  c.client_name === m.client_name &&
+                  _toMin(c.time) - _toMin(last.time) === _interval
+                );
+                if (!next) break;
+                used.add(next.id);
+                blocks.push(next);
+                last = next;
+              }
+              return { ...m, blocks };
+            });
+            // Continuações órfãs continuam aparecendo, para não ficarem invisíveis
+            conts.filter(c => !used.has(c.id)).forEach(c => groupedAppointments.push({ ...c, blocks: [c] }));
+
+            return (
           <section>
             <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
               <Calendar size={18} className="text-blue-500"/> Agenda Completa
             </h3>
-            {allAppointments.length === 0
+            {groupedAppointments.length === 0
               ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
                   <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
                 </div>
               : <div className="space-y-3">
-                  {allAppointments.filter((app,i,self)=>i===self.findIndex(t=>t.id===app.id)).map(app => (
+                  {groupedAppointments.map(app => {
+                    const lastBlock = app.blocks[app.blocks.length - 1];
+                    const timeLabel = app.blocks.length > 1 && app.time && lastBlock.time
+                      ? `${app.time}–${_toTime(_toMin(lastBlock.time) + _interval)}`
+                      : app.time;
+                    return (
                     <div key={app.id}
                       className={`flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm
                         ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
@@ -4302,7 +4342,7 @@ const handleUploadWorkPhoto = async (event) => {
                         <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || app.service || 'Serviço'}</p>
                         <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-0.5">
                           <Clock size={12} strokeWidth={3}/>
-                          <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
+                          <span className="text-[10px]">{timeLabel} • {app.date?.split('-').reverse().join('/')}</span>
                         </div>
                       </div>
                       <button onClick={() => {
@@ -4321,8 +4361,11 @@ const handleUploadWorkPhoto = async (event) => {
                             if (!isGuestBarber) sb.from('profiles').update({ manual_appointments: filtered }).eq('id', effectiveUser.id);
                             if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
                           } else {
-                            if (!isGuestBarber) onUpdateStatus(app.id, 'rejected');
-                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                            // Rejeita e libera TODOS os blocos do atendimento
+                            app.blocks.forEach(b => {
+                              if (!isGuestBarber) onUpdateStatus(b.id, 'rejected');
+                              if (b.date && b.time) setSlotAvailability(b.date, b.time, true);
+                            });
                           }
                         }
                       }} className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all">
@@ -4330,9 +4373,12 @@ const handleUploadWorkPhoto = async (event) => {
                         <span className="text-[8px] font-black uppercase">Cancelar</span>
                       </button>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>}
           </section>
+            );
+          })()}
         </div>
       )}
  
