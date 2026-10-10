@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import imgMao from './img/mao.jpg';
 import imgMp from './img/mp.jpg';
 import imgPopup from './img/popup.png';
-
+import { Capacitor } from '@capacitor/core';
 import {
   Scissors, User, Calendar, MapPin, Star, CheckCircle2, LogOut, Bell, DollarSign,
   ChevronLeft, ChevronRight, Check, Trash2, KeyRound, UserPlus, Eye, EyeOff,
@@ -1467,7 +1467,20 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
 // ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
 // AUTH SCREEN — login/cadastro de barbeiros e clientes
-// ════════════════════════════════════════════════════════════════════════════
+//// ⚠️ Troque pelo Bundle ID real do app (o mesmo do App ID na Apple e do campo "Client IDs" do provider Apple no Supabase)
+const APPLE_CLIENT_ID = 'COLOQUE_AQUI_SEU_BUNDLE_ID';
+
+const generateNonce = () => {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const sha256Hex = async (text) => {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDark }) => {
   const [mode, setMode] = useState('login');
 
@@ -1483,12 +1496,15 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
 
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
   const [error, setError] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  const [googleUser, setGoogleUser] = useState(null);
-  const [phoneForGoogle, setPhoneForGoogle] = useState('');
+  // Usuário vindo de login social (Google ou Apple) que ainda não tem perfil
+  const [socialUser, setSocialUser] = useState(null);
+  const [phoneForSocial, setPhoneForSocial] = useState('');
+  const [nameForSocial, setNameForSocial] = useState('');
 
   const [noAccountHint, setNoAccountHint] = useState(false);
 
@@ -1504,11 +1520,13 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const loginEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(loginEmail.trim());
   const loginPasswordValid = loginPassword.length >= 6;
 
-  const phoneGoogleValid = getPhoneDigits(phoneForGoogle).length === 11;
+  const phoneSocialValid = getPhoneDigits(phoneForSocial).length === 11;
+  const socialNameKnown = !!(socialUser && socialUser.name && socialUser.name.trim().length >= 2);
+  const socialNameValid = socialNameKnown || nameForSocial.trim().length >= 2;
 
   const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
-  const handlePhoneGoogleChange = (e) => setPhoneForGoogle(applyPhoneMask(e.target.value));
+  const handlePhoneSocialChange = (e) => setPhoneForSocial(applyPhoneMask(e.target.value));
 
   const classifyDuplicateError = (err) => {
     const msg = (err && err.message) || '';
@@ -1646,64 +1664,135 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  useEffect(() => {
-    const checkGoogleSession = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user || user.app_metadata?.provider !== 'google') return;
+  // Verifica se há sessão de login social (Google/Apple).
+  // Se já existe perfil -> entra direto. Se não existe -> pede telefone (primeiro login).
+  const checkSocialSession = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const provider = user?.app_metadata?.provider;
+    if (!user || (provider !== 'google' && provider !== 'apple')) return;
 
-      let { data: existingProfile } = await supabase
-        .from('profiles').select('*').eq('id', user.id).maybeSingle();
+    let { data: existingProfile } = await supabase
+      .from('profiles').select('*').eq('id', user.id).maybeSingle();
 
-      if (!existingProfile && user.email) {
-        const { data: byEmail, error: emailLookupErr } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('email', user.email)
-          .eq('role', userType)
-          .not('phone', 'is', null)
-          .neq('phone', '')
-          .maybeSingle();
-        if (emailLookupErr) {
-          console.error('[AuthScreen] Falha ao buscar perfil por e-mail (Google):', emailLookupErr);
-        }
-        existingProfile = byEmail || null;
+    if (!existingProfile && user.email) {
+      const { data: byEmail, error: emailLookupErr } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('email', user.email)
+        .eq('role', userType)
+        .not('phone', 'is', null)
+        .neq('phone', '')
+        .maybeSingle();
+      if (emailLookupErr) {
+        console.error('[AuthScreen] Falha ao buscar perfil por e-mail (' + provider + '):', emailLookupErr);
       }
+      existingProfile = byEmail || null;
+    }
 
-      if (existingProfile) {
-        try { await onLogin(existingProfile.phone, null, existingProfile); }
-        catch (err) { setError(err.message || 'Erro ao entrar com Google.'); }
-      } else {
-        setGoogleUser({
-          id: user.id,
-          email: user.email,
-          name: user.user_metadata?.full_name || user.user_metadata?.name || '',
-          avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+    if (existingProfile) {
+      try { await onLogin(existingProfile.phone, null, existingProfile); }
+      catch (err) { setError(err.message || 'Erro ao entrar com ' + (provider === 'apple' ? 'Apple.' : 'Google.')); }
+    } else {
+      setSocialUser({
+        id: user.id,
+        provider,
+        email: user.email,
+        name: user.user_metadata?.full_name || user.user_metadata?.name || '',
+        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || '',
+      });
+    }
+  };
+
+  const handleAppleLogin = async () => {
+    setError('');
+    setAppleLoading(true);
+    try {
+      if (Capacitor.isNativePlatform()) {
+        // Fluxo nativo (iOS): token direto da Apple -> Supabase
+        const { SignInWithApple } = await import('@capacitor-community/apple-sign-in');
+
+        const rawNonce = generateNonce();
+        const hashedNonce = await sha256Hex(rawNonce);
+
+        const result = await SignInWithApple.authorize({
+          clientId: APPLE_CLIENT_ID,
+          redirectURI: '',
+          scopes: 'email name',
+          nonce: hashedNonce,
         });
+
+        const idToken = result?.response?.identityToken;
+        if (!idToken) throw new Error('Não recebemos a autorização da Apple.');
+
+        const { error: signInErr } = await supabase.auth.signInWithIdToken({
+          provider: 'apple',
+          token: idToken,
+          nonce: rawNonce,
+        });
+        if (signInErr) throw signInErr;
+
+        // A Apple só envia o nome UMA vez (no primeiro login): salvar imediatamente
+        const given = result.response.givenName || '';
+        const family = result.response.familyName || '';
+        const fullName = (given + ' ' + family).trim();
+        if (fullName) {
+          const { error: metaErr } = await supabase.auth.updateUser({
+            data: { full_name: fullName, name: fullName },
+          });
+          if (metaErr) console.error('[AuthScreen] Falha ao salvar nome da Apple:', metaErr);
+        }
+
+        await checkSocialSession();
+        setAppleLoading(false);
+        return;
       }
-    };
-    checkGoogleSession();
+
+      // Web: fluxo por redirecionamento (precisa do Services ID configurado no Supabase)
+      const { error: oauthErr } = await supabase.auth.signInWithOAuth({
+        provider: 'apple',
+        options: { redirectTo: window.location.origin },
+      });
+      if (oauthErr) throw oauthErr;
+    } catch (err) {
+      const msg = ((err && err.message) || '').toLowerCase();
+      const code = String((err && err.code) || '');
+      const cancelled = msg.includes('cancel') || msg.includes('1001') || code === '1001';
+      if (!cancelled) {
+        console.error('[AuthScreen] Erro no login Apple:', err);
+        setError('Erro ao conectar com a Apple. Tente novamente.');
+      }
+      setAppleLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    checkSocialSession();
   }, []);
 
-  const handleSaveGooglePhone = async () => {
-    if (!phoneGoogleValid) { setError('WhatsApp inválido.'); return; }
+  const handleSaveSocialPhone = async () => {
+    if (!socialNameValid) { setError('Digite seu nome (pelo menos 2 letras).'); return; }
+    if (!phoneSocialValid) { setError('WhatsApp inválido.'); return; }
     setLoading(true); setError('');
     try {
-      const digits = getPhoneDigits(phoneForGoogle);
+      const digits = getPhoneDigits(phoneForSocial);
 
       if (await phoneAlreadyRegistered(digits)) {
         await supabase.auth.signOut();
-        setGoogleUser(null);
-        setPhoneForGoogle('');
+        setSocialUser(null);
+        setPhoneForSocial('');
+        setNameForSocial('');
         redirectToLoginWithPhone(digits);
         return;
       }
 
+      const finalName = socialNameKnown ? socialUser.name.trim() : nameForSocial.trim();
+
       await onRegister(
-        googleUser.name,
+        finalName,
         digits,
-        'google-' + googleUser.id,
-        googleUser,
-        googleUser.email,
+        socialUser.provider + '-' + socialUser.id,
+        { ...socialUser, name: finalName },
+        socialUser.email,
       );
     } catch (err) {
       setError(friendlyAuthError(err, 'Erro ao finalizar cadastro.'));
@@ -1712,39 +1801,53 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
   };
 
-  if (googleUser) {
+  if (socialUser) {
     return (
       <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 relative">
         <div className="absolute top-6 left-6">
-          <button onClick={() => { setGoogleUser(null); supabase.auth.signOut(); }}
+          <button onClick={() => { setSocialUser(null); setPhoneForSocial(''); setNameForSocial(''); setError(''); supabase.auth.signOut(); }}
             className="p-2 bg-white rounded-full shadow-sm"><ChevronLeft size={24}/></button>
         </div>
         <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
           <div className="flex flex-col items-center mb-6">
             <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center overflow-hidden mb-3 border-2 border-slate-200">
-              {googleUser.avatar_url
-                ? <img src={googleUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
+              {socialUser.avatar_url
+                ? <img src={socialUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
                 : <User size={28} className="text-slate-400"/>}
             </div>
-            <p className="font-black text-slate-900 text-base">{googleUser.name}</p>
-            <p className="text-xs text-slate-400">{googleUser.email}</p>
+            {socialNameKnown && <p className="font-black text-slate-900 text-base">{socialUser.name}</p>}
+            <p className="text-xs text-slate-400">{socialUser.email}</p>
           </div>
-          <h2 className="text-lg font-black text-center text-slate-900 mb-1">Só falta o WhatsApp</h2>
+          <h2 className="text-lg font-black text-center text-slate-900 mb-1">
+            {socialNameKnown ? 'Só falta o WhatsApp' : 'Só faltam seu nome e WhatsApp'}
+          </h2>
           <p className="text-center text-slate-400 text-xs mb-6">Precisamos do seu número para confirmar agendamentos.</p>
           {error && <div className="mb-4 p-3 bg-red-50 text-red-500 text-xs font-bold rounded-lg border border-red-100">{error}</div>}
           <div className="space-y-4">
+            {!socialNameKnown && (
+              <div>
+                <input type="text" value={nameForSocial} onChange={e => setNameForSocial(e.target.value)}
+                  placeholder="Seu nome (aparece pros clientes)"
+                  maxLength={60}
+                  className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
+                    ${nameForSocial.length > 0 ? (socialNameValid ? 'border-green-400' : 'border-red-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+                {nameForSocial.length > 0 && !socialNameValid && (
+                  <p className="text-[10px] text-red-500 font-bold mt-1 ml-1">Digite pelo menos 2 letras</p>
+                )}
+              </div>
+            )}
             <div>
-              <input type="tel" value={phoneForGoogle} onChange={handlePhoneGoogleChange}
+              <input type="tel" value={phoneForSocial} onChange={handlePhoneSocialChange}
                 placeholder="WhatsApp: (41) 99999-9999"
                 className={`w-full p-3 bg-slate-50 border-2 rounded-xl outline-none transition-colors
-                  ${phoneForGoogle.length > 0 ? (phoneGoogleValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
-              {phoneForGoogle.length > 0 && (
-                <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneGoogleValid ? 'text-green-600' : 'text-amber-500'}`}>
-                  {getPhoneDigits(phoneForGoogle).length}/11 dígitos {phoneGoogleValid ? '✓' : ''}
+                  ${phoneForSocial.length > 0 ? (phoneSocialValid ? 'border-green-400' : 'border-amber-300') : 'border-slate-200 focus:border-blue-500'}`}/>
+              {phoneForSocial.length > 0 && (
+                <p className={`text-[10px] font-bold mt-1 ml-1 ${phoneSocialValid ? 'text-green-600' : 'text-amber-500'}`}>
+                  {getPhoneDigits(phoneForSocial).length}/11 dígitos {phoneSocialValid ? '✓' : ''}
                 </p>
               )}
             </div>
-            <Button onClick={handleSaveGooglePhone} loading={loading} disabled={!phoneGoogleValid}>
+            <Button onClick={handleSaveSocialPhone} loading={loading} disabled={!phoneSocialValid || !socialNameValid}>
               Finalizar cadastro
             </Button>
           </div>
@@ -1775,7 +1878,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         )}
 
         <div className="space-y-4">
-          <button onClick={handleGoogleLogin} disabled={googleLoading}
+          <button onClick={handleGoogleLogin} disabled={googleLoading || appleLoading}
             className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
             {googleLoading
               ? <Loader2 size={18} className="animate-spin text-slate-400"/>
@@ -1786,6 +1889,16 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
                   <path d="M24 9.552c3.456 0 6.552 1.188 8.988 3.528l6.732-6.732C35.904 2.388 30.468 0 24 0 14.76 0 6.6 5.22 2.64 13.044l8.196 6.3c1.86-5.556 7.044-9.792 13.164-9.792z" fill="#EA4335"/>
                 </svg>}
             {googleLoading ? 'Conectando...' : 'Continuar com Google'}
+          </button>
+
+          <button onClick={handleAppleLogin} disabled={appleLoading || googleLoading}
+            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-black border-2 border-black rounded-xl font-bold text-sm text-white hover:bg-slate-900 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
+            {appleLoading
+              ? <Loader2 size={18} className="animate-spin text-white"/>
+              : <svg width="18" height="18" viewBox="0 0 24 24" fill="white" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+                </svg>}
+            {appleLoading ? 'Conectando...' : 'Continuar com Apple'}
           </button>
 
           <div className="flex items-center gap-2">
