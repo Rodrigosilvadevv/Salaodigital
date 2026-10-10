@@ -12,8 +12,7 @@
       "distribution": "internal"
     },
     "production": {
-      "autoIncrement": true,
-      "preInstall": "npm uninstall @capacitor/ios @capacitor/push-notifications"
+      "autoIncrement": true
     }
   },
   "submit": {
