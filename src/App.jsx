@@ -2525,6 +2525,14 @@ const PublicBarberPage = ({ barber }) => {
   const services=[...masterServices,...customServices];
   const barberPhone=String(barber.phone||'').replace(/\D/g,'');
 
+  // ── Cor escolhida no cardápio ──
+  const theme = MENU_THEMES[barber.menu_color] || MENU_THEMES.blue;
+
+  // ── Tags do admin (no lugar do selo "Pro") ──
+  const adminTags = Array.isArray(barber.admin_tags) ? barber.admin_tags.filter(Boolean) : [];
+  const otherBadges = badges.filter(b => !/^\s*pro\b/i.test(String(b.label || '')));
+  const showBadges = adminTags.length > 0 ? otherBadges : badges;
+
   // ── Vitrine do cardápio (somente visualização) ──
   useEffect(()=>{
     let cancelled=false;
@@ -2660,7 +2668,7 @@ const PublicBarberPage = ({ barber }) => {
             <Phone size={16}/> Avisar no WhatsApp
           </a>
         )}
-        <button onClick={resetBooking} className="text-blue-600 font-bold text-sm">Fazer outro agendamento</button>
+        <button onClick={resetBooking} className={`${theme.text} font-bold text-sm`}>Fazer outro agendamento</button>
       </div>
     );
   }
@@ -2671,10 +2679,10 @@ const PublicBarberPage = ({ barber }) => {
   return (
     <div className="min-h-screen bg-slate-50 pb-28">
       {/* ══ HERO ══ */}
-      <div className="bg-slate-900 pb-10 pt-12 px-6 relative overflow-hidden">
-        {barber.avatar_url&&<img src={barber.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-25 blur-2xl scale-125"/>}
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/40 via-slate-900/70 to-slate-900"/>
-        <a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-slate-400 hover:text-white transition-colors">Login</a>
+      <div className={`${theme.solid} pb-10 pt-12 px-6 relative overflow-hidden`}>
+        {barber.avatar_url&&<img src={barber.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-125"/>}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/70"/>
+        <a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-white/60 hover:text-white transition-colors">Login</a>
 
         <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
           <div className="mb-4">
@@ -2683,36 +2691,43 @@ const PublicBarberPage = ({ barber }) => {
             </StoryRing>
           </div>
           <h1 className="text-white font-black text-3xl leading-tight mb-1 mt-1">{barber.name}</h1>
-          {barber.bio&&<p className="text-blue-300 text-sm font-bold italic mb-2">"{barber.bio}"</p>}
-          {barber.address&&<p className="text-slate-400 text-xs flex items-center justify-center gap-1 mb-3"><MapPin size={11}/>{barber.address}</p>}
-          {badges.length>0&&<div className="flex flex-wrap gap-1.5 justify-center mb-4">{badges.map((b,i)=><span key={i} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}</div>}
+          {barber.bio&&<p className="text-white/80 text-sm font-bold italic mb-2">"{barber.bio}"</p>}
+          {barber.address&&<p className="text-white/60 text-xs flex items-center justify-center gap-1 mb-3"><MapPin size={11}/>{barber.address}</p>}
+
+          {/* Tags do admin + selos */}
+          {(adminTags.length>0||showBadges.length>0)&&(
+            <div className="flex flex-wrap gap-1.5 justify-center mb-4">
+              {adminTags.map((t,i)=><span key={`tag-${i}`} className="bg-white/15 border border-white/25 text-white text-[10px] font-black px-2.5 py-1 rounded-full">{t}</span>)}
+              {showBadges.map((b,i)=><span key={`b-${i}`} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}
+            </div>
+          )}
 
           {/* Disponibilidade em tempo real */}
           {nextAvailable?(
             <div className="mb-5 flex flex-col items-center gap-1.5">
-              <div className="flex items-center gap-2 bg-white/10 backdrop-blur border border-white/10 rounded-full px-4 py-2">
+              <div className="flex items-center gap-2 bg-white/10 backdrop-blur border border-white/15 rounded-full px-4 py-2">
                 <span className="relative flex h-2.5 w-2.5"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"/><span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-400"/></span>
                 <span className="text-white text-xs font-bold">Próximo horário: {dateLabel(nextAvailable.date)} às {nextAvailable.time}</span>
               </div>
               {freeToday>0&&freeToday<=4&&<span className="text-amber-300 text-[11px] font-black">🔥 Só {freeToday} {freeToday>1?'horários livres':'horário livre'} hoje</span>}
             </div>
           ):(
-            <div className="mb-5 bg-white/10 border border-white/10 rounded-full px-4 py-2"><span className="text-slate-300 text-xs font-bold">Agenda cheia no momento</span></div>
+            <div className="mb-5 bg-white/10 border border-white/15 rounded-full px-4 py-2"><span className="text-white/80 text-xs font-bold">Agenda cheia no momento</span></div>
           )}
 
           {/* Mini estatísticas */}
           <div className="grid grid-cols-3 gap-2 w-full max-w-xs mb-5">
-            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{services.length}</p><p className="text-slate-400 text-[9px] font-bold uppercase mt-1">Serviços</p></div>
-            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{workPhotos.length}</p><p className="text-slate-400 text-[9px] font-bold uppercase mt-1">Trabalhos</p></div>
-            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{freeToday}</p><p className="text-slate-400 text-[9px] font-bold uppercase mt-1">Vagas hoje</p></div>
+            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{services.length}</p><p className="text-white/60 text-[9px] font-bold uppercase mt-1">Serviços</p></div>
+            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{workPhotos.length}</p><p className="text-white/60 text-[9px] font-bold uppercase mt-1">Trabalhos</p></div>
+            <div className="bg-white/10 rounded-2xl py-2.5"><p className="text-white font-black text-lg leading-none">{freeToday}</p><p className="text-white/60 text-[9px] font-bold uppercase mt-1">Vagas hoje</p></div>
           </div>
 
           <div className="flex gap-2 w-full max-w-xs">
-            <button onClick={()=>setBookStep(1)} className="flex-1 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-900/50"><CalendarDays size={17}/> Agendar horário</button>
+            <button onClick={()=>setBookStep(1)} className={`flex-1 py-4 bg-white ${theme.text} rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg`}><CalendarDays size={17}/> Agendar horário</button>
             {barberPhone&&(
               <a href={`https://wa.me/55${barberPhone}`} target="_blank" rel="noopener noreferrer" className="px-4 py-4 bg-green-600 text-white rounded-2xl flex items-center justify-center active:scale-95 transition-all" title="Falar no WhatsApp"><Phone size={17}/></a>
             )}
-            <button onClick={handleShare} className={`px-4 py-4 rounded-2xl font-black flex items-center justify-center active:scale-95 transition-all ${copied?'bg-green-500 text-white':'bg-white/10 text-slate-200 hover:bg-white/20'}`} title="Compartilhar">
+            <button onClick={handleShare} className={`px-4 py-4 rounded-2xl font-black flex items-center justify-center active:scale-95 transition-all ${copied?'bg-green-500 text-white':'bg-white/15 text-white hover:bg-white/25'}`} title="Compartilhar">
               {copied?<CheckCircle size={17}/>:<Copy size={17}/>}
             </button>
           </div>
@@ -2729,7 +2744,7 @@ const PublicBarberPage = ({ barber }) => {
                 <button onClick={resetBooking} className="text-slate-400 font-bold text-xs">Cancelar</button>
               </div>
               <div className="flex gap-1.5">
-                {[1,2,3].map(n=><div key={n} className={`h-1.5 flex-1 rounded-full transition-all ${n<=bookStep?'bg-blue-600':'bg-slate-100'}`}/>)}
+                {[1,2,3].map(n=><div key={n} className={`h-1.5 flex-1 rounded-full transition-all ${n<=bookStep?theme.solid:'bg-slate-100'}`}/>)}
               </div>
               <p className="text-[10px] text-slate-400 font-bold mt-2">Passo {bookStep} de 3</p>
             </div>
@@ -2740,9 +2755,9 @@ const PublicBarberPage = ({ barber }) => {
                   <div className="space-y-2">{services.map(s=>{
                     const sel=isSelected(s);
                     return (
-                      <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${sel?'border-blue-600 bg-blue-50':'border-slate-100 hover:border-slate-300'}`}>
+                      <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-95 text-left ${sel?`${theme.border} ${theme.soft}`:'border-slate-100 hover:border-slate-300'}`}>
                         <div className="flex items-center gap-3">
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${sel?'bg-blue-600 text-white':'bg-slate-100'}`}>{sel?<CheckCircle size={17}/>:React.cloneElement(s.icon,{size:17})}</div>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${sel?`${theme.solid} text-white`:'bg-slate-100'}`}>{sel?<CheckCircle size={17}/>:React.cloneElement(s.icon,{size:17})}</div>
                           <div><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">{s.duration}</p></div>
                         </div>
                         <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
@@ -2755,7 +2770,7 @@ const PublicBarberPage = ({ barber }) => {
                       <p className="font-black text-green-600">R$ {totalPrice}</p>
                     </div>
                   )}
-                  <button onClick={()=>setBookStep(2)} disabled={selectedServices.length===0} className="w-full mt-4 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                  <button onClick={()=>setBookStep(2)} disabled={selectedServices.length===0} className={`w-full mt-4 py-4 ${theme.solid} text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}>
                     {selectedServices.length===0?'Selecione ao menos um serviço':`Continuar → R$ ${totalPrice}`}
                   </button>
                 </div>
@@ -2779,33 +2794,33 @@ const PublicBarberPage = ({ barber }) => {
                       <div className="grid grid-cols-4 gap-2">
                         {GLOBAL_TIME_SLOTS.map((t,idx)=>{
                           const avail = isTimeAvailable(selectedDate, idx);
-                          return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-xl font-bold text-xs transition-all ${selectedTime===t?'bg-slate-900 text-white shadow-lg scale-105':avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>;
+                          return <button key={t} disabled={!avail} onClick={()=>setSelectedTime(t)} className={`py-2.5 rounded-xl font-bold text-xs transition-all ${selectedTime===t?`${theme.solid} text-white shadow-lg scale-105`:avail?'bg-white text-slate-600 border border-slate-200 hover:border-slate-400':'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>{t}</button>;
                         })}
                       </div>
                       {slotsNeeded>1&&<p className="text-[10px] text-slate-400 mt-3">Mostrando apenas horários com {formatDuration(totalMinutes)} livres em sequência.</p>}
                       {GLOBAL_TIME_SLOTS.every((_,idx)=>!isTimeAvailable(selectedDate, idx))&&<p className="text-xs text-amber-600 font-bold mt-3">Sem horário suficiente nesse dia. Tente outra data ou remova um serviço.</p>}
                     </div>
                   )}
-                  {selectedTime&&selectedDate&&<button onClick={()=>setBookStep(3)} className="w-full mt-5 py-4 bg-blue-600 text-white rounded-2xl font-black text-sm active:scale-95 transition-all">Próximo → {dateLabel(selectedDate)} às {selectedTime}</button>}
+                  {selectedTime&&selectedDate&&<button onClick={()=>setBookStep(3)} className={`w-full mt-5 py-4 ${theme.solid} text-white rounded-2xl font-black text-sm active:scale-95 transition-all`}>Próximo → {dateLabel(selectedDate)} às {selectedTime}</button>}
                 </div>
               )}
               {bookStep===3&&(
                 <div className="space-y-4">
                   <button onClick={()=>setBookStep(2)} className="text-xs text-slate-400 font-bold mb-2 flex items-center gap-1"><ChevronLeft size={14}/> {selectedDate&&dateLabel(selectedDate)} às {selectedTime}</button>
-                  <div className="bg-blue-50 rounded-2xl p-4">
+                  <div className={`${theme.soft} rounded-2xl p-4`}>
                     <div className="space-y-1.5">
                       {selectedServices.map(s=>(
                         <div key={s.id} className="flex justify-between items-center"><p className="font-bold text-slate-900 text-xs">{s.name} <span className="text-slate-400 font-normal">· {s.duration}</span></p><p className="font-bold text-slate-600 text-xs">R$ {s.price}</p></div>
                       ))}
                     </div>
-                    <div className="border-t border-blue-100 mt-3 pt-3 flex justify-between items-center">
+                    <div className="border-t border-slate-200 mt-3 pt-3 flex justify-between items-center">
                       <div><p className="font-black text-slate-900 text-sm">Total · {formatDuration(totalMinutes)}</p><p className="text-[10px] text-slate-500">{selectedDate&&dateLabel(selectedDate)} às {selectedTime}</p></div>
                       <p className="font-black text-green-600 text-lg">R$ {totalPrice}</p>
                     </div>
                   </div>
-                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
-                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors"/></div>
-                  <button onClick={handleSubmitBooking} disabled={submitting} className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-slate-400 transition-colors"/></div>
+                  <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-slate-400 transition-colors"/></div>
+                  <button onClick={handleSubmitBooking} disabled={submitting} className={`w-full py-4 ${theme.solid} text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2`}>
                     {submitting?<Loader2 className="animate-spin" size={18}/>:<><CheckCircle size={18}/> Confirmar Agendamento</>}
                   </button>
                   <p className="text-center text-[10px] text-slate-400 font-bold">🔒 Seus dados são usados apenas para este agendamento.</p>
@@ -2833,43 +2848,42 @@ const PublicBarberPage = ({ barber }) => {
         <div className="mt-8">
           <div className="flex items-end justify-between mb-3 px-1">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Serviços</p>
-            <span className="text-blue-500 text-[10px] font-bold">toque para montar seu combo</span>
+            <span className={`${theme.text} text-[10px] font-bold`}>toque para montar seu combo</span>
           </div>
           <div className="space-y-2">{services.map(s=>{
             const sel=isSelected(s);
             return (
-              <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full rounded-2xl border-2 p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer ${sel?'bg-blue-50 border-blue-500 shadow-md shadow-blue-100':'bg-white border-transparent shadow-sm hover:border-blue-200'}`}>
+              <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full rounded-2xl border-2 p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer ${sel?`${theme.soft} ${theme.border} shadow-md`:'bg-white border-transparent shadow-sm hover:border-slate-200'}`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sel?'bg-blue-600 text-white':'bg-slate-100 text-slate-600'}`}>{React.cloneElement(s.icon,{size:18})}</div>
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sel?`${theme.solid} text-white`:'bg-slate-100 text-slate-600'}`}>{React.cloneElement(s.icon,{size:18})}</div>
                   <div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">⏱ {s.duration}</p></div>
                 </div>
                 <div className="flex items-center gap-2">
                   <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${sel?'bg-blue-600 border-blue-600':'border-slate-200'}`}>{sel&&<CheckCircle size={13} className="text-white"/>}</div>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${sel?`${theme.solid} ${theme.border}`:'border-slate-200'}`}>{sel&&<CheckCircle size={13} className="text-white"/>}</div>
                 </div>
               </button>
             );
           })}</div>
         </div>
 
-        {/* ══ E ainda contamos com mais... (vitrine, só visualização) ══ */}
+        {/* ══ E ainda contamos com mais... (vitrine, só visualização, sem preço) ══ */}
         {menuSections.length>0&&(
           <div className="mt-12">
             <div className="flex items-center gap-3 mb-1">
-              <div className="h-px flex-1 bg-slate-200"/>
+              <div className={`h-px flex-1 ${theme.soft}`}/>
               <h2 className="text-sm font-black text-slate-900 text-center">E ainda contamos com mais...</h2>
-              <div className="h-px flex-1 bg-slate-200"/>
+              <div className={`h-px flex-1 ${theme.soft}`}/>
             </div>
             <p className="text-center text-[11px] text-slate-400 font-bold mb-5">Aproveite seu horário e experimente 😋</p>
             {menuSections.map(s=>(
               <div key={s.id} className="mb-6">
-                <h3 className="font-black text-slate-900 text-sm mb-3 px-1">{s.name}</h3>
+                <h3 className={`font-black text-sm mb-3 px-1 ${theme.text}`}>{s.name}</h3>
                 <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x">
                   {s.items.map(p=>(
                     <div key={p.id} className="flex-shrink-0 snap-start w-36">
                       <div className="relative w-36 h-36 rounded-3xl bg-slate-100 overflow-hidden shadow-md">
                         {p.photo_url?<img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>:<div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={24}/></div>}
-                        <span className="absolute bottom-2 left-2 bg-slate-900/85 text-white text-[10px] font-black px-2.5 py-1 rounded-full">R$ {Number(p.price).toFixed(2)}</span>
                       </div>
                       <p className="font-black text-slate-900 text-xs mt-2 truncate">{p.name}</p>
                     </div>
@@ -2889,8 +2903,8 @@ const PublicBarberPage = ({ barber }) => {
       {/* ══ BARRA FLUTUANTE DO COMBO ══ */}
       {bookStep===0&&selectedServices.length>0&&(
         <div className="fixed bottom-0 inset-x-0 p-4 z-40">
-          <button onClick={()=>setBookStep(2)} className="max-w-md mx-auto w-full bg-slate-900 text-white rounded-2xl py-4 px-5 flex items-center justify-between font-black text-sm shadow-2xl active:scale-95 transition-all">
-            <span className="flex items-center gap-2"><span className="bg-blue-600 w-7 h-7 rounded-full flex items-center justify-center text-xs">{selectedServices.length}</span>{formatDuration(totalMinutes)}</span>
+          <button onClick={()=>setBookStep(2)} className={`max-w-md mx-auto w-full ${theme.solid} text-white rounded-2xl py-4 px-5 flex items-center justify-between font-black text-sm shadow-2xl active:scale-95 transition-all`}>
+            <span className="flex items-center gap-2"><span className="bg-white/25 w-7 h-7 rounded-full flex items-center justify-center text-xs">{selectedServices.length}</span>{formatDuration(totalMinutes)}</span>
             <span>Escolher horário · R$ {totalPrice} →</span>
           </button>
         </div>
