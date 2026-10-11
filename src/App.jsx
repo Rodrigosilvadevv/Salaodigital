@@ -4242,6 +4242,23 @@ const handleUploadWorkPhoto = async (event) => {
     event.target.value = '';
   }
 };
+
+
+
+const handleRemoveWorkPhoto = async (index) => {
+  if (isGuestBarber) { alert("Para remover fotos, faça login!"); return; }
+  if (!window.confirm("Remover esta foto?")) return;
+  const newPhotos = (effectiveUser.work_photos || []).filter((_, i) => i !== index);
+  effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
+  const { error } = await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
+  if (error) {
+    console.error('[handleRemoveWorkPhoto]', error);
+    alert('Erro ao remover a foto: ' + error.message);
+  }
+};
+
+
+
   const handleDeleteAccount = async () => {
     if (isGuestBarber) return;
     if (!window.confirm("⚠️ Tem certeza? Todos os dados, agendamentos e fotos serão APAGADOS permanentemente. Esta ação não pode ser desfeita.")) return;
@@ -5418,6 +5435,17 @@ const handleUploadWorkPhoto = async (event) => {
           <SupportChat user={effectiveUser} isGuest={isGuestBarber} />
         </div>
       )}
+
+
+
+      {!isGuestBarber && (
+  <div className="text-center">
+    <button onClick={handleDeleteAccount}
+      className="text-xs text-red-500 font-bold underline underline-offset-2">
+      Excluir minha conta
+    </button>
+  </div>
+)}
 
       {/* ══════════════════════════ SHOP/BAR TAB ══════════════════════════ */}
       {activeTab === 'shop' && (
