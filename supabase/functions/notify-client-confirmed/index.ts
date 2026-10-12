@@ -18,6 +18,7 @@ async function makeApnsJwt() {
     .setProtectedHeader({ alg: 'ES256', kid: Deno.env.get('APNS_KEY_ID')! })
     .setIssuer(Deno.env.get('APNS_TEAM_ID')!)
     .setIssuedAt()
+    
     .sign(key);
 }
 
