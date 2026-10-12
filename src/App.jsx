@@ -47,8 +47,65 @@ const createNotificationChannel = async () => {
   }
 };
 
+// ─── PUSH iOS (token do APNs → profiles.ios_push_token) ───────────────────────
+let iosPushListenersReady = false;
+let iosPushUserId = null;
+
+async function setupIosPush(userId) {
+  if (!userId || String(userId).startsWith('guest')) return;
+  iosPushUserId = userId;
+
+  try {
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
+      perm = await PushNotifications.requestPermissions();
+    }
+    if (perm.receive !== 'granted') {
+      console.warn('Permissão de notificação negada (iOS)');
+      return;
+    }
+
+    if (!iosPushListenersReady) {
+      iosPushListenersReady = true;
+
+      await PushNotifications.addListener('registration', async (token) => {
+        const uid = iosPushUserId;
+        if (!uid || !token.value) return;
+
+        // O token pertence só a quem está logado neste aparelho
+        await supabase
+          .from('profiles')
+          .update({ ios_push_token: null })
+          .eq('ios_push_token', token.value)
+          .neq('id', uid);
+
+        const { error } = await supabase
+          .from('profiles')
+          .update({ ios_push_token: token.value })
+          .eq('id', uid);
+
+        if (error) console.error('Erro ao salvar ios_push_token:', error.message);
+      });
+
+      await PushNotifications.addListener('registrationError', (error) => {
+        console.error('Erro no registro de Push (iOS):', error.error);
+      });
+    }
+
+    await PushNotifications.register();
+  } catch (err) {
+    console.error('Erro ao configurar push iOS:', err);
+  }
+}
+
 // ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN (CAPACITOR) ───────────────
 export async function setupPushNotifications(barberId) {
+  // iOS segue por um caminho separado; o Android continua exatamente como antes
+  if (Capacitor.getPlatform() === 'ios') {
+    await setupIosPush(barberId);
+    return;
+  }
+
   try {
     // Cria o canal nativo do Android antes de pedir permissão ou registrar
     await createNotificationChannel();
@@ -565,7 +622,6 @@ const GoalCard = ({ totalAppointments, slug, isGuest }) => {
   );
 };
 
-// ─── AI SUPPORT CHAT (substitui SupportChat) ──────────────────────────────────
 
 // ─── SIMPLE BAR CHART ─────────────────────────────────────────────────────────
 const SimpleBarChart = ({ data, color='#3b82f6', height=80 }) => {
@@ -3207,6 +3263,12 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
     if (!bookingData.date||!bookingData.barber) return [];
     const daySlots=bookingData.barber?.available_slots?.[bookingData.date]||[];
     const now=new Date();
+
+      useEffect(() => {
+    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
+  }, [user?.id]);
+
+  
     const [y,m,d]=bookingData.date.split('-').map(Number);
     const isToday=y===now.getFullYear()&&(m-1)===now.getMonth()&&d===now.getDate();
     return GLOBAL_TIME_SLOTS.filter(t=>{
