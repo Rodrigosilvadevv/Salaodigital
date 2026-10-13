@@ -36,6 +36,11 @@ jobs:
           if [ ! -d ios ]; then npx cap add ios; fi
           npx cap sync ios
 
+      - name: Gerar icones do app
+        run: |
+          ls -la assets
+          npx --yes @capacitor/assets generate --ios
+
       - name: Entitlements (Push e Login com Apple)
         run: |
           cat > ios/App/App/App.entitlements <<'EOF'
