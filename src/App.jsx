@@ -3286,6 +3286,19 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
       setView('success');
     } catch(error) { alert("Falha ao agendar: "+error.message); }
   };
+  
+  // Push do cliente (iPhone e Android)
+  useEffect(() => {
+    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
+  }, [user?.id]);
+
+  
+  // Push do cliente (iPhone e Android)
+  useEffect(() => {
+    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
+  }, [user?.id]);
+
+  
   if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
