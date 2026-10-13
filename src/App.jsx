@@ -47,6 +47,7 @@ const createNotificationChannel = async () => {
   }
 };
 
+// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN (CAPACITOR) ───────────────
 // ─── PUSH iOS (token do APNs → profiles.ios_push_token) ───────────────────────
 let iosPushListenersReady = false;
 let iosPushUserId = null;
@@ -3263,12 +3264,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
     if (!bookingData.date||!bookingData.barber) return [];
     const daySlots=bookingData.barber?.available_slots?.[bookingData.date]||[];
     const now=new Date();
-
-      useEffect(() => {
-    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
-  }, [user?.id]);
-
-  
     const [y,m,d]=bookingData.date.split('-').map(Number);
     const isToday=y===now.getFullYear()&&(m-1)===now.getMonth()&&d===now.getDate();
     return GLOBAL_TIME_SLOTS.filter(t=>{
