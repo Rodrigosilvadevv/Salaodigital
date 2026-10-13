@@ -28,6 +28,8 @@ PushNotifications.addListener('pushNotificationReceived', (notification) => {
 
 const APP_VERSION = 'v6.2';
 
+
+
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
 
@@ -1521,7 +1523,7 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
   );
 };
 // ════════════════════════════════════════════════════════════════════════════
-// AUTH SCREEN — login/cadastro de barbeiros e clientes
+/// AUTH SCREEN — login/cadastro de barbeiros e clientes
 // ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
 const generateNonce = () => {
@@ -1564,8 +1566,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
 
   const [duplicateHint, setDuplicateHint] = useState(null);
 
-  // Login com Apple só aparece dentro do app nativo (iOS)
-  const isNativeApp = Capacitor.isNativePlatform();
+  // Login com Apple só aparece no app do iPhone; o Google fica escondido no iPhone
+  const isIosApp = Capacitor.getPlatform() === 'ios';
 
   const regNameValid = regName.trim().length >= 2;
   const regPhoneValid = getPhoneDigits(regPhone).length === 11;
@@ -1761,7 +1763,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   };
 
   const handleAppleLogin = async () => {
-    if (!Capacitor.isNativePlatform()) return;
+    if (!isIosApp) return;
     setError('');
     setAppleLoading(true);
     try {
@@ -1924,20 +1926,22 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         )}
 
         <div className="space-y-4">
-          <button onClick={handleGoogleLogin} disabled={googleLoading || appleLoading}
-            className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
-            {googleLoading
-              ? <Loader2 size={18} className="animate-spin text-slate-400"/>
-              : <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v9.02h13.204c-.572 3.048-2.3 5.628-4.9 7.356v6.108h7.932c4.644-4.272 7.296-10.572 7.296-17.78z" fill="#4285F4"/>
-                  <path d="M24 48c6.48 0 11.916-2.148 15.888-5.832l-7.932-6.108c-2.148 1.44-4.896 2.292-7.956 2.292-6.12 0-11.304-4.14-13.164-9.696H2.64v6.3C6.6 42.78 14.76 48 24 48z" fill="#34A853"/>
-                  <path d="M10.836 28.656A14.82 14.82 0 0 1 9.96 24c0-1.62.276-3.192.876-4.656v-6.3H2.64A23.956 23.956 0 0 0 0 24c0 3.876.924 7.548 2.64 10.956l8.196-6.3z" fill="#FBBC05"/>
-                  <path d="M24 9.552c3.456 0 6.552 1.188 8.988 3.528l6.732-6.732C35.904 2.388 30.468 0 24 0 14.76 0 6.6 5.22 2.64 13.044l8.196 6.3c1.86-5.556 7.044-9.792 13.164-9.792z" fill="#EA4335"/>
-                </svg>}
-            {googleLoading ? 'Conectando...' : 'Continuar com Google'}
-          </button>
+          {!isIosApp && (
+            <button onClick={handleGoogleLogin} disabled={googleLoading || appleLoading}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-white border-2 border-slate-200 rounded-xl font-bold text-sm text-slate-700 hover:border-slate-300 hover:bg-slate-50 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
+              {googleLoading
+                ? <Loader2 size={18} className="animate-spin text-slate-400"/>
+                : <svg width="18" height="18" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M47.532 24.552c0-1.636-.147-3.2-.42-4.704H24v9.02h13.204c-.572 3.048-2.3 5.628-4.9 7.356v6.108h7.932c4.644-4.272 7.296-10.572 7.296-17.78z" fill="#4285F4"/>
+                    <path d="M24 48c6.48 0 11.916-2.148 15.888-5.832l-7.932-6.108c-2.148 1.44-4.896 2.292-7.956 2.292-6.12 0-11.304-4.14-13.164-9.696H2.64v6.3C6.6 42.78 14.76 48 24 48z" fill="#34A853"/>
+                    <path d="M10.836 28.656A14.82 14.82 0 0 1 9.96 24c0-1.62.276-3.192.876-4.656v-6.3H2.64A23.956 23.956 0 0 0 0 24c0 3.876.924 7.548 2.64 10.956l8.196-6.3z" fill="#FBBC05"/>
+                    <path d="M24 9.552c3.456 0 6.552 1.188 8.988 3.528l6.732-6.732C35.904 2.388 30.468 0 24 0 14.76 0 6.6 5.22 2.64 13.044l8.196 6.3c1.86-5.556 7.044-9.792 13.164-9.792z" fill="#EA4335"/>
+                  </svg>}
+              {googleLoading ? 'Conectando...' : 'Continuar com Google'}
+            </button>
+          )}
 
-          {isNativeApp && (
+          {isIosApp && (
             <button onClick={handleAppleLogin} disabled={appleLoading || googleLoading}
               className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-black border-2 border-black rounded-xl font-bold text-sm text-white hover:bg-slate-900 active:scale-95 transition-all disabled:opacity-60 shadow-sm">
               {appleLoading
@@ -3298,7 +3302,7 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
     if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
   }, [user?.id]);
 
-  
+
   if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
