@@ -5443,19 +5443,18 @@ const handleRemoveWorkPhoto = async (index) => {
               </section>
             )}
  
-            {/* Botão escondido excluir conta (5 cliques no rodapé) */}
-            <p onClick={handleHiddenVersionClick}
-              className="text-[9px] text-slate-400 mt-4 text-center uppercase font-bold tracking-tighter pb-4 cursor-default select-none">
-              Salão Digital © 2026 · {APP_VERSION}
-            </p>
-            {showHiddenDelete && !isGuestBarber && (
-              <div className="pb-6 text-center">
+            {/* Botão de excluir conta visível e minimalista */}
+            {!isGuestBarber && (
+              <div className="pb-2 text-center">
                 <button onClick={handleDeleteAccount}
                   className="text-[10px] text-red-400 font-bold underline underline-offset-2 hover:text-red-600 transition-colors">
                   ⚠️ Excluir minha conta permanentemente
                 </button>
               </div>
             )}
+            <p className="text-[9px] text-slate-400 mt-2 text-center uppercase font-bold tracking-tighter pb-4 cursor-default select-none">
+              Salão Digital © 2026 · {APP_VERSION}
+            </p>
           </div>
         )}
      {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
@@ -5495,14 +5494,6 @@ const handleRemoveWorkPhoto = async (index) => {
 
 
 
-      {!isGuestBarber && (
-  <div className="text-center">
-    <button onClick={handleDeleteAccount}
-      className="text-xs text-red-500 font-bold underline underline-offset-2">
-      Excluir minha conta
-    </button>
-  </div>
-)}
 
       {/* ══════════════════════════ SHOP/BAR TAB ══════════════════════════ */}
       {activeTab === 'shop' && (
