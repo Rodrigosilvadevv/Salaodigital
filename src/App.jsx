@@ -49,107 +49,7 @@ const createNotificationChannel = async () => {
   }
 };
 
-// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN (CAPACITOR) ───────────────
-// ─── PUSH iOS (token do APNs → profiles.ios_push_token) ───────────────────────
-let iosPushListenersReady = false;
-let iosPushUserId = null;
 
-async function setupIosPush(userId) {
-  if (!userId || String(userId).startsWith('guest')) return;
-  iosPushUserId = userId;
-
-  try {
-    let perm = await PushNotifications.checkPermissions();
-    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
-      perm = await PushNotifications.requestPermissions();
-    }
-    if (perm.receive !== 'granted') {
-      console.warn('Permissão de notificação negada (iOS)');
-      return;
-    }
-
-    if (!iosPushListenersReady) {
-      iosPushListenersReady = true;
-
-      await PushNotifications.addListener('registration', async (token) => {
-        const uid = iosPushUserId;
-        if (!uid || !token.value) return;
-
-        // O token pertence só a quem está logado neste aparelho
-        await supabase
-          .from('profiles')
-          .update({ ios_push_token: null })
-          .eq('ios_push_token', token.value)
-          .neq('id', uid);
-
-        const { error } = await supabase
-          .from('profiles')
-          .update({ ios_push_token: token.value })
-          .eq('id', uid);
-
-        if (error) console.error('Erro ao salvar ios_push_token:', error.message);
-      });
-
-      await PushNotifications.addListener('registrationError', (error) => {
-        console.error('Erro no registro de Push (iOS):', error.error);
-      });
-    }
-
-    await PushNotifications.register();
-  } catch (err) {
-    console.error('Erro ao configurar push iOS:', err);
-  }
-}
-
-// ─── CAPTURA E ATUALIZAÇÃO AUTOMÁTICA DO PUSH TOKEN (CAPACITOR) ───────────────
-export async function setupPushNotifications(barberId) {
-  // iOS segue por um caminho separado; o Android continua exatamente como antes
-  if (Capacitor.getPlatform() === 'ios') {
-    await setupIosPush(barberId);
-    return;
-  }
-
-  try {
-    // Cria o canal nativo do Android antes de pedir permissão ou registrar
-    await createNotificationChannel();
-
-    let permStatus = await PushNotifications.checkPermissions();
-
-    if (permStatus.receive === 'prompt') {
-      permStatus = await PushNotifications.requestPermissions();
-    }
-
-    if (permStatus.receive !== 'granted') {
-      console.warn('Permissão de notificação negada!');
-      return;
-    }
-
-    await PushNotifications.register();
-
-    PushNotifications.addListener('registration', async (token) => {
-      console.log('FCM Token do Dispositivo:', token.value);
-
-      if (barberId && token.value) {
-        const { error } = await supabase
-          .from('profiles')
-          .update({ push_token: token.value })
-          .eq('id', barberId);
-
-        if (error) {
-          console.error('Erro ao salvar push_token no Supabase:', error.message);
-        } else {
-          console.log('push_token atualizado com sucesso no Supabase!');
-        }
-      }
-    });
-
-    PushNotifications.addListener('registrationError', (error) => {
-      console.error('Erro no registro de Push:', error.error);
-    });
-  } catch (err) {
-    console.error('Erro ao configurar notificações push:', err);
-  }
-}
 // ─── DARK MODE CSS ────────────────────────────────────────────────────────────
 const injectDarkModeCSS = (isDark) => {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
@@ -3290,18 +3190,10 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
       setView('success');
     } catch(error) { alert("Falha ao agendar: "+error.message); }
   };
-  
-  // Push do cliente (iPhone e Android)
-  useEffect(() => {
-    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
-  }, [user?.id]);
 
-  
-  // Push do cliente (iPhone e Android)
-  useEffect(() => {
-    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
-  }, [user?.id]);
-
+useEffect(() => {
+  if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
+}, [user?.id]);
 
   if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
   return (
@@ -4391,12 +4283,6 @@ const handleRemoveWorkPhoto = async (index) => {
     setTempAddress(effectiveUser?.address || ''); // Adicione esta linha
   }, [effectiveUser?.bio, effectiveUser?.address]); // Adicione o address aqui na lista
   
-  useEffect(() => {
-  // Suponha que você tenha um estado 'user' que guarda os dados do barbeiro logado
-  if (user && user.id) {
-    setupPushNotifications(user.id);
-  }
-}, [user]);
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
