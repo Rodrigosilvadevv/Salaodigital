@@ -50,6 +50,56 @@ const createNotificationChannel = async () => {
 };
 
 
+let pushListenersReady = false;
+let pushUserId = null;
+
+export async function setupPushNotifications(userId) {
+  if (!Capacitor.isNativePlatform()) return;
+  if (!userId || String(userId).startsWith('guest')) return;
+
+  pushUserId = userId;
+  const platform = Capacitor.getPlatform();
+  const column = platform === 'ios' ? 'ios_push_token' : 'push_token';
+
+  try {
+    if (platform === 'android') await createNotificationChannel();
+
+    let perm = await PushNotifications.checkPermissions();
+    if (perm.receive === 'prompt' || perm.receive === 'prompt-with-rationale') {
+      perm = await PushNotifications.requestPermissions();
+    }
+    if (perm.receive !== 'granted') return;
+
+    if (!pushListenersReady) {
+      pushListenersReady = true;
+
+      await PushNotifications.addListener('registration', async (token) => {
+        const uid = pushUserId;
+        if (!uid || !token.value) return;
+        await supabase.from('profiles').update({ [column]: null })
+          .eq(column, token.value).neq('id', uid);
+        const { error } = await supabase.from('profiles')
+          .update({ [column]: token.value }).eq('id', uid);
+        if (error) console.error('Erro ao salvar token:', error.message);
+      });
+
+      await PushNotifications.addListener('registrationError', (e) => {
+        console.error('Erro no registro de push:', e.error);
+      });
+    }
+
+    await PushNotifications.register();
+  } catch (err) {
+    console.error('Erro ao configurar push:', err);
+  }
+}
+
+export async function clearPushToken(userId) {
+  if (!userId || !Capacitor.isNativePlatform()) return;
+  const column = Capacitor.getPlatform() === 'ios' ? 'ios_push_token' : 'push_token';
+  await supabase.from('profiles').update({ [column]: null }).eq('id', userId);
+}
+
 // ─── DARK MODE CSS ────────────────────────────────────────────────────────────
 const injectDarkModeCSS = (isDark) => {
   document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
