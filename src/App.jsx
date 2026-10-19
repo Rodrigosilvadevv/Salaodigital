@@ -363,7 +363,7 @@ const generateSlug = (name, id) => {
   const normalized = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'-');
   return `${normalized}-${String(id).slice(-4)}`;
 };
-const getPublicUrl = (slug) => `${window.location.origin}/${slug}`;
+const getPublicUrl = (slug) => `${getBaseUrl()}/${slug}`;
 const applyPhoneMask = (value) => {
   const digits = value.replace(/\D/g,'').slice(0,11);
   if (digits.length<=2) return digits;
@@ -3419,7 +3419,7 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb }) => {
   const [copied, setCopied] = useState(false);
 
   const barberId = effectiveUser?.id;
-  const menuUrl = effectiveUser?.slug ? `${window.location.origin}/cardapio/${effectiveUser.slug}` : '';
+  const menuUrl = effectiveUser?.slug ? `${getBaseUrl()}/cardapio/${effectiveUser.slug}` : '';
   const qrUrl = menuUrl ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(menuUrl)}` : '';
 
   const beep = () => {
@@ -5472,23 +5472,34 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [barbers, setBarbers] = useState([]);
   const [appointments, setAppointments] = useState([]);
-  const [showWelcome, setShowWelcome] = useState(true);
   const [loading, setLoading] = useState(true);
   const [isGuestBarber, setIsGuestBarber] = useState(false);
   const [publicBarber, setPublicBarber] = useState(null);
   const [publicComandaNumero, setPublicComandaNumero] = useState(null);
-  const [publicMenuSlug, setPublicMenuSlug] = useState(null); // ← NOVO
+  const [publicMenuSlug, setPublicMenuSlug] = useState(null);
+
+  // Popup de boas-vindas: só na primeira vez no aparelho
+  const [showWelcome, setShowWelcome] = useState(() => {
+    try { return localStorage.getItem('salao_welcome_seen') !== 'true'; }
+    catch (_) { return true; }
+  });
+
+  const handleCloseWelcome = () => {
+    try { localStorage.setItem('salao_welcome_seen', 'true'); } catch (_) {}
+    setShowWelcome(false);
+  };
+
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('salao_dark_mode');
     if (saved !== null) return saved === 'true';
     return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
   });
- 
+
   useEffect(() => {
     injectDarkModeCSS(isDark);
     localStorage.setItem('salao_dark_mode', isDark);
   }, [isDark]);
- 
+
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = (e) => {
@@ -5497,7 +5508,7 @@ export default function App() {
     mediaQuery.addEventListener('change', handleChange);
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
- 
+
   const handleToggleDark = () => {
     setIsDark(d => {
       const newVal = !d;
@@ -5505,16 +5516,16 @@ export default function App() {
       return newVal;
     });
   };
- 
+
   useEffect(() => {
     const checkPublicRoute = async () => {
       const path = window.location.pathname;
       if (!path || path === '/') { setLoading(false); restoreSession(); return; }
- 
+
       // Rota admin
       if (path === '/estrela2016-v2') { setLoading(false); return; }
 
-      // Rota do cardápio público ← NOVO
+      // Rota do cardápio público
       if (path.startsWith('/cardapio/')) {
         const s = path.split('/cardapio/')[1]?.replace(/\/$/, '');
         if (s) { setPublicMenuSlug(s); setLoading(false); return; }
@@ -5525,7 +5536,7 @@ export default function App() {
         const numero = path.split('/comanda/')[1]?.replace(/\/$/, '');
         if (numero) { setPublicComandaNumero(numero); setLoading(false); return; }
       }
- 
+
       const slug = path.replace(/^\//, '').replace(/\/$/, '');
       if (!slug) { setLoading(false); restoreSession(); return; }
       try {
@@ -5535,7 +5546,7 @@ export default function App() {
       setLoading(false);
       restoreSession();
     };
- 
+
     const restoreSession = async () => {
       try {
         const saved = localStorage.getItem('salao_user_data');
@@ -5550,10 +5561,10 @@ export default function App() {
         }
       } catch (err) { console.error('Erro ao restaurar sessão:', err); }
     };
- 
+
     checkPublicRoute();
   }, []);
- 
+
   useEffect(() => {
     const fetchData = async () => {
       const { data: bData } = await supabase.from('profiles').select('*').eq('role', 'barber');
@@ -5573,7 +5584,7 @@ export default function App() {
       }
     };
     if (!loading) fetchData();
- 
+
     // Realtime
     if (!loading && user && !user.isGuest) {
       const channel = supabase.channel(`app-rt-${user.id}`)
@@ -5583,7 +5594,7 @@ export default function App() {
       return () => supabase.removeChannel(channel);
     }
   }, [user, isGuestBarber, loading]);
- 
+
   const handleSelectMode = (mode) => {
     if (mode === 'guest') {
       setUser({ id: 'guest', name: 'Visitante', isGuest: true });
@@ -5598,55 +5609,55 @@ export default function App() {
       setIsGuestBarber(false);
     }
   };
- 
+
   const handleLogin = async (identifier, password, directProfile = null, loginBy = 'phone') => {
-     if (directProfile) {
-       setUser(directProfile);
-       setCurrentMode(directProfile.role);
-       localStorage.setItem('salao_user_data', JSON.stringify(directProfile));
-       return;
-     }
- 
-     let query = supabase.from('profiles').select('*').eq('role', currentMode);
- 
-     if (loginBy === 'email') {
-       query = query.eq('email', identifier).eq('password', password);
-     } else {
-       // telefone: senha é opcional (quem criou antes não tem email)
-       query = query.eq('phone', identifier);
-       if (password) query = query.eq('password', password);
-     }
- 
-     const { data, error } = await query.single();
-     if (error || !data) throw new Error('Dados incorretos. Verifique e tente novamente.');
-     localStorage.setItem('salao_user_data', JSON.stringify(data));
-     setUser(data);
-     setIsGuestBarber(false);
-   };
- 
-   const handleRegister = async (name, phone, password, googleUser = null, email = '') => {
-     const slug = generateSlug(name, Date.now());
-     const { data, error } = await supabase.from('profiles').insert([{
-       name, phone, password,
-       email: email || '',          // ← campo novo na tabela
-       role: currentMode,
-       is_visible: false, has_access: false, plano_ativo: true,
-       my_services: [], available_slots: {}, available_dates: [],
-       avatar_url: googleUser?.avatar_url || '', work_photos: [], custom_services: [],
-       slug, onboarding_done: false, bio: '',
-     }]).select().single();
-     if (error) {
-       if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
-       throw new Error(error.message);
-     }
-     const realSlug = generateSlug(name, data.id);
-     await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
-     const finalData = { ...data, slug: realSlug };
-     localStorage.setItem('salao_user_data', JSON.stringify(finalData));
-     setUser(finalData);
-     setIsGuestBarber(false);
-   };
- 
+    if (directProfile) {
+      setUser(directProfile);
+      setCurrentMode(directProfile.role);
+      localStorage.setItem('salao_user_data', JSON.stringify(directProfile));
+      return;
+    }
+
+    let query = supabase.from('profiles').select('*').eq('role', currentMode);
+
+    if (loginBy === 'email') {
+      query = query.eq('email', identifier).eq('password', password);
+    } else {
+      // telefone: senha é opcional (quem criou antes não tem email)
+      query = query.eq('phone', identifier);
+      if (password) query = query.eq('password', password);
+    }
+
+    const { data, error } = await query.single();
+    if (error || !data) throw new Error('Dados incorretos. Verifique e tente novamente.');
+    localStorage.setItem('salao_user_data', JSON.stringify(data));
+    setUser(data);
+    setIsGuestBarber(false);
+  };
+
+  const handleRegister = async (name, phone, password, googleUser = null, email = '') => {
+    const slug = generateSlug(name, Date.now());
+    const { data, error } = await supabase.from('profiles').insert([{
+      name, phone, password,
+      email: email || '',
+      role: currentMode,
+      is_visible: false, has_access: false, plano_ativo: true,
+      my_services: [], available_slots: {}, available_dates: [],
+      avatar_url: googleUser?.avatar_url || '', work_photos: [], custom_services: [],
+      slug, onboarding_done: false, bio: '',
+    }]).select().single();
+    if (error) {
+      if (error.code === '23505') throw new Error('Este WhatsApp já está cadastrado!');
+      throw new Error(error.message);
+    }
+    const realSlug = generateSlug(name, data.id);
+    await supabase.from('profiles').update({ slug: realSlug }).eq('id', data.id);
+    const finalData = { ...data, slug: realSlug };
+    localStorage.setItem('salao_user_data', JSON.stringify(finalData));
+    setUser(finalData);
+    setIsGuestBarber(false);
+  };
+
   const handleUpdateStatus = async (appointmentId, status) => {
     if (user?.isGuest || isGuestBarber) return;
     const { error } = await supabase.from('appointments').update({ status }).eq('id', appointmentId);
@@ -5655,7 +5666,7 @@ export default function App() {
       else setAppointments(prev => prev.map(a => a.id === appointmentId ? { ...a, status } : a));
     }
   };
- 
+
   const handleUpdateProfile = async (updatedUser) => {
     try {
       const dataToSave = {
@@ -5683,17 +5694,29 @@ export default function App() {
       localStorage.setItem('salao_user_data', JSON.stringify(updatedUser));
     } catch (error) { alert('Erro ao salvar: ' + error.message); }
   };
- 
-  const handleLogout = () => {
+
+  // Sair da conta: encerra também a sessão do Supabase (Apple/Google),
+  // senão o login social volta sozinho ao abrir a tela de entrada.
+  const handleLogout = async () => {
+    // remove o token de push deste aparelho
+    try {
+      if (user?.id && !user?.isGuest) await clearPushToken(user.id);
+    } catch (_) {}
+
+    // encerra a sessão social apenas neste aparelho
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (_) {}
+
     localStorage.removeItem('salao_user_data');
     setUser(null);
     setCurrentMode(null);
     setIsGuestBarber(false);
   };
- 
+
   const isAdminRoute = window.location.pathname === '/estrela2016-v2';
   const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && user.onboarding_done === false;
- 
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
@@ -5702,15 +5725,15 @@ export default function App() {
       </div>
     );
   }
- 
+
   if (isAdminRoute) return <AdminDashboard/>;
-  if (publicMenuSlug) return <PublicMenuPage slug={publicMenuSlug}/>; // ← NOVO
+  if (publicMenuSlug) return <PublicMenuPage slug={publicMenuSlug}/>;
   if (publicComandaNumero) return <ComandaStorefrontPage numero={publicComandaNumero}/>;
   if (publicBarber) return <PublicBarberPage barber={publicBarber}/>;
- 
+
   return (
     <>
-      {showWelcome && !user && <WelcomePopup onClose={() => setShowWelcome(false)}/>}
+      {showWelcome && !user && <WelcomePopup onClose={handleCloseWelcome}/>}
       {!currentMode && !user && (
         <WelcomeScreen onSelectMode={handleSelectMode} isDark={isDark} onToggleDark={handleToggleDark}/>
       )}
