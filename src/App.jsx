@@ -3262,7 +3262,7 @@ useEffect(() => {
           <div className="space-y-1">
             <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl mb-2">
               <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
-              <div className="flex gap-2"><Button variant="secondary" onClick={()=>setView('booking')}>Novo Agendamento</Button><Button variant="outline" className="text-white border-white/20" onClick={()=>setView('history')}>Histórico</Button></div>
+              <div className="flex gap-2"><Button variant="secondary" onClick={()=>setView('booking')}>Novo Agendamento</Button><Button variant="secondary" onClick={()=>setView('history')}>Histórico</Button></div>
             </div>
             <div className="mt-4">
               <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
