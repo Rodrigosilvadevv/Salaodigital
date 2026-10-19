@@ -363,6 +363,8 @@ const generateSlug = (name, id) => {
   const normalized = name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,'').trim().replace(/\s+/g,'-');
   return `${normalized}-${String(id).slice(-4)}`;
 };
+const PUBLIC_BASE_URL = (import.meta.env.VITE_PUBLIC_URL || 'https://salaodigital.onrender.com').replace(/\/$/, '');
+const getBaseUrl = () => (Capacitor.isNativePlatform() ? PUBLIC_BASE_URL : window.location.origin);
 const getPublicUrl = (slug) => `${getBaseUrl()}/${slug}`;
 const applyPhoneMask = (value) => {
   const digits = value.replace(/\D/g,'').slice(0,11);
