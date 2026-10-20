@@ -3894,6 +3894,9 @@ const longPressFired = useRef(false);
 
   const effectiveUser = isGuestBarber ? guestBarberState : user;
   const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
+  useEffect(() => {
+  if (user?.id && !isGuestBarber && !user?.isGuest) setupPushNotifications(user.id);
+}, [user?.id, isGuestBarber]);
 
   const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
   const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
