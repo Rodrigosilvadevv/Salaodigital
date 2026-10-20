@@ -36,6 +36,30 @@ jobs:
           if [ ! -d ios ]; then npx cap add ios; fi
           npx cap sync ios
 
+      - name: Habilitar token de push no AppDelegate
+        run: |
+          python3 - <<'EOF'
+          p = 'ios/App/App/AppDelegate.swift'
+          s = open(p).read()
+          if 'capacitorDidRegisterForRemoteNotifications' not in s:
+              add = '''
+              func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+                  NotificationCenter.default.post(name: .capacitorDidRegisterForRemoteNotifications, object: deviceToken)
+              }
+
+              func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+                  NotificationCenter.default.post(name: .capacitorDidFailToRegisterForRemoteNotifications, object: error)
+              }
+          '''
+              i = s.rstrip().rfind('}')
+              s = s[:i] + add + '\n}\n'
+              open(p, 'w').write(s)
+              print('AppDelegate atualizado')
+          else:
+              print('AppDelegate ja tinha os metodos')
+          EOF
+          grep -n "capacitorDidRegisterForRemoteNotifications" ios/App/App/AppDelegate.swift
+
       - name: Gerar icones do app
         run: |
           ls -la assets
