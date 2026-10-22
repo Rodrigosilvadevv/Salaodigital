@@ -80,7 +80,7 @@ export async function setupPushNotifications(userId) {
           .eq(column, token.value).neq('id', uid);
         const { error } = await supabase.from('profiles')
           .update({ [column]: token.value }).eq('id', uid);
-        if (error) console.error('Erro ao salvar token:', error.message);
+        if (error) console.error('Erro para salvar token:', error.message);
       });
 
       await PushNotifications.addListener('registrationError', (e) => {
