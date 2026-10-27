@@ -2595,9 +2595,93 @@ const TopProfessionalsSection = ({ barbers }) => {
     </div>
   );
 };
-/// ─── PUBLIC BARBER PAGE ───────────────────────────────────────────────────────
+// ⚠️ Se você já colou o DownloadAppSheet e as constantes das lojas em outro arquivo
+// que compartilha o mesmo escopo, apague o bloco "POP UP DE DOWNLOAD" abaixo
+// para não duplicar. Aqui só precisam existir useState, useEffect, useRef e o ícone X.
 
-// Helpers (pode deixar fora do componente)
+// ───────────── POP UP DE DOWNLOAD DO APP ─────────────
+const APP_STORE_URL = 'https://apps.apple.com/br/app/salao-digital/id6821454030';
+const PLAY_STORE_URL = 'https://play.google.com/store/apps/details?id=com.barber.SalaoDigital';
+
+const DownloadAppSheet = ({ open, onClose, title, subtitle }) => {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => setVisible(true), 50);
+      return () => clearTimeout(t);
+    }
+    setVisible(false);
+  }, [open]);
+
+  const close = () => {
+    setVisible(false);
+    setTimeout(onClose, 300);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50">
+      <div
+        onClick={close}
+        className={`absolute inset-0 bg-black/40 transition-opacity duration-300 ${visible ? 'opacity-100' : 'opacity-0'}`}
+      />
+      <div
+        className={`absolute bottom-0 left-0 right-0 bg-white rounded-t-3xl p-6 pb-8 shadow-2xl transition-transform duration-300 ease-out ${visible ? 'translate-y-0' : 'translate-y-full'}`}
+      >
+        <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+        <button onClick={close} className="absolute top-4 right-4 p-2 text-slate-400">
+          <X size={18} />
+        </button>
+        <div className="max-w-md mx-auto text-center">
+          <h3 className="text-xl font-black text-slate-900 mb-1">{title}</h3>
+          <p className="text-sm text-slate-500 mb-5">{subtitle}</p>
+
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            <a
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 bg-slate-900 text-white rounded-2xl py-3.5 active:scale-95 transition-all"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16.37 12.64c-.02-2.2 1.8-3.26 1.88-3.31-1.03-1.5-2.62-1.7-3.19-1.73-1.35-.14-2.65.8-3.34.8-.69 0-1.75-.78-2.88-.76-1.48.02-2.85.86-3.61 2.19-1.54 2.67-.39 6.62 1.1 8.78.73 1.06 1.6 2.25 2.74 2.21 1.1-.04 1.52-.71 2.85-.71 1.33 0 1.71.71 2.88.69 1.19-.02 1.94-1.08 2.66-2.14.84-1.23 1.19-2.42 1.21-2.48-.03-.01-2.3-.88-2.32-3.5zM14.2 6.2c.6-.74 1.01-1.76.9-2.78-.87.04-1.93.58-2.55 1.31-.56.65-1.05 1.69-.92 2.69.97.07 1.96-.49 2.57-1.22z" />
+              </svg>
+              <div className="text-left leading-tight">
+                <p className="text-[8px] font-bold opacity-70 uppercase">Baixar na</p>
+                <p className="text-sm font-black">App Store</p>
+              </div>
+            </a>
+            <a
+              href={PLAY_STORE_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-center gap-2 bg-slate-900 text-white rounded-2xl py-3.5 active:scale-95 transition-all"
+            >
+              <svg width="22" height="22" viewBox="0 0 24 24">
+                <path fill="#00d2ff" d="M3.6 2.3c-.3.3-.5.8-.5 1.4v16.6c0 .6.2 1.1.5 1.4l.1.1 9.3-9.3v-.2L3.7 2.2l-.1.1z" />
+                <path fill="#ffce00" d="M16.1 15.2l-3.1-3.1v-.2l3.1-3.1.1.1 3.7 2.1c1 .6 1 1.5 0 2.1l-3.7 2.1-.1 0z" />
+                <path fill="#ff3a44" d="M16.2 15.1L13 12 3.6 21.4c.3.4.9.4 1.5.1l11.1-6.4" />
+                <path fill="#48ff48" d="M16.2 8.9L5.1 2.5c-.6-.3-1.2-.3-1.5.1L13 12l3.2-3.1z" />
+              </svg>
+              <div className="text-left leading-tight">
+                <p className="text-[8px] font-bold opacity-70 uppercase">Disponível no</p>
+                <p className="text-sm font-black">Google Play</p>
+              </div>
+            </a>
+          </div>
+
+          <button onClick={close} className="text-slate-400 font-bold text-xs py-2">
+            Agora não
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ───────────── FUNÇÕES AUXILIARES ─────────────
 const timeToMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 // Converte "30 min", "1h", "1h30", "1h 30min" em minutos (fallback 30)
@@ -2635,6 +2719,7 @@ const PublicBarberPage = ({ barber }) => {
   const [bookStep,setBookStep]=useState(0), [selectedServices,setSelectedServices]=useState([]), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
   const [menuProducts,setMenuProducts]=useState([]), [menuCategories,setMenuCategories]=useState([]);
   const [lightbox,setLightbox]=useState(null);
+  const [appPrompt,setAppPrompt]=useState(null); // null | 'start' | 'finish'
   const panelRef=useRef(null);
   const rating=getBarberRating(barber), badges=getBadges(barber), workPhotos=barber.work_photos||[];
   const masterServices=(barber.my_services||[]).map(s=>{ const master=MASTER_SERVICES.find(m=>m.id===s.id); return master?{...master,price:s.price}:null; }).filter(Boolean);
@@ -2649,6 +2734,30 @@ const PublicBarberPage = ({ barber }) => {
   const adminTags = Array.isArray(barber.admin_tags) ? barber.admin_tags.filter(Boolean) : [];
   const otherBadges = badges.filter(b => !/^\s*pro\b/i.test(String(b.label || '')));
   const showBadges = adminTags.length > 0 ? otherBadges : badges;
+
+  // ── Pop up de download: aparece ao abrir a página ──
+  useEffect(()=>{
+    const t=setTimeout(()=>setAppPrompt('start'),1200);
+    return()=>clearTimeout(t);
+  },[]);
+
+  // ── Pop up de download: aparece de novo quando o agendamento termina ──
+  useEffect(()=>{
+    if (bookStep!==4) return;
+    const t=setTimeout(()=>setAppPrompt('finish'),900);
+    return()=>clearTimeout(t);
+  },[bookStep]);
+
+  const appSheet=(
+    <DownloadAppSheet
+      open={!!appPrompt}
+      onClose={()=>setAppPrompt(null)}
+      title={appPrompt==='finish'?'Agendamento enviado! 🎉':'Leve a agenda no bolso 📱'}
+      subtitle={appPrompt==='finish'
+        ?'Aproveite e baixe o app Salão Digital.'
+        :'Baixe o app Salão Digital e agende com mais facilidade.'}
+    />
+  );
 
   // ── Vitrine do cardápio (somente visualização) ──
   useEffect(()=>{
@@ -2786,6 +2895,7 @@ const PublicBarberPage = ({ barber }) => {
           </a>
         )}
         <button onClick={resetBooking} className={`${theme.text} font-bold text-sm`}>Fazer outro agendamento</button>
+        {appSheet}
       </div>
     );
   }
@@ -3034,9 +3144,13 @@ const PublicBarberPage = ({ barber }) => {
           <img src={lightbox} alt="Trabalho" className="max-w-full max-h-[85vh] rounded-2xl object-contain"/>
         </div>
       )}
+
+      {/* ══ POP UP DE DOWNLOAD DO APP ══ */}
+      {appSheet}
     </div>
   );
 };
+
 // ─── CLIENT APP ───────────────────────────────────────────────────────────────
 // ─── CARDÁPIO PÚBLICO (CLIENTE) ───────────────────────────────────────────────
 const PublicMenuPage = ({ slug }) => {
