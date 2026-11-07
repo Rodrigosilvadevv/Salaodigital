@@ -4190,7 +4190,7 @@ const goToMonth = (d) => {
   const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
   setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
 };
-const goConfigPrev = () => { if (!isPevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
+const goConfigPrev = () => { if (!isPrevConfigDisabled]]]) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
 const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
 
 const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
