@@ -2763,8 +2763,8 @@ const PublicBarberPage = ({ barber }) => {
       onClose={()=>setAppPrompt(null)}
       title={appPrompt==='finish'?'Agendamento enviado! 🎉':'Leve a agenda no bolso 📱'}
       subtitle={appPrompt==='finish'
-        ?'Aproveite e baixe o app Salão Digital.'
-        :'Baixe o app Salão Digital e agende com mais facilidade.'}
+        ?'Acompanhe seu agendamento no App.'
+        :'Baixe o app Salão Digital e participe de descontos.'}
     />
   );
 
@@ -4190,7 +4190,7 @@ const goToMonth = (d) => {
   const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
   setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
 };
-const goConfigPrev = () => { if (!isPrevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
+const goConfigPrev = () => { if (!isPevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
 const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
 
 const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
@@ -5043,7 +5043,9 @@ const handleRemoveWorkPhoto = async (index) => {
                         for (const b of blocks) await onUpdateStatus(b.id, 'confirmed');
                         const times = blocks.map(b => b.time).filter(Boolean);
                         if (app.date && times.length) await setSlotsAvailability(app.date, times, false);
-                        const msg = `Olá ${app.client_name || app.client}! Seu agendamento foi CONFIRMADO! ✅%0A📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}`;
+                       const msg = encodeURIComponent(
+  `Olá ${app.client_name || app.client}! Seu agendamento foi CONFIRMADO! ✅\n📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}\n\n📲 Baixe o app Salão Digital:\nhttps://salaodigital.app.br/download`
+);
                         const fone = app.phone?.toString().replace(/\D/g,'');
                         if (fone) window.location.href = `https://wa.me/55${fone}?text=${msg}`;
                       } catch (err) { console.error(err); }
@@ -5715,6 +5717,43 @@ const handleRemoveWorkPhoto = async (index) => {
   </div>
 );
 };
+// ─── /download: detecta Android/iOS e manda direto para a loja ───────────────
+const DownloadRedirectPage = () => {
+  const [fallback, setFallback] = useState(false);
+
+  useEffect(() => {
+    const ua = navigator.userAgent || '';
+    const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    const isAndroid = /Android/i.test(ua);
+
+    if (isIOS) window.location.replace(APP_STORE_URL);
+    else if (isAndroid) window.location.replace(PLAY_STORE_URL);
+    else setFallback(true); // computador: mostra os dois botões
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center p-6 text-center">
+      <div className="w-20 h-20 bg-blue-600 rounded-[1.5rem] flex items-center justify-center mb-6 rotate-3 shadow-2xl">
+        <Scissors size={34} className="text-white"/>
+      </div>
+      <h1 className="text-3xl font-black text-white italic mb-2">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
+      {!fallback ? (
+        <>
+          <Loader2 size={24} className="animate-spin text-blue-400 mt-6"/>
+          <p className="text-slate-400 text-xs font-bold mt-3">Abrindo a loja do seu aparelho...</p>
+        </>
+      ) : (
+        <>
+          <p className="text-slate-400 text-sm mb-6">Baixe o aplicativo</p>
+          <div className="w-full max-w-xs space-y-3">
+            <a href={APP_STORE_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">App Store (iPhone)</a>
+            <a href={PLAY_STORE_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">Google Play (Android)</a>
+          </div>
+        </>
+      )}
+    </div>
+  );
+};
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null }; }
   static getDerivedStateFromError(error) { return { error }; }
@@ -5789,7 +5828,8 @@ export default function App() {
 
       // Rota admin
       if (path === '/estrela2016-v2') { setLoading(false); return; }
-
+// Rota de download (redireciona para a loja)
+if (path.replace(/\/$/, '') === '/download') { setLoading(false); return; }
       // Rota do cardápio público
       if (path.startsWith('/cardapio/')) {
         const s = path.split('/cardapio/')[1]?.replace(/\/$/, '');
@@ -5978,10 +6018,10 @@ export default function App() {
     setCurrentMode(null);
     setIsGuestBarber(false);
   };
-
+if (isDownloadRoute) return <DownloadRedirectPage/>;
   const isAdminRoute = window.location.pathname === '/estrela2016-v2';
   const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && user.onboarding_done === false;
-
+const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/download';
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
