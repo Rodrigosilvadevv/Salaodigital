@@ -5719,6 +5719,8 @@ const handleRemoveWorkPhoto = async (index) => {
 };
 // ─── /download: detecta Android/iOS e manda direto para a loja ───────────────
 const DownloadRedirectPage = () => {
+  const IOS_URL = 'https://apps.apple.com/br/app/salao-digital/id6821454030';
+  const ANDROID_URL = 'https://play.google.com/store/apps/details?id=com.barber.SalaoDigital';
   const [fallback, setFallback] = useState(false);
 
   useEffect(() => {
@@ -5726,8 +5728,8 @@ const DownloadRedirectPage = () => {
     const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     const isAndroid = /Android/i.test(ua);
 
-    if (isIOS) window.location.replace(APP_STORE_URL);
-    else if (isAndroid) window.location.replace(PLAY_STORE_URL);
+    if (isIOS) window.location.replace(IOS_URL);
+    else if (isAndroid) window.location.replace(ANDROID_URL);
     else setFallback(true); // computador: mostra os dois botões
   }, []);
 
@@ -5746,8 +5748,8 @@ const DownloadRedirectPage = () => {
         <>
           <p className="text-slate-400 text-sm mb-6">Baixe o aplicativo</p>
           <div className="w-full max-w-xs space-y-3">
-            <a href={APP_STORE_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">App Store (iPhone)</a>
-            <a href={PLAY_STORE_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">Google Play (Android)</a>
+            <a href={IOS_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">App Store (iPhone)</a>
+            <a href={ANDROID_URL} className="block py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95">Google Play (Android)</a>
           </div>
         </>
       )}
@@ -6002,7 +6004,7 @@ if (path.replace(/\/$/, '') === '/download') { setLoading(false); return; }
 
   // Sair da conta: encerra também a sessão do Supabase (Apple/Google),
   // senão o login social volta sozinho ao abrir a tela de entrada.
-  const handleLogout = async () => {
+    const handleLogout = async () => {
     // remove o token de push deste aparelho
     try {
       if (user?.id && !user?.isGuest) await clearPushToken(user.id);
@@ -6018,10 +6020,11 @@ if (path.replace(/\/$/, '') === '/download') { setLoading(false); return; }
     setCurrentMode(null);
     setIsGuestBarber(false);
   };
-if (isDownloadRoute) return <DownloadRedirectPage/>;
+
   const isAdminRoute = window.location.pathname === '/estrela2016-v2';
+  const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/download';
   const isFirstTimeBarber = user && currentMode === 'barber' && !isGuestBarber && user.onboarding_done === false;
-const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/download';
+
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center text-white">
@@ -6031,6 +6034,7 @@ const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/downlo
     );
   }
 
+  if (isDownloadRoute) return <DownloadRedirectPage/>;
   if (isAdminRoute) return <AdminDashboard/>;
   if (publicMenuSlug) return <PublicMenuPage slug={publicMenuSlug}/>;
   if (publicComandaNumero) return <ComandaStorefrontPage numero={publicComandaNumero}/>;
@@ -6047,7 +6051,7 @@ const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/downlo
           onLogin={handleLogin} onRegister={handleRegister}
           isDark={isDark} onToggleDark={handleToggleDark}/>
       )}
-        {user && (
+      {user && (
         currentMode === 'barber'
           ? isFirstTimeBarber
             ? <BarberOnboarding user={user} supabase={supabase}
@@ -6077,8 +6081,7 @@ const isDownloadRoute = window.location.pathname.replace(/\/$/, '') === '/downlo
               MASTER_SERVICES={MASTER_SERVICES}
               isDark={isDark}
               onToggleDark={handleToggleDark}/>
-      
-         )}
+      )}
     </>
   );
 }
