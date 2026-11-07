@@ -2072,14 +2072,23 @@ const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
 
   const filteredTimeSlots = duration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
   const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
-  const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
-  const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
-  const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
-  const slotsForSelectedDay = availableSlots[selectedDateConfig] || [];
+ const slotsForSelectedDay = availableSlots[selectedDateConfig] || [];
+  const currentMonthIndex = today.getFullYear() * 12 + today.getMonth();
+const configMonthIndex = configCalYear * 12 + configCalMonth;
+const isPastMonth = configMonthIndex < currentMonthIndex;
+const isPrevConfigDisabled = configMonthIndex <= currentMonthIndex - 12; // volta até 12 meses
 
+const goToMonth = (d) => {
+  setConfigCalYear(d.getFullYear());
+  setConfigCalMonth(d.getMonth());
+  const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+  setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
+};
+const goConfigPrev = () => { if (!isPrevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
+const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
   const toggleSlotForDate = (date, slot) => {
     const slotsForDay = [...(availableSlots[date] || [])];
-    const isOpen = slotsForDay.includes(slot);
+     const isOpen = slotsForDay.includes(slot);
     const updatedDaySlots = isOpen ? slotsForDay.filter(s => s !== slot) : [...slotsForDay, slot].sort();
     setAvailableSlots(prev => ({ ...prev, [date]: updatedDaySlots }));
   };
@@ -3967,16 +3976,116 @@ const ShopBarSection = ({ effectiveUser, isGuestBarber, sb }) => {
     </div>
   );
 };
+// ─── RESUMO DO MÊS PASSADO ────────────────────────────────────────────────────
+const PastMonthSummary = ({ year, month, appointments }) => {
+  const data = useMemo(() => {
+    const prefix = `${year}-${String(month + 1).padStart(2, '0')}-`;
+    const daysInMonth = getDaysInMonth(year, month);
+    const list = appointments.filter(a => typeof a.date === 'string' && a.date.startsWith(prefix));
 
+    const byWeekday = Array(7).fill(0);
+    const weeks = [0, 0, 0, 0, 0];
+    const byService = {};
+    let revenue = 0;
+    const days = new Set();
+
+    list.forEach(a => {
+      const day = Number(a.date.slice(8, 10));
+      if (day < 1 || day > daysInMonth) return;
+      days.add(day);
+      byWeekday[new Date(year, month, day).getDay()]++;
+      weeks[Math.min(4, Math.floor((day - 1) / 7))]++;
+      revenue += Number(a.price) || 0;
+      const svc = a.service_name || a.service || 'Serviço';
+      byService[svc] = (byService[svc] || 0) + 1;
+    });
+
+    return {
+      total: list.length,
+      revenue,
+      daysWorked: days.size,
+      ticket: list.length ? revenue / list.length : 0,
+      byWeekday,
+      weeks,
+      topServices: Object.entries(byService).sort((a, b) => b[1] - a[1]).slice(0, 4),
+    };
+  }, [year, month, appointments]);
+
+  const brl = (v) => `R$ ${v.toFixed(2).replace('.', ',')}`;
+
+  if (data.total === 0) {
+    return (
+      <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-center">
+        <p className="text-2xl mb-1">📭</p>
+        <p className="text-xs font-bold text-slate-500">Nenhum atendimento em {MONTH_NAMES[month]} {year}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <h4 className="font-black text-xs text-slate-900 uppercase tracking-tight flex items-center gap-2">
+        <BarChart2 size={16} className="text-blue-500"/> Como foi {MONTH_NAMES[month]} {year}
+      </h4>
+
+      <div className="grid grid-cols-2 gap-2">
+        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3">
+          <p className="text-[9px] font-black text-blue-500 uppercase">Atendimentos</p>
+          <p className="text-xl font-black text-slate-900">{data.total}</p>
+        </div>
+        <div className="bg-green-50 border border-green-100 rounded-2xl p-3">
+          <p className="text-[9px] font-black text-green-600 uppercase">Faturamento</p>
+          <p className="text-lg font-black text-slate-900">{brl(data.revenue)}</p>
+        </div>
+        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+          <p className="text-[9px] font-black text-slate-500 uppercase">Dias trabalhados</p>
+          <p className="text-xl font-black text-slate-900">{data.daysWorked}</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3">
+          <p className="text-[9px] font-black text-amber-600 uppercase">Ticket médio</p>
+          <p className="text-lg font-black text-slate-900">{brl(data.ticket)}</p>
+        </div>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-3">
+        <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Atendimentos por semana</p>
+        <SimpleBarChart
+          data={data.weeks.map((v, i) => ({ label: `Sem ${i + 1}`, value: v })).filter((w, i) => i < 4 || w.value > 0)}
+          color="#3b82f6" height={72}/>
+      </div>
+
+      <div className="bg-white border border-slate-200 rounded-2xl p-3">
+        <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Por dia da semana</p>
+        <SimpleBarChart
+          data={['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label, i) => ({ label, value: data.byWeekday[i] }))}
+          color="#8b5cf6" height={72}/>
+      </div>
+
+      {data.topServices.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-3">
+          <p className="text-[10px] font-black text-slate-500 uppercase mb-2">Serviços mais feitos</p>
+          <div className="space-y-1.5">
+            {data.topServices.map(([name, qty]) => (
+              <div key={name} className="flex items-center justify-between text-[11px]">
+                <span className="font-bold text-slate-700 truncate pr-2">{name}</span>
+                <span className="font-black text-blue-600">{qty}x</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase: sb, isGuestBarber, isDark, onToggleDark }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const today = new Date();
-  const [selectedDateConfig, setSelectedDateConfig] = useState(today.toISOString().split('T')[0]);
-  const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
-  const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+ const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
+  const [selectedDateConfig, setSelectedDateConfig] = useState(localISO(today));
+ const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
   const [showAllPending, setShowAllPending] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualSlotTarget, setManualSlotTarget] = useState(null);
@@ -4068,11 +4177,23 @@ const longPressFired = useRef(false);
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [confirmed, manualAppointments]);
 
-  const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
-  const isPrevConfigDisabled = configCalYear === today.getFullYear() && configCalMonth === today.getMonth();
-  const goConfigPrev = () => { if (!isPrevConfigDisabled) { const d = new Date(configCalYear, configCalMonth - 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); } };
-  const goConfigNext = () => { const d = new Date(configCalYear, configCalMonth + 1, 1); setConfigCalYear(d.getFullYear()); setConfigCalMonth(d.getMonth()); };
-  const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
+ const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
+
+const currentMonthIndex = today.getFullYear() * 12 + today.getMonth();
+const configMonthIndex = configCalYear * 12 + configCalMonth;
+const isPastMonth = configMonthIndex < currentMonthIndex;
+const isPrevConfigDisabled = configMonthIndex <= currentMonthIndex - 12; // volta até 12 meses
+
+const goToMonth = (d) => {
+  setConfigCalYear(d.getFullYear());
+  setConfigCalMonth(d.getMonth());
+  const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+  setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
+};
+const goConfigPrev = () => { if (!isPrevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
+const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
+
+const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
 
   const setSlotAvailability = async (date, slot, makeAvailable) => {
     const currentSlots = effectiveUser.available_slots || {};
@@ -5331,12 +5452,17 @@ const handleRemoveWorkPhoto = async (index) => {
                       <ChevronRight size={18}/>
                     </button>
                   </div>
- 
-                  <div className="flex gap-2 mb-3">
-                    <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
-                    <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
-                  </div>
- 
+ {isPastMonth ? (
+  <button onClick={() => goToMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
+    className="w-full mb-3 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">
+    ↩ Voltar para o mês atual
+  </button>
+) : (
+  <div className="flex gap-2 mb-3">
+    <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
+    <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
+  </div>
+)}
                   {/* Aviso do toque longo */}
                   <div className="flex items-center justify-center gap-1.5 mb-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
                     <Clock size={12} className="text-blue-500"/>
@@ -5406,7 +5532,9 @@ const handleRemoveWorkPhoto = async (index) => {
                       <span className="text-[9px] text-slate-500 font-bold">Agendado</span>
                     </div>
                   </div>
- 
+                      {isPastMonth ? (
+  <PastMonthSummary year={configCalYear} month={configCalMonth} appointments={allAppointments}/>
+) : (
                   <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
                     <div className="flex items-center justify-between mb-2">
                       <div>
@@ -5473,8 +5601,11 @@ const handleRemoveWorkPhoto = async (index) => {
                         );
                       })}
                     </div>
+                   
                   </div>
+                 )}
                 </div>
+                
               )}
             </section>
  
@@ -5584,6 +5715,21 @@ const handleRemoveWorkPhoto = async (index) => {
   </div>
 );
 };
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(error) { return { error }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 20, fontFamily: 'monospace', fontSize: 12, color: '#b91c1c', whiteSpace: 'pre-wrap' }}>
+          <b>Erro:</b>{'\n'}{String(this.state.error?.message || this.state.error)}{'\n\n'}
+          {String(this.state.error?.stack || '').split('\n').slice(0, 6).join('\n')}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
  
 // ─── APP PRINCIPAL ────────────────────────────────────────────────────────────
 export default function App() {
@@ -5861,24 +6007,26 @@ export default function App() {
           onLogin={handleLogin} onRegister={handleRegister}
           isDark={isDark} onToggleDark={handleToggleDark}/>
       )}
-      {user && (
+        {user && (
         currentMode === 'barber'
           ? isFirstTimeBarber
             ? <BarberOnboarding user={user} supabase={supabase}
                 onComplete={u => { setUser(u); localStorage.setItem('salao_user_data', JSON.stringify(u)); }}
                 onSkip={u => { setUser(u); localStorage.setItem('salao_user_data', JSON.stringify(u)); }}/>
-            : <BarberDashboard
-                user={user}
-                appointments={appointments}
-                onLogout={handleLogout}
-                onUpdateStatus={handleUpdateStatus}
-                onUpdateProfile={handleUpdateProfile}
-                MASTER_SERVICES={MASTER_SERVICES}
-                GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS}
-                supabase={supabase}
-                isGuestBarber={isGuestBarber}
-                isDark={isDark}
-                onToggleDark={handleToggleDark}/>
+            : <ErrorBoundary>
+                <BarberDashboard
+                  user={user}
+                  appointments={appointments}
+                  onLogout={handleLogout}
+                  onUpdateStatus={handleUpdateStatus}
+                  onUpdateProfile={handleUpdateProfile}
+                  MASTER_SERVICES={MASTER_SERVICES}
+                  GLOBAL_TIME_SLOTS={GLOBAL_TIME_SLOTS}
+                  supabase={supabase}
+                  isGuestBarber={isGuestBarber}
+                  isDark={isDark}
+                  onToggleDark={handleToggleDark}/>
+              </ErrorBoundary>
           : <ClientApp
               user={user}
               barbers={barbers}
@@ -5889,7 +6037,8 @@ export default function App() {
               MASTER_SERVICES={MASTER_SERVICES}
               isDark={isDark}
               onToggleDark={handleToggleDark}/>
-      )}
+      
+         )}
     </>
   );
 }
