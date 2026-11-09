@@ -2724,7 +2724,8 @@ const dateLabel = (dateStr) => {
   return `${wd} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
 };
 
-const PublicBarberPage = ({ barber }) => {
+// [AJUSTE 1] novas props: embedded (dentro do app) e clientUser (cliente logado)
+const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   const [bookStep,setBookStep]=useState(0), [selectedServices,setSelectedServices]=useState([]), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
   const [menuProducts,setMenuProducts]=useState([]), [menuCategories,setMenuCategories]=useState([]);
   const [lightbox,setLightbox]=useState(null);
@@ -2736,6 +2737,14 @@ const PublicBarberPage = ({ barber }) => {
   const services=[...masterServices,...customServices];
   const barberPhone=String(barber.phone||'').replace(/\D/g,'');
 
+  // [AJUSTE 2] preenche nome e telefone quando é o cliente logado do app
+  useEffect(()=>{
+    if (clientUser && !clientUser.isGuest) {
+      setClientName(clientUser.name||'');
+      setClientPhone(applyPhoneMask(String(clientUser.phone||'')));
+    }
+  },[clientUser?.id]);
+
   // ── Cor escolhida no cardápio ──
   const theme = MENU_THEMES[barber.menu_color] || MENU_THEMES.blue;
 
@@ -2745,14 +2754,16 @@ const PublicBarberPage = ({ barber }) => {
   const showBadges = adminTags.length > 0 ? otherBadges : badges;
 
   // ── Pop up de download: aparece ao abrir a página ──
+  // [AJUSTE 3] não aparece quando está dentro do app
   useEffect(()=>{
+    if (embedded) return;
     const t=setTimeout(()=>setAppPrompt('start'),1200);
     return()=>clearTimeout(t);
   },[]);
 
   // ── Pop up de download: aparece de novo quando o agendamento termina ──
   useEffect(()=>{
-    if (bookStep!==4) return;
+    if (bookStep!==4||embedded) return;
     const t=setTimeout(()=>setAppPrompt('finish'),900);
     return()=>clearTimeout(t);
   },[bookStep]);
@@ -2859,7 +2870,16 @@ const PublicBarberPage = ({ barber }) => {
     setSelectedDate(null); setSelectedTime(null);
   };
 
-  const resetBooking=()=>{ setBookStep(0); setSelectedServices([]); setSelectedDate(null); setSelectedTime(null); setClientName(''); setClientPhone(''); };
+  // Ao cancelar/refazer, mantém nome e telefone do cliente logado preenchidos
+  const resetBooking=()=>{
+    setBookStep(0); setSelectedServices([]); setSelectedDate(null); setSelectedTime(null);
+    if (clientUser && !clientUser.isGuest) {
+      setClientName(clientUser.name||'');
+      setClientPhone(applyPhoneMask(String(clientUser.phone||'')));
+    } else {
+      setClientName(''); setClientPhone('');
+    }
+  };
 
   const handleSubmitBooking=async()=>{
     if (!clientName.trim()||!clientPhone.trim()) { alert('Preencha seu nome e WhatsApp.'); return; }
@@ -2869,7 +2889,8 @@ const PublicBarberPage = ({ barber }) => {
       // Uma linha por bloco ocupado (ex: 2 serviços de 30min = 14:00 e 14:30)
       const startIdx = GLOBAL_TIME_SLOTS.indexOf(selectedTime);
       const blocks = GLOBAL_TIME_SLOTS.slice(startIdx, startIdx + slotsNeeded);
-      const base = { date:selectedDate, barber_id:barber.id, client_id:null, client_name:clientName.trim(), phone:clientPhone.trim(), status:'pending' };
+      // [AJUSTE 4] liga o agendamento ao cliente logado (é isso que conta as moedas)
+      const base = { date:selectedDate, barber_id:barber.id, client_id:(clientUser&&!clientUser.isGuest)?clientUser.id:null, client_name:clientName.trim(), phone:clientPhone.trim(), status:'pending' };
       const rows = blocks.map((t,i)=>({
         ...base,
         time: t,
@@ -2918,7 +2939,8 @@ const PublicBarberPage = ({ barber }) => {
       <div className={`${theme.solid} pb-10 pt-12 px-6 relative overflow-hidden`}>
         {barber.avatar_url&&<img src={barber.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-125"/>}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/70"/>
-        <a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-white/60 hover:text-white transition-colors">Login</a>
+        {/* [AJUSTE 5] esconde o "Login" quando está dentro do app */}
+        {!embedded&&<a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-white/60 hover:text-white transition-colors">Login</a>}
 
         <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
           <div className="mb-4">
@@ -3328,183 +3350,1104 @@ const PublicMenuPage = ({ slug }) => {
     </div>
   );
 };
+const COIN_COST_FREE_CUT = 10;   // moedas para trocar por 1 corte (igual ao LOYALTY_REDEEM_COINS do profissional)
+const DEFAULT_COIN_VALUE = 5;    // usado SÓ na demonstração (FAKE_BONUS_COINS). O valor real vem de barber.coin_value
+const FAKE_BONUS_COINS = 0;      // coloque 7, por exemplo, para ver a tela de moedas "cheia"
 
+const normText = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+const isContinuationApp = (a) => typeof a?.service_name === 'string' && a.service_name.endsWith(' (continuação)');
+const brlMoney = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+const clientTimeToMin = (t) => { const [h, m] = String(t || '00:00').split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+const CLIENT_SUB_STATUS = {
+  ativa:     { l: 'Ativa',     c: 'bg-green-100 text-green-700' },
+  pausada:   { l: 'Pausada',   c: 'bg-amber-100 text-amber-700' },
+  cancelada: { l: 'Cancelada', c: 'bg-slate-200 text-slate-500' },
+};
+
+// Nuvenzinha com a bio do profissional
+const BioCloud = ({ text, inline = false, index = 0 }) => {
+  if (!text) return inline ? null : <div className="h-7" />;
+  return (
+    <div className={`flex flex-col ${inline ? 'items-start' : 'items-center'} max-w-full`}>
+      <div className="cloud-float relative bg-white border border-sky-100 rounded-full px-3 py-1 shadow-sm max-w-full"
+        style={{ animationDelay: `${(index % 5) * 0.6}s` }}>
+        <p className="text-[10px] font-bold italic text-blue-600 truncate">"{text}"</p>
+      </div>
+      {!inline && (
+        <div className="flex flex-col items-center mt-0.5">
+          <span className="w-1.5 h-1.5 bg-white border border-sky-100 rounded-full" />
+          <span className="w-1 h-1 bg-white border border-sky-100 rounded-full mt-0.5" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+const ProAvatar = ({ barber, size = 56 }) => (
+  <StoryRing rating={getBarberRating(barber)} size={size}>
+    {barber.avatar_url
+      ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name} />
+      : <div className="w-full h-full flex items-center justify-center bg-slate-200"><User size={Math.round(size / 3)} className="text-slate-400" /></div>}
+  </StoryRing>
+);
+
+// Card do carrossel da home
+const ProCarouselCard = ({ barber, onOpen, index, isDark }) => {
+  const rating = getBarberRating(barber);
+  const dk = isDark ? { color: '#ffffff' } : undefined;
+  return (
+    <button onClick={() => onOpen(barber)}
+      className="flex-shrink-0 snap-start w-[152px] bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden active:scale-95 transition-all text-left">
+      <div className="relative bg-gradient-to-br from-slate-800 to-slate-900 pt-4 pb-6 flex flex-col items-center">
+        {barber.featured_rank && (
+          <div className="absolute top-2 left-2 bg-amber-500 rounded-full px-1.5 py-0.5 text-[8px] font-black text-white">★{barber.featured_rank}</div>
+        )}
+        <BioCloud text={barber.bio} index={index} />
+        <div className="mt-1"><ProAvatar barber={barber} size={72} /></div>
+      </div>
+      <div className="px-3 pt-3 pb-3">
+        <p className="font-black text-slate-900 text-xs leading-tight truncate" style={dk}>{barber.name}</p>
+        <div className="flex items-center gap-1.5 mt-1">
+          <StarRating rating={rating} />
+          <span className="text-[9px] font-black text-amber-500">{rating}</span>
+        </div>
+        {barber.distanceLabel && (
+          <div className="flex items-center gap-0.5 mt-1.5">
+            <MapPin size={9} className="text-blue-400" />
+            <span className="text-[9px] font-bold text-blue-500">{barber.distanceLabel}</span>
+          </div>
+        )}
+        <p className="mt-2 text-[9px] font-black text-blue-600 uppercase tracking-tight flex items-center gap-0.5">Ver perfil <ChevronRight size={10} /></p>
+      </div>
+    </button>
+  );
+};
+
+// Card da assinatura do cliente (somente leitura: quem registra os usos é o profissional)
+const ClientSubscriptionCard = ({ sub, barber, isDark, onOpenPro }) => {
+  const dk = isDark ? { color: '#ffffff' } : undefined;
+  const today = localISO(new Date());
+  const limited = Number(sub.uses_per_month) > 0;
+  const used = Number(sub.uses_in_cycle) || 0;
+  const left = limited ? Math.max(0, Number(sub.uses_per_month) - used) : null;
+  const pct = limited ? Math.min(100, (used / Number(sub.uses_per_month)) * 100) : 0;
+  const overdue = sub.status === 'ativa' && sub.renews_at && sub.renews_at < today;
+  const st = overdue ? { l: 'Vencida', c: 'bg-red-100 text-red-600' } : (CLIENT_SUB_STATUS[sub.status] || CLIENT_SUB_STATUS.ativa);
+  const renewLabel = sub.renews_at ? sub.renews_at.split('-').reverse().join('/') : '—';
+  const border = overdue ? 'border-l-red-500' : sub.status === 'ativa' ? 'border-l-purple-500' : 'border-l-slate-300';
+
+  return (
+    <div className={`bg-white rounded-2xl border border-slate-100 border-l-4 ${border} shadow-sm p-4`}>
+      <div className="flex items-center gap-3 mb-3">
+        {barber
+          ? <ProAvatar barber={barber} size={44} />
+          : <div className="w-11 h-11 rounded-full bg-slate-100 flex items-center justify-center"><User size={16} className="text-slate-400" /></div>}
+        <div className="flex-1 min-w-0">
+          <p className="font-black text-slate-900 text-sm truncate" style={dk}>{sub.plan_name}</p>
+          <p className="text-[10px] text-purple-600 font-bold truncate">com {barber?.name || 'Profissional'} · {brlMoney(sub.price)}/mês</p>
+        </div>
+        <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase flex-shrink-0 ${st.c}`}>{st.l}</span>
+      </div>
+
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-bold text-slate-500">Usos neste ciclo</span>
+          <span className="text-[10px] font-black text-slate-900" style={dk}>
+            {limited ? `${used}/${sub.uses_per_month}` : `${used} · ilimitado`}
+          </span>
+        </div>
+        {limited && (
+          <>
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-700 ${left === 0 ? 'bg-red-400' : 'bg-gradient-to-r from-purple-400 to-purple-600'}`} style={{ width: `${pct}%` }} />
+            </div>
+            <p className="text-[10px] font-bold text-slate-400 mt-1">
+              {left === 0 ? 'Você usou todos os cortes deste ciclo' : `Restam ${left} ${left === 1 ? 'uso' : 'usos'} neste ciclo`}
+            </p>
+          </>
+        )}
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="bg-slate-50 rounded-xl p-2 text-center border border-slate-100">
+          <p className="text-sm font-black" style={{ color: '#0f172a' }}>{sub.total_uses || 0}</p>
+          <p className="text-[8px] font-bold text-slate-400 uppercase">Usos total</p>
+        </div>
+        <div className="bg-amber-50 rounded-xl p-2 text-center border border-amber-100">
+          <p className="text-sm font-black text-amber-600">🪙 {sub.coins_earned || 0}</p>
+          <p className="text-[8px] font-bold text-amber-600 uppercase">Moedas</p>
+        </div>
+        <div className={`rounded-xl p-2 text-center border ${overdue ? 'bg-red-50 border-red-100' : 'bg-slate-50 border-slate-100'}`}>
+          <p className="text-sm font-black" style={{ color: overdue ? '#ef4444' : '#0f172a' }}>{renewLabel.split('/').slice(0, 2).join('/')}</p>
+          <p className="text-[8px] font-bold text-slate-400 uppercase">{overdue ? 'Venceu' : 'Renova'}</p>
+        </div>
+      </div>
+
+      {overdue && (
+        <p className="text-[10px] font-bold text-red-500 bg-red-50 border border-red-100 rounded-xl px-3 py-2 mt-3">
+          Sua assinatura venceu em {renewLabel}. Fale com seu profissional para renovar.
+        </p>
+      )}
+      {barber && (
+        <button onClick={() => onOpenPro(barber)} className="w-full mt-3 py-2.5 bg-purple-50 text-purple-600 rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all">
+          Ver perfil e agendar
+        </button>
+      )}
+    </div>
+  );
+};
+
+// ─── CLIENT APP ───────────────────────────────────────────────────────────────
 const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onUpdateStatus, MASTER_SERVICES: MS, isDark, onToggleDark }) => {
-  const [view,setView]=useState('home'), [step,setStep]=useState(1), [bookingData,setBookingData]=useState({service:null,barber:null,price:null,date:null,time:null}), [userCoords,setUserCoords]=useState(null);
-  const handleDeleteAccount=async()=>{
+  const emptyBooking = { service: null, barber: null, price: null, date: null, time: null };
+  const [view, setView] = useState('home'); // home | search | wallet | history | booking | success | profile
+  const [step, setStep] = useState(1);
+  const [bookingData, setBookingData] = useState(emptyBooking);
+  const [userCoords, setUserCoords] = useState(null);
+  const [query, setQuery] = useState('');
+  const [profileBarber, setProfileBarber] = useState(null);
+  const [profileBack, setProfileBack] = useState('home');
+  const [subs, setSubs] = useState([]);                       // assinaturas do cliente
+  const [rescheduleInfo, setRescheduleInfo] = useState(null); // { ids, date, time } do horário que está sendo trocado
+
+  // Texto branco no modo noite (nomes e títulos que ficavam escuros em cima do fundo escuro)
+  const dk = isDark ? { color: '#ffffff' } : undefined;
+
+  const handleDeleteAccount = async () => {
     if (!window.confirm("Deseja realmente excluir sua conta? Todos os seus dados serão apagados permanentemente.")) return;
-    try { await supabase.from('appointments').delete().eq('client_id',user.id); await supabase.from('profiles').delete().eq('id',user.id); alert("Conta removida."); onLogout(); }
-    catch(error) { alert("Erro ao excluir. Tente novamente."); }
+    try { await supabase.from('appointments').delete().eq('client_id', user.id); await supabase.from('profiles').delete().eq('id', user.id); alert("Conta removida."); onLogout(); }
+    catch (error) { alert("Erro ao excluir. Tente novamente."); }
   };
-  useEffect(()=>{ if ("geolocation" in navigator) navigator.geolocation.getCurrentPosition(pos=>setUserCoords({lat:pos.coords.latitude,lng:pos.coords.longitude}),err=>console.error(err.message),{enableHighAccuracy:true}); },[]);
-  const processedBarbers=useMemo(()=>(barbers||[]).filter(b=>b.is_visible).map(b=>{ const dist=calculateDistance(userCoords?.lat,userCoords?.lng,b.latitude,b.longitude); const label=dist!==null?(dist<1?`${Math.floor(dist*1000)} m`:`${dist.toFixed(1)} km`):null; return {...b,distance:dist,distanceLabel:label}; }).sort((a,b)=>{ if (a.distance===null) return 1; if (b.distance===null) return -1; return a.distance-b.distance; }),[barbers,userCoords]);
-  const LOW_AVAILABILITY_THRESHOLD=3; // se sobrarem até 3 horários livres no dia, eles ficam amarelos (pouca vaga)
-  const availableTimesToday=useMemo(()=>{
-    if (!bookingData.date||!bookingData.barber) return [];
-    const daySlots=bookingData.barber?.available_slots?.[bookingData.date]||[];
-    const now=new Date();
-    const [y,m,d]=bookingData.date.split('-').map(Number);
-    const isToday=y===now.getFullYear()&&(m-1)===now.getMonth()&&d===now.getDate();
-    return GLOBAL_TIME_SLOTS.filter(t=>{
+
+  useEffect(() => {
+    if ("geolocation" in navigator) navigator.geolocation.getCurrentPosition(
+      pos => setUserCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      err => console.error(err.message),
+      { enableHighAccuracy: true }
+    );
+  }, []);
+
+  useEffect(() => {
+    if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
+  }, [user?.id]);
+
+  useEffect(() => { window.scrollTo(0, 0); }, [view]);
+
+  // Saiu do fluxo de agendamento sem confirmar → o reagendamento é descartado e o horário antigo continua valendo
+  useEffect(() => {
+    if (view !== 'booking' && view !== 'profile') setRescheduleInfo(null);
+  }, [view]);
+
+  // ── Assinaturas: vincula as que o profissional cadastrou pelo telefone e carrega as do cliente ──
+  const loadSubs = useCallback(async () => {
+    if (!user?.id || user?.isGuest) return;
+    try {
+      try { await supabase.rpc('claim_my_subscriptions'); } catch (_) {} // se a função ainda não existe, segue sem ela
+      const { data, error } = await supabase.from('subscriptions').select('*').eq('client_id', String(user.id)).order('created_at', { ascending: false });
+      if (error) throw error;
+      setSubs(data || []);
+    } catch (e) {
+      console.warn('Assinaturas indisponíveis:', e?.message || e); // tabelas ainda não criadas: a seção simplesmente não aparece
+    }
+  }, [user?.id, user?.isGuest]);
+
+  useEffect(() => { if (view === 'home' || view === 'wallet') loadSubs(); }, [view, loadSubs]);
+
+  const processedBarbers = useMemo(() => (barbers || []).filter(b => b.is_visible).map(b => {
+    const dist = calculateDistance(userCoords?.lat, userCoords?.lng, b.latitude, b.longitude);
+    const label = dist !== null ? (dist < 1 ? `${Math.floor(dist * 1000)} m` : `${dist.toFixed(1)} km`) : null;
+    return { ...b, distance: dist, distanceLabel: label };
+  }).sort((a, b) => { if (a.distance === null) return 1; if (b.distance === null) return -1; return a.distance - b.distance; }), [barbers, userCoords]);
+
+  const featuredPros = useMemo(() => {
+    const list = processedBarbers.filter(b => (b.my_services || []).length > 0 || b.avatar_url);
+    return [...list].sort((a, b) => {
+      const fa = a.featured_rank || 99, fb = b.featured_rank || 99;
+      if (fa !== fb) return fa - fb;
+      return getBarberRating(b) - getBarberRating(a);
+    }).slice(0, 10);
+  }, [processedBarbers]);
+
+  const searchResults = useMemo(() => {
+    const q = normText(query);
+    if (!q) return [];
+    return processedBarbers.filter(b => normText(b.name).includes(q));
+  }, [query, processedBarbers]);
+
+  // ── Moedas: 1 corte confirmado = 1 moeda + moedas extras das assinaturas ──
+  const myApps = useMemo(
+    () => (appointments || []).filter(a => String(a.client_id) === String(user?.id) && !isContinuationApp(a)),
+    [appointments, user?.id]
+  );
+  const pendingCoins = myApps.filter(a => a.status === 'pending').length;
+
+  const coinsByPro = useMemo(() => {
+    const map = {};
+    const ensure = (id) => {
+      if (!map[id]) {
+        const b = (barbers || []).find(x => String(x.id) === id);
+        // coinValue 0 = o profissional ainda não definiu quanto vale a moeda
+        map[id] = { id, barber: b || null, name: b?.name || 'Profissional', coins: 0, subCoins: 0, coinValue: Number(b?.coin_value) || 0 };
+      }
+      return map[id];
+    };
+    myApps.filter(a => a.status === 'confirmed').forEach(a => { ensure(String(a.barber_id)).coins += 1; });
+    subs.forEach(s => {
+      const c = Number(s.coins_earned) || 0;
+      if (c > 0) { const e = ensure(String(s.barber_id)); e.coins += c; e.subCoins += c; }
+    });
+    let list = Object.values(map);
+    if (FAKE_BONUS_COINS > 0 && list.length === 0) {
+      list = [{ id: 'demo', barber: null, name: 'Profissional Demo', coins: FAKE_BONUS_COINS, subCoins: 0, coinValue: DEFAULT_COIN_VALUE }];
+    }
+    return list.sort((a, b) => b.coins - a.coins);
+  }, [myApps, barbers, subs]);
+
+  const totalCoins = coinsByPro.reduce((s, p) => s + p.coins, 0);
+  const totalCoinsValue = coinsByPro.reduce((s, p) => s + p.coins * p.coinValue, 0);
+  const bestCoins = coinsByPro[0]?.coins || 0;
+  const missingForCut = Math.max(0, COIN_COST_FREE_CUT - bestCoins);
+  const activeSubs = subs.filter(s => s.status === 'ativa');
+  const homeSub = activeSubs[0] || null;
+
+  // Próximo horário: compara data E hora (antes um horário de hoje que já passou continuava aparecendo)
+  const nextApp = useMemo(() => {
+    const nowDt = new Date();
+    return myApps
+      .filter(a => (a.status === 'pending' || a.status === 'confirmed') && a.date && a.time && new Date(`${a.date}T${a.time}`) >= nowDt)
+      .sort((a, b) => new Date(`${a.date}T${a.time}`) - new Date(`${b.date}T${b.time}`))[0] || null;
+  }, [myApps]);
+
+  const LOW_AVAILABILITY_THRESHOLD = 3;
+  const availableTimesToday = useMemo(() => {
+    if (!bookingData.date || !bookingData.barber) return [];
+    const daySlots = bookingData.barber?.available_slots?.[bookingData.date] || [];
+    const now = new Date();
+    const [y, m, d] = bookingData.date.split('-').map(Number);
+    const isToday = y === now.getFullYear() && (m - 1) === now.getMonth() && d === now.getDate();
+    return GLOBAL_TIME_SLOTS.filter(t => {
       if (!daySlots.includes(t)) return false;
       if (isToday) {
-        const [th,tm]=t.split(':').map(Number);
-        if (th<now.getHours()||(th===now.getHours()&&tm<=now.getMinutes())) return false;
+        const [th, tm] = t.split(':').map(Number);
+        if (th < now.getHours() || (th === now.getHours() && tm <= now.getMinutes())) return false;
       }
       return true;
     });
-  },[bookingData.date,bookingData.barber]);
-  const handleFinish=async()=>{
-    try {
-      if (user?.isGuest) { alert("Para realizar um agendamento real, por favor crie sua conta!"); onLogout(); return; }
-      if (!bookingData.date||!bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
-      const payload={date:bookingData.date,time:bookingData.time,barber_id:bookingData.barber?.id,client_id:user?.id,client_name:user?.name||"Cliente",phone:user?.phone||"Sem telefone",service_name:bookingData.service?.name||"Serviço",price:Number(bookingData.price)||0,status:'pending'};
-      if (!payload.barber_id) { alert("Erro: profissional não encontrado."); return; }
-      const {error}=await supabase.from('appointments').insert([payload]);
-      if (error) throw error;
-      setView('success');
-    } catch(error) { alert("Falha ao agendar: "+error.message); }
+  }, [bookingData.date, bookingData.barber]);
+
+  // ── Ações ──
+  const openProfile = (barber, from) => {
+    setProfileBarber(barber);
+    setProfileBack(from);
+    setView('profile');
+    window.scrollTo(0, 0);
+  };
+  const closeProfile = () => { setView(profileBack); };
+
+  const startBooking = () => { setRescheduleInfo(null); setBookingData(emptyBooking); setStep(1); setView('booking'); };
+
+  const handleRedeemFake = () => {
+    alert('Em breve! Quando o profissional ativar as moedas, você poderá trocar por cortes 💈');
   };
 
-useEffect(() => {
-  if (user?.id && !user?.isGuest) setupPushNotifications(user.id);
-}, [user?.id]);
+  // Devolve o id do atendimento + os das linhas "(continuação)" dele (serviços que ocupam mais de um horário)
+  const getMyBlockIds = (app) => {
+    const ids = [app.id];
+    if (!app.time) return ids;
+    const step30 = GLOBAL_TIME_SLOTS.length > 1 ? (clientTimeToMin(GLOBAL_TIME_SLOTS[1]) - clientTimeToMin(GLOBAL_TIME_SLOTS[0])) || 30 : 30;
+    const conts = (appointments || []).filter(c =>
+      isContinuationApp(c) && c.time && c.date === app.date &&
+      String(c.barber_id) === String(app.barber_id) &&
+      (String(c.client_id) === String(app.client_id) || (c.client_name && c.client_name === app.client_name))
+    );
+    const used = new Set();
+    let last = app.time;
+    while (true) {
+      const next = conts.find(c => !used.has(c.id) && clientTimeToMin(c.time) - clientTimeToMin(last) === step30);
+      if (!next) break;
+      used.add(next.id);
+      ids.push(next.id);
+      last = next.time;
+    }
+    return ids;
+  };
 
-  if (view==='success') return <div className="min-h-screen flex flex-col items-center justify-center p-8 text-center bg-white"><Check size={60} className="text-green-500 mb-4"/><h2 className="text-2xl font-bold mb-8">Agendamento Realizado!</h2><Button onClick={()=>{ setView('home'); setStep(1); }}>Voltar ao Início</Button></div>;
+  // Reagendar: o horário antigo SÓ é cancelado depois que o novo for confirmado
+  const startReschedule = (app, professional) => {
+    if (!professional) { alert('Este profissional não está disponível no momento.'); return; }
+    if (!window.confirm('Reagendar? Seu horário atual só será cancelado quando você confirmar o novo.')) return;
+    const serviceObj = MS.find(s => s.name === app.service_name) || { id: `custom-${app.id}`, name: app.service_name || 'Serviço', duration: '' };
+    setRescheduleInfo({ ids: getMyBlockIds(app), date: app.date, time: app.time });
+    setBookingData({ service: serviceObj, barber: professional, price: app.price, date: null, time: null });
+    setView('booking'); setStep(3);
+  };
+
+  const handleFinish = async () => {
+    try {
+      if (user?.isGuest) { alert("Para realizar um agendamento real, por favor crie sua conta!"); onLogout(); return; }
+      if (!bookingData.date || !bookingData.time) { alert("Por favor, selecione o dia e o horário antes de confirmar."); return; }
+      const payload = { date: bookingData.date, time: bookingData.time, barber_id: bookingData.barber?.id, client_id: user?.id, client_name: user?.name || "Cliente", phone: user?.phone || "Sem telefone", service_name: bookingData.service?.name || "Serviço", price: Number(bookingData.price) || 0, status: 'pending' };
+      if (!payload.barber_id) { alert("Erro: profissional não encontrado."); return; }
+      const { error } = await supabase.from('appointments').insert([payload]);
+      if (error) throw error;
+      // Novo horário salvo → agora sim cancela o antigo (se era um reagendamento)
+      if (rescheduleInfo?.ids?.length && typeof onUpdateStatus === 'function') {
+        for (const id of rescheduleInfo.ids) {
+          try { await onUpdateStatus(id, 'rejected'); } catch (e) { console.error('Erro ao cancelar horário antigo:', e); }
+        }
+      }
+      setRescheduleInfo(null);
+      setView('success');
+    } catch (error) { alert("Falha ao agendar: " + error.message); }
+  };
+
+
+ // ───────────── MOEDAS + ASSINATURAS: dados derivados ─────────────
+  // COLE ESTE BLOCO logo depois de onde `coinsByPro`, `subs` e `barbers` já existem
+  // e ANTES do primeiro `if (view === ...)`. São só constantes simples (sem hooks).
+  const coinValueOf = (b) => Number(b?.coin_value) || 0;
+
+  // Planos de assinatura que o profissional criou no LoyaltySection.
+  // Formato esperado em profiles.subscription_plans (array JSON):
+  // { id, name, price, uses_per_month (0 = ilimitado), bonus_coins (moedas extras por uso), active }
+  const plansOf = (b) => (Array.isArray(b?.subscription_plans) ? b.subscription_plans : [])
+    .filter(p => p && p.active !== false && Number(p.price) > 0);
+
+  // Quem oferece moedas (valor da moeda definido), com o saldo do cliente em cada um
+  const prosWithCoins = (barbers || [])
+    .filter(b => coinValueOf(b) > 0)
+    .map(b => {
+      const mine = (coinsByPro || []).find(p => String(p.id) === String(b.id));
+      return { barber: b, coinValue: coinValueOf(b), myCoins: mine?.coins || 0, plans: plansOf(b) };
+    })
+    .sort((a, b) => b.myCoins - a.myCoins || b.coinValue - a.coinValue);
+
+  // Profissionais com planos de assinatura disponíveis
+  const prosWithPlans = prosWithCoins.filter(p => p.plans.length > 0);
+
+  // Saldo por assinatura do cliente (usos restantes + moedas ganhas pelo plano)
+  const subBalance = (s) => {
+    const limited = Number(s.uses_per_month) > 0;
+    const used = Number(s.uses_in_cycle) || 0;
+    const left = limited ? Math.max(0, Number(s.uses_per_month) - used) : null;
+    const pro = (coinsByPro || []).find(p => String(p.id) === String(s.barber_id));
+    const b = (barbers || []).find(x => String(x.id) === String(s.barber_id));
+    const subCoins = pro?.subCoins || 0;
+    const cv = coinValueOf(b);
+    return { limited, used, left, subCoins, subValue: subCoins * cv, coinValue: cv, barber: b || null };
+  };
+  const totalSubCoins = (subs || []).reduce((acc, s) => acc + subBalance(s).subCoins, 0);
+  const totalSubValue = (subs || []).reduce((acc, s) => acc + subBalance(s).subValue, 0);
+
+  // ───────────── PERFIL DO PROFISSIONAL (a página do link, dentro do app) ─────────────
+  if (view === 'profile' && profileBarber) {
+    return (
+      <div className="relative">
+        <button onClick={closeProfile}
+          className="fixed left-4 z-[500] flex items-center gap-1.5 pl-2.5 pr-4 py-2.5 bg-white text-slate-900 rounded-full shadow-xl border border-slate-100 font-black text-xs active:scale-95 transition-all"
+          style={{ top: 'calc(env(safe-area-inset-top, 0px) + 12px)' }}>
+          <ArrowLeft size={16} /> Voltar
+        </button>
+        <PublicBarberPage key={profileBarber.id} barber={profileBarber} embedded clientUser={user} />
+      </div>
+    );
+  }
+
+  // ───────────── SUCESSO ─────────────
+  if (view === 'success') {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col items-center justify-center p-8 text-center">
+        <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-green-200 animate-bounce"><CheckCircle size={48} className="text-white" /></div>
+        <h2 className="text-3xl font-black text-slate-900 mb-2">Agendamento enviado! 🎉</h2>
+        <p className="text-slate-500 text-sm mb-6">{bookingData.barber?.name || 'O profissional'} vai confirmar em breve.</p>
+        <div className="w-full max-w-xs bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-8 flex items-center gap-3 text-left">
+          <span className="text-3xl">🪙</span>
+          <p className="text-xs font-bold text-amber-700">Quando o corte for confirmado, você ganha 1 moeda!</p>
+        </div>
+        <div className="w-full max-w-xs space-y-3">
+          <button onClick={() => { setBookingData(emptyBooking); setStep(1); setView('home'); }}
+            className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm active:scale-95 transition-all shadow-lg">Voltar ao início</button>
+          <button onClick={() => { setBookingData(emptyBooking); setStep(1); setView('history'); }}
+            className="w-full py-3 text-blue-600 font-bold text-sm">Ver meus agendamentos</button>
+        </div>
+      </div>
+    );
+  }
+
+  const firstName = ((user?.name || '').split(' ')[0]) || 'Cliente';
+  const showNav = ['home', 'search', 'wallet', 'history'].includes(view);
+  const stepTitles = ['Escolha o serviço', 'Escolha o profissional', 'Data e hora'];
+  const navTabs = ['home', 'search', 'wallet', 'history'];
+  const navLabels = { home: 'Início', search: 'Buscar', wallet: 'Moedas', history: 'Agenda' };
+  const navIcons = { home: Home, search: Search, wallet: Gift, history: Calendar };
+
+  // Linha de profissional (busca)
+  const renderProRow = (b, i) => (
+    <button key={b.id} onClick={() => openProfile(b, 'search')}
+      className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 active:scale-[0.98] transition-all text-left">
+      <ProAvatar barber={b} size={60} />
+      <div className="flex-1 min-w-0">
+        <p className="font-black text-slate-900 text-sm truncate" style={dk}>{b.name}</p>
+        <div className="mt-1"><BioCloud text={b.bio} inline index={i} /></div>
+        <div className="flex items-center gap-2 mt-1.5">
+          <StarRating rating={getBarberRating(b)} />
+          {b.distanceLabel && <span className="text-[10px] font-black text-blue-500 flex items-center gap-0.5"><MapPin size={9} />{b.distanceLabel}</span>}
+        </div>
+      </div>
+      <ChevronRight size={18} className="text-slate-300 flex-shrink-0" />
+    </button>
+  );
+
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
-      <header className="bg-white p-4 flex justify-between items-center border-b shadow-sm sticky top-0 z-20">
-        <h1 className="font-black italic">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
-        <div className="flex items-center gap-3">
-          <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
-          <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1"><LogOut size={14}/> {user?.isGuest?'Entrar':'Sair'}</button>
+    <div className="min-h-screen bg-slate-50 pb-24">
+      <style>{`
+        @keyframes cloudFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        .cloud-float { animation: cloudFloat 4s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .cloud-float { animation: none; } }
+      `}</style>
+
+      {/* ══ HEADER ══ */}
+      <header className="bg-white px-5 py-3.5 flex justify-between items-center border-b border-slate-100 sticky top-0 z-20">
+        <h1 className="font-black italic text-lg text-slate-900">SALÃO<span className="text-blue-600">DIGITAL</span></h1>
+        <div className="flex items-center gap-2.5">
+          <button onClick={() => setView('search')} title="Buscar profissional"
+            className="w-[34px] h-[34px] rounded-full bg-slate-100 flex items-center justify-center text-slate-600 active:scale-90 transition-all"><Search size={16} /></button>
+          <DarkModeToggle isDark={isDark} onToggle={onToggleDark} />
+          <button onClick={onLogout} className="text-red-500 font-bold text-xs flex items-center gap-1"><LogOut size={14} /> {user?.isGuest ? 'Entrar' : 'Sair'}</button>
         </div>
       </header>
-      <main className="p-6 max-w-md mx-auto">
-        {view==='home'&&(
-          <div className="space-y-1">
-            <div className="bg-slate-900 p-6 rounded-3xl text-white shadow-xl mb-2">
-              <h2 className="text-xl font-bold mb-4 italic">Olá, {user.name.split(' ')[0]}</h2>
-              <div className="flex gap-2"><Button variant="secondary" onClick={()=>setView('booking')}>Novo Agendamento</Button><Button variant="secondary" onClick={()=>setView('history')}>Histórico</Button></div>
-            </div>
-            <div className="mt-4">
-              <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Galeria</h3>
-              <div className="flex gap-2 overflow-x-auto pb-4">
-                {[imgMp,imgMao].map((img,i)=><div key={i} className="w-[280px] h-[200px] bg-slate-200 rounded-2xl overflow-hidden flex-shrink-0 shadow-sm border border-slate-100"><img src={img} alt="Galeria" className="w-full h-full object-cover"/></div>)}
+
+      <main className="p-5 max-w-md mx-auto">
+
+        {/* ══════════ HOME ══════════ */}
+        {view === 'home' && (
+          <div className="space-y-6">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-800 via-slate-900 to-black p-6 text-white shadow-xl">
+              <div className="absolute -top-12 -right-12 w-44 h-44 bg-blue-600/30 rounded-full blur-3xl" />
+              <div className="relative">
+                <p className="text-white/50 text-xs font-bold mb-0.5">Bem-vindo de volta</p>
+                <h2 className="text-2xl font-black italic mb-4">Olá, {firstName}</h2>
+                <button onClick={() => setView('wallet')}
+                  className="inline-flex items-center gap-2 bg-white/10 border border-white/15 rounded-full pl-2.5 pr-3 py-1.5 mb-5 active:scale-95 transition-all">
+                  <span className="text-base">🪙</span>
+                  <span className="text-xs font-black">{totalCoins} {totalCoins === 1 ? 'moeda' : 'moedas'}</span>
+                  <ChevronRight size={12} className="text-white/60" />
+                </button>
+                <div className="flex gap-2">
+                  <button onClick={startBooking}
+                    className="flex-1 py-3.5 bg-white text-slate-900 rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg">
+                    <CalendarDays size={17} /> Agendar horário
+                  </button>
+                  <button onClick={() => setView('history')} title="Meus agendamentos"
+                    className="px-4 py-3.5 bg-white/10 text-white rounded-2xl flex items-center justify-center active:scale-95 transition-all hover:bg-white/20">
+                    <History size={17} />
+                  </button>
+                </div>
               </div>
             </div>
-            <TopProfessionalsSection barbers={processedBarbers}/>
-          </div>
-        )}
-        {view==='history'&&(
-          <div className="space-y-4">
-            <button onClick={()=>setView('home')} className="text-slate-400 font-bold text-sm mb-4 flex items-center gap-1"><ArrowLeft size={16}/> Voltar</button>
-            <div className="flex justify-between items-end mb-4">
-              <h3 className="font-bold text-lg text-slate-900">Meus Agendamentos</h3>
-              <button onClick={handleDeleteAccount} className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5">Excluir Conta</button>
-            </div>
-            {(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).length===0
-              ? <div className="p-10 text-center border-2 border-dashed border-slate-200 rounded-2xl text-slate-400 text-sm">Ainda não tem agendamentos.</div>
-              : <div className="space-y-3">{(appointments||[]).filter(a=>String(a.client_id)===String(user.id)).sort((a,b)=>new Date(`${b.date}T${b.time}`)-new Date(`${a.date}T${a.time}`)).map(app=>{
-                  const professional=(barbers||[]).find(b=>String(b.id)===String(app.barber_id));
-                  return (
-                    <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                      <div className="flex gap-3 items-center">
-                        <div className="w-10 h-10 bg-slate-50 rounded-full flex items-center justify-center text-slate-400"><User size={18}/></div>
-                        <div><p className="font-bold text-slate-900 text-sm">{app.service_name}</p><p className="text-[10px] text-blue-600 font-bold">Profissional: {professional?.name||"Profissional"}</p><p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10}/>{app.date?.split('-').reverse().join('/')} às {app.time}</p></div>
-                      </div>
-                      <button onClick={()=>{ if (window.confirm("Reagendar? O horário atual será cancelado.")) { const serviceObj=MS.find(s=>s.name===app.service_name); setBookingData({service:serviceObj,barber:professional,price:app.price}); if (typeof onUpdateStatus==='function') onUpdateStatus(app.id,'rejected'); setView('booking'); setStep(3); } }} className="flex flex-col items-center gap-1 p-2 text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><CalendarDays size={20}/><span className="text-[9px] font-bold uppercase">Reagendar</span></button>
+
+            {/* Busca */}
+            <button onClick={() => setView('search')}
+              className="w-full flex items-center gap-3 bg-white border-2 border-slate-100 rounded-2xl px-4 py-3.5 shadow-sm active:scale-[0.98] transition-all text-left">
+              <Search size={18} className="text-slate-400" />
+              <span className="text-sm font-bold text-slate-400">Buscar profissional pelo nome</span>
+            </button>
+
+            {/* Próximo agendamento */}
+            {nextApp && (() => {
+              const pro = (barbers || []).find(b => String(b.id) === String(nextApp.barber_id));
+              const confirmedNext = nextApp.status === 'confirmed';
+              return (
+                <section>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Seu próximo horário</p>
+                  <div className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3 border-l-4 ${confirmedNext ? 'border-slate-100 border-l-green-500' : 'border-slate-100 border-l-orange-400'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-slate-900 text-sm truncate" style={dk}>{nextApp.service_name}</p>
+                      <p className="text-[11px] text-blue-600 font-bold truncate">com {pro?.name || 'Profissional'}</p>
+                      <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10} /> {dateLabel(nextApp.date)} às {nextApp.time}</p>
                     </div>
-                  );
-                })}</div>}
+                    <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase ${confirmedNext ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-600'}`}>
+                      {confirmedNext ? 'Confirmado' : 'Pendente'}
+                    </span>
+                  </div>
+                </section>
+              );
+            })()}
+
+            {/* Minha assinatura (aparece só para quem é assinante) */}
+            {homeSub && (() => {
+              const pro = (barbers || []).find(b => String(b.id) === String(homeSub.barber_id));
+              const limited = Number(homeSub.uses_per_month) > 0;
+              const used = Number(homeSub.uses_in_cycle) || 0;
+              const left = limited ? Math.max(0, Number(homeSub.uses_per_month) - used) : null;
+              return (
+                <button onClick={() => setView('wallet')}
+                  className="w-full text-left bg-white rounded-2xl border border-slate-100 border-l-4 border-l-purple-500 shadow-sm p-4 flex items-center gap-3 active:scale-[0.98] transition-all">
+                  <div className="w-10 h-10 bg-purple-50 rounded-xl flex items-center justify-center flex-shrink-0"><Award size={18} className="text-purple-600" /></div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 text-sm truncate" style={dk}>{homeSub.plan_name}</p>
+                    <p className="text-[11px] text-purple-600 font-bold truncate">com {pro?.name || 'Profissional'}</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">
+                      {limited ? (left === 0 ? 'Cortes do ciclo todos usados' : `Restam ${left} ${left === 1 ? 'uso' : 'usos'} neste ciclo`) : 'Cortes ilimitados neste ciclo'}
+                    </p>
+                  </div>
+                  <ChevronRight size={16} className="text-slate-300 flex-shrink-0" />
+                </button>
+              );
+            })()}
+
+            {/* Moedas (mini) */}
+            <button onClick={() => setView('wallet')}
+              className="w-full text-left bg-gradient-to-br from-amber-400 to-orange-400 rounded-3xl p-5 shadow-lg shadow-amber-100 active:scale-[0.98] transition-all">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 bg-white/25 rounded-2xl flex items-center justify-center text-2xl">🪙</div>
+                  <div>
+                    <p className="text-white font-black text-sm">Suas moedas</p>
+                    <p className="text-white/80 text-[10px] font-bold">Cada corte vale 1 moeda</p>
+                  </div>
+                </div>
+                <p className="text-white font-black text-3xl">{totalCoins}</p>
+              </div>
+              <div className="h-2.5 bg-white/30 rounded-full overflow-hidden">
+                <div className="h-full bg-white rounded-full transition-all duration-700" style={{ width: `${Math.min(100, (bestCoins / COIN_COST_FREE_CUT) * 100)}%` }} />
+              </div>
+              <p className="text-white/90 text-[10px] font-bold mt-2">
+                {missingForCut === 0 ? 'Você já pode trocar por um corte! 🎉' : `Faltam ${missingForCut} ${missingForCut === 1 ? 'moeda' : 'moedas'} para trocar por um corte`}
+              </p>
+            </button>
+
+            {/* Galeria */}
+            <section>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Galeria</p>
+              <div className="flex gap-3 overflow-x-auto pb-2 -mx-5 px-5 snap-x">
+                {[imgMp, imgMao].map((img, i) => (
+                  <div key={i} className="snap-start w-[280px] h-[190px] bg-slate-200 rounded-3xl overflow-hidden flex-shrink-0 shadow-md">
+                    <img src={img} alt="Galeria" className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Profissionais */}
+            {featuredPros.length > 0 && (
+              <section>
+                <div className="flex items-center justify-between mb-3 px-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Profissionais</p>
+                  <button onClick={() => setView('search')} className="text-[10px] font-black text-blue-600 flex items-center gap-1"><Search size={10} /> Buscar</button>
+                </div>
+                <div className="flex gap-3 overflow-x-auto pb-3 -mx-5 px-5 snap-x">
+                  {featuredPros.map((b, i) => <ProCarouselCard key={b.id} barber={b} index={i} isDark={isDark} onOpen={(x) => openProfile(x, 'home')} />)}
+                </div>
+              </section>
+            )}
           </div>
         )}
-        {view==='booking'&&(
+
+        {/* ══════════ BUSCA ══════════ */}
+        {view === 'search' && (
           <div className="space-y-4">
-            <button onClick={()=>setStep(step-1)} className={`${step===1?'hidden':'block'} text-slate-400 font-bold text-sm mb-2`}>← Voltar</button>
-            {step===1&&(
-              <div className="flex flex-col h-full relative">
-                <div className="flex-1 pb-24">
-                  <h3 className="font-bold text-lg mb-4 text-slate-900">Escolha o Serviço</h3>
-                  <div className="space-y-3">{MS.map(s=>(
-                    <Card key={s.id} selected={bookingData.service?.id===s.id} onClick={()=>setBookingData({...bookingData,service:s})}>
-                      <div className="flex items-center justify-between w-full">
-                        <div className="flex items-center gap-3"><div className={`p-2 rounded-lg transition-colors ${bookingData.service?.id===s.id?'bg-blue-600 text-white':'bg-slate-100'}`}>{s.icon}</div><div><p className="font-bold text-slate-900">{s.name}</p><p className="text-xs text-slate-400 font-medium">{s.duration}</p></div></div>
-                        {bookingData.service?.id===s.id&&<div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"/>}
-                      </div>
-                    </Card>
-                  ))}</div>
+            <div>
+              <h2 className="text-xl font-black text-slate-900" style={dk}>Buscar profissional</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Digite o nome e abra o perfil dele aqui mesmo</p>
+            </div>
+            <div className="relative">
+              <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input autoFocus type="text" value={query} onChange={e => setQuery(e.target.value)}
+                placeholder="Nome do profissional"
+                className="w-full pl-11 pr-11 py-4 bg-white border-2 border-slate-200 rounded-2xl text-sm font-bold outline-none focus:border-blue-500 shadow-sm transition-colors" />
+              {query && (
+                <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center"><X size={14} /></button>
+              )}
+            </div>
+
+            {normText(query) ? (
+              searchResults.length === 0 ? (
+                <div className="py-14 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                  <Search size={26} className="mx-auto text-slate-300 mb-2" />
+                  <p className="text-sm font-black text-slate-500">Nenhum profissional encontrado</p>
+                  <p className="text-[11px] text-slate-400 mt-1">Confira se o nome está certinho</p>
                 </div>
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
-                  <div className="max-w-md mx-auto"><Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.service?'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none':'bg-blue-600 text-white active:scale-95'}`} onClick={()=>setStep(2)} disabled={!bookingData.service}>{bookingData.service?`Próximo: ${bookingData.service.name}`:'Selecione um serviço'}</Button></div>
+              ) : (
+                <div className="space-y-2.5">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{searchResults.length} {searchResults.length === 1 ? 'resultado' : 'resultados'}</p>
+                  {searchResults.map((b, i) => renderProRow(b, i))}
                 </div>
+              )
+            ) : (
+              <div className="space-y-2.5">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Perto de você</p>
+                {processedBarbers.length === 0
+                  ? <p className="text-center text-slate-400 text-sm py-10">Nenhum profissional disponível ainda.</p>
+                  : processedBarbers.slice(0, 8).map((b, i) => renderProRow(b, i))}
               </div>
             )}
-            {step===2&&(
-              <div className="flex flex-col h-full relative">
-                <div className="flex-1 pb-24">
-                  <h3 className="font-bold text-lg mb-2 text-slate-900">Escolha o Profissional</h3>
-                  <div className="grid grid-cols-2 gap-3">{processedBarbers.filter(b=>b.my_services?.some(s=>s.id===bookingData.service?.id)).map(b=>{
-                    const displayPrice=b.my_services?.find(s=>s.id===bookingData.service?.id)?.price||0, isSelected=bookingData.barber?.id===b.id, rating=getBarberRating(b);
+          </div>
+        )}
+
+        {/* ══════════ MOEDAS + ASSINATURAS ══════════ */}
+        {view === 'wallet' && (
+          <div className="space-y-5">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 p-6 text-white shadow-xl shadow-amber-100">
+              <div className="absolute -bottom-10 -right-6 text-[140px] opacity-20 leading-none select-none">🪙</div>
+              <div className="relative">
+                <p className="text-white/80 text-xs font-bold">Suas moedas</p>
+                <p className="text-5xl font-black my-1">{totalCoins}</p>
+                <p className="text-white/90 text-xs font-bold">
+                  {totalCoins === 0 ? 'Faça seu primeiro corte e comece a juntar'
+                    : totalCoinsValue > 0 ? `Equivale a ${brlMoney(totalCoinsValue)} em cortes`
+                    : 'Cada profissional define quanto vale a moeda dele'}
+                </p>
+                {pendingCoins > 0 && (
+                  <span className="inline-block mt-3 bg-white/25 rounded-full px-3 py-1 text-[10px] font-black">
+                    +{pendingCoins} {pendingCoins === 1 ? 'moeda a caminho' : 'moedas a caminho'} (aguardando confirmação)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Minhas assinaturas + saldo (só aparece para quem é assinante) */}
+            {subs.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Minhas assinaturas</p>
+                  {totalSubCoins > 0 && (
+                    <span className="text-[10px] font-black text-purple-600">💎 {totalSubCoins} {totalSubCoins === 1 ? 'moeda' : 'moedas'}{totalSubValue > 0 ? ` · ${brlMoney(totalSubValue)}` : ''}</span>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  {subs.map(s => {
+                    const bal = subBalance(s);
                     return (
-                      <div key={b.id} onClick={()=>setBookingData({...bookingData,barber:b,price:displayPrice})} className={`relative flex flex-col items-center p-4 rounded-2xl border-2 transition-all cursor-pointer ${isSelected?'border-slate-900 bg-slate-50':'border-white bg-white shadow-sm'}`}>
-                        <div className="mb-2"><StoryRing rating={rating} size={64}>{b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt="avatar"/>:<div className="w-full h-full flex items-center justify-center bg-slate-200"><User size={20} className="text-slate-400"/></div>}</StoryRing></div>
-                        <p className="font-bold text-sm truncate w-full text-center text-slate-900 mt-1">{b.name}</p>
-                        {b.bio&&<p className="text-[8px] text-blue-500 font-bold italic text-center truncate w-full">"{b.bio}"</p>}
-                        <BadgeList barber={b} small/>
-                        {b.distanceLabel&&<p className="text-[10px] text-blue-600 font-black flex items-center gap-1 mt-1"><MapPin size={10}/>{b.distanceLabel}</p>}
-                        <p className="mt-2 text-green-600 font-black text-sm">R$ {displayPrice}</p>
+                      <div key={s.id} className="space-y-2">
+                        <ClientSubscriptionCard
+                          sub={s}
+                          barber={bal.barber}
+                          isDark={isDark}
+                          onOpenPro={(b) => openProfile(b, 'wallet')}
+                        />
+                        {/* Saldo da assinatura */}
+                        <div className="grid grid-cols-3 gap-2 -mt-1">
+                          <div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 text-center">
+                            <p className="text-[8px] font-black text-purple-400 uppercase">Usos restantes</p>
+                            <p className="text-sm font-black text-purple-700">{bal.limited ? bal.left : '∞'}</p>
+                          </div>
+                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-2.5 text-center">
+                            <p className="text-[8px] font-black text-amber-500 uppercase">Moedas do plano</p>
+                            <p className="text-sm font-black text-amber-600">🪙 {bal.subCoins}</p>
+                          </div>
+                          <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 text-center">
+                            <p className="text-[8px] font-black text-green-500 uppercase">Equivale a</p>
+                            <p className="text-sm font-black text-green-600">{bal.coinValue > 0 ? brlMoney(bal.subValue) : '—'}</p>
+                          </div>
+                        </div>
                       </div>
                     );
-                  })}</div>
-                </div>
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
-                  <div className="max-w-md mx-auto"><Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.barber?'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none':'bg-blue-600 text-white active:scale-95'}`} onClick={()=>setStep(3)} disabled={!bookingData.barber}>Próximo</Button></div>
+                  })}
                 </div>
               </div>
             )}
-            {step===3&&(
-              <div className="flex flex-col h-full relative">
-                <div className="flex-1 pb-24">
-                  <h3 className="font-bold text-lg mb-4">Data e Hora</h3>
-                  <MonthCalendar availableSlots={bookingData.barber?.available_slots} selectedDate={bookingData.date} onSelectDate={dateStr=>setBookingData({...bookingData,date:dateStr,time:null})}/>
-                  <div className="mt-6">
-                    {bookingData.date?<>
-                      <label className="text-xs font-bold text-slate-500 uppercase mb-2 block">Horários para {bookingData.date.split('-').reverse().join('/')}</label>
-                      <div className="grid grid-cols-4 gap-2">
-                        {GLOBAL_TIME_SLOTS.map(t=>{ 
-                          let isPast = false;
-                          if (bookingData.date) {
-                            const [y, m, d] = bookingData.date.split('-').map(Number);
-                            const now = new Date();
-                            if (y === now.getFullYear() && (m - 1) === now.getMonth() && d === now.getDate()) {
-                              const [th, tm] = t.split(':').map(Number);
-                              if (th < now.getHours() || (th === now.getHours() && tm <= now.getMinutes())) {
-                                isPast = true;
-                              }
-                            }
-                          }
-                          const isAvail = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t) && !isPast;
-                          const isLow = isAvail && availableTimesToday.length<=LOW_AVAILABILITY_THRESHOLD;
-                          const slotColor = bookingData.time===t?'bg-slate-900 text-white shadow-lg scale-105':!isAvail?'bg-red-50 text-red-300 border border-red-100 cursor-not-allowed':isLow?'bg-amber-50 text-amber-700 border border-amber-200 hover:border-amber-400':'bg-green-50 text-green-700 border border-green-200 hover:border-green-400';
-                          return <button key={t} disabled={!isAvail} onClick={()=>setBookingData({...bookingData,time:t})} className={`py-2 rounded-lg font-bold text-xs transition-all ${slotColor}`}>{t}</button>; 
+
+            {/* Quem oferece moedas e quanto vale cada uma */}
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Quem oferece moedas</p>
+              {prosWithCoins.length === 0 ? (
+                <div className="py-8 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                  <p className="text-2xl mb-1">🪙</p>
+                  <p className="text-sm font-black text-slate-500">Nenhum profissional definiu o valor da moeda ainda</p>
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {prosWithCoins.map(({ barber: b, coinValue, myCoins, plans }) => (
+                    <button key={b.id} onClick={() => openProfile(b, 'wallet')}
+                      className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 active:scale-[0.98] transition-all text-left">
+                      <ProAvatar barber={b} size={48} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-slate-900 text-sm truncate" style={dk}>{b.name}</p>
+                        <p className="text-[11px] text-amber-600 font-black">🪙 1 moeda = {brlMoney(coinValue)}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          {COIN_COST_FREE_CUT} moedas = {brlMoney(coinValue * COIN_COST_FREE_CUT)} de desconto
+                          {plans.length > 0 ? ` · 💎 ${plans.length} ${plans.length === 1 ? 'plano' : 'planos'}` : ''}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className="text-[9px] text-slate-400 font-bold uppercase">Você tem</p>
+                        <p className="font-black text-amber-500">🪙 {myCoins}</p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Planos de assinatura disponíveis */}
+            {prosWithPlans.length > 0 && (
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Planos de assinatura</p>
+                <div className="space-y-3">
+                  {prosWithPlans.map(({ barber: b, coinValue, plans }) => (
+                    <div key={b.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4">
+                      <div className="flex items-center gap-3 mb-3">
+                        <ProAvatar barber={b} size={40} />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-black text-slate-900 text-sm truncate" style={dk}>{b.name}</p>
+                          <p className="text-[10px] text-amber-600 font-bold">Moeda vale {brlMoney(coinValue)}</p>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {plans.map(pl => {
+                          const unlimited = !(Number(pl.uses_per_month) > 0);
+                          const bonus = Number(pl.bonus_coins) || 0;
+                          const alreadySub = (subs || []).some(s => String(s.barber_id) === String(b.id) && String(s.plan_id ?? s.plan_name) === String(pl.id ?? pl.name));
+                          return (
+                            <div key={pl.id || pl.name} className="rounded-2xl border border-purple-100 bg-purple-50/60 p-3">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="font-black text-sm" style={{ color: '#0f172a' }}>{pl.name}</p>
+                                  <p className="text-[10px] text-slate-500 font-bold mt-0.5">
+                                    {unlimited ? 'Cortes ilimitados' : `${pl.uses_per_month} ${Number(pl.uses_per_month) === 1 ? 'uso' : 'usos'} por mês`}
+                                  </p>
+                                  {bonus > 0 && (
+                                    <p className="text-[10px] text-purple-600 font-black mt-0.5">
+                                      💎 +{bonus} {bonus === 1 ? 'moeda' : 'moedas'} a cada uso{coinValue > 0 ? ` (${brlMoney(bonus * coinValue)})` : ''}
+                                    </p>
+                                  )}
+                                </div>
+                                <p className="font-black text-green-600 text-base flex-shrink-0">{brlMoney(Number(pl.price))}<span className="text-[9px] text-slate-400">/mês</span></p>
+                              </div>
+                              <button onClick={() => openProfile(b, 'wallet')} disabled={alreadySub}
+                                className={`w-full mt-3 py-2.5 rounded-xl text-[11px] font-black transition-all ${alreadySub ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-purple-600 text-white active:scale-95 shadow-md shadow-purple-100'}`}>
+                                {alreadySub ? '✓ Você já assina este plano' : 'Quero assinar'}
+                              </button>
+                            </div>
+                          );
                         })}
                       </div>
-                    </>: <div className="p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 text-center"><Calendar size={24} className="mx-auto text-slate-300 mb-2"/><p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p></div>}
-                  </div>
-                  {bookingData.time&&bookingData.date&&<div className="mt-8 p-4 bg-amber-50 rounded-xl border border-amber-100"><p className="text-xs text-amber-600 font-bold uppercase mb-1">Resumo</p><div className="flex justify-between items-center"><span className="font-bold text-slate-900">{bookingData.service?.name}</span><span className="font-bold text-slate-900">R$ {bookingData.price}</span></div><p className="text-sm text-slate-500 mt-1">Com {bookingData.barber?.name} às {bookingData.time}</p></div>}
+                    </div>
+                  ))}
                 </div>
-                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-slate-100 z-50">
-                  <div className="max-w-md mx-auto"><Button className={`w-full py-4 rounded-2xl font-bold text-sm ${!bookingData.time||!bookingData.date?'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none':'bg-blue-600 text-white active:scale-95'}`} onClick={handleFinish} disabled={!bookingData.time||!bookingData.date}>Confirmar Agendamento</Button></div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+              <h3 className="font-black text-slate-900 text-sm mb-3" style={dk}>Como funciona</h3>
+              <div className="space-y-3">
+                {[
+                  { icon: '✂️', t: 'Cada corte confirmado vale 1 moeda' },
+                  { icon: '💎', t: 'Quem tem assinatura ganha moedas extras a cada uso do plano' },
+                  { icon: '💰', t: 'Cada profissional define quanto vale a moeda dele' },
+                  { icon: '🎁', t: `Junte ${COIN_COST_FREE_CUT} moedas e troque por um corte` },
+                ].map((r, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center text-base flex-shrink-0">{r.icon}</div>
+                    <p className="text-xs font-bold text-slate-600">{r.t}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-amber-600 font-bold bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-4">🚧 Em breve: a troca por cortes será liberada pelos profissionais.</p>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Moedas por profissional</p>
+              {coinsByPro.length === 0 ? (
+                <div className="py-10 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                  <p className="text-3xl mb-1">🪙</p>
+                  <p className="text-sm font-black text-slate-500">Nenhuma moeda ainda</p>
+                  <button onClick={startBooking} className="mt-3 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black active:scale-95 transition-all">Agendar agora</button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {coinsByPro.map(p => {
+                    const pct = Math.min(100, (p.coins / COIN_COST_FREE_CUT) * 100);
+                    const canRedeem = p.coins >= COIN_COST_FREE_CUT;
+                    return (
+                      <div key={p.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
+                        <div className="flex items-center gap-3 mb-3">
+                          {p.barber ? <ProAvatar barber={p.barber} size={48} /> : <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center"><User size={18} className="text-slate-400" /></div>}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-black text-slate-900 text-sm truncate" style={dk}>{p.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">
+                              {p.coinValue > 0 ? `Cada moeda vale ${brlMoney(p.coinValue)}` : 'Valor da moeda ainda não definido'}
+                            </p>
+                            {p.subCoins > 0 && (
+                              <p className="text-[10px] text-purple-600 font-bold">💎 {p.subCoins} {p.subCoins === 1 ? 'moeda' : 'moedas'} da assinatura</p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-black text-xl text-amber-500">🪙 {p.coins}</p>
+                          </div>
+                        </div>
+                        <div className="h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
+                          <div className="h-full bg-gradient-to-r from-amber-400 to-orange-400 rounded-full transition-all duration-700" style={{ width: `${pct}%` }} />
+                        </div>
+                        {p.coinValue > 0 && (
+                          <p className="text-[10px] text-slate-400 font-bold mb-3">
+                            {COIN_COST_FREE_CUT} moedas = {brlMoney(p.coinValue * COIN_COST_FREE_CUT)} de desconto no corte
+                          </p>
+                        )}
+                        <button onClick={handleRedeemFake} disabled={!canRedeem}
+                          className={`w-full py-3 rounded-xl text-xs font-black transition-all ${p.coinValue > 0 ? '' : 'mt-3 '}${canRedeem ? 'bg-amber-500 text-white active:scale-95 shadow-md shadow-amber-100' : 'bg-slate-100 text-slate-400 cursor-not-allowed'}`}>
+                          {canRedeem ? '🎁 Trocar por um corte' : `Faltam ${COIN_COST_FREE_CUT - p.coins} para trocar`}
+                        </button>
+                        {p.barber && (
+                          <button onClick={() => openProfile(p.barber, 'wallet')} className="w-full mt-2 text-[10px] font-black text-blue-600 py-1">Ver perfil</button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ══════════ HISTÓRICO ══════════ */}
+        {view === 'history' && (
+          <div className="space-y-4">
+            <div className="flex justify-between items-end">
+              <div>
+                <h2 className="text-xl font-black text-slate-900" style={dk}>Meus agendamentos</h2>
+                <p className="text-xs text-slate-400 mt-0.5">{myApps.length} {myApps.length === 1 ? 'registro' : 'registros'}</p>
+              </div>
+              <button onClick={handleDeleteAccount} className="text-[9px] text-red-400 font-bold uppercase tracking-tighter border-b border-red-100 pb-0.5">Excluir conta</button>
+            </div>
+            {myApps.length === 0 ? (
+              <div className="py-12 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                <CalendarDays size={28} className="mx-auto text-slate-300 mb-2" />
+                <p className="text-sm font-black text-slate-500">Ainda não tem agendamentos</p>
+                <button onClick={startBooking} className="mt-3 px-5 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black active:scale-95 transition-all">Agendar agora</button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {[...myApps].sort((a, b) => new Date(`${b.date}T${b.time}`) - new Date(`${a.date}T${a.time}`)).map(app => {
+                  const professional = (barbers || []).find(b => String(b.id) === String(app.barber_id));
+                  const st = app.status === 'confirmed'
+                    ? { l: 'Confirmado', c: 'bg-green-100 text-green-700', b: 'border-l-green-500' }
+                    : app.status === 'rejected'
+                      ? { l: 'Cancelado', c: 'bg-slate-200 text-slate-500', b: 'border-l-slate-300' }
+                      : { l: 'Pendente', c: 'bg-orange-100 text-orange-600', b: 'border-l-orange-400' };
+                  const canReschedule = app.status === 'pending' || app.status === 'confirmed';
+                  return (
+                    <div key={app.id} className={`bg-white p-4 rounded-2xl border border-slate-100 border-l-4 ${st.b} shadow-sm`}>
+                      <div className="flex justify-between items-start gap-2 mb-3">
+                        <div className="min-w-0">
+                          <p className="font-black text-slate-900 text-sm truncate" style={dk}>{app.service_name}</p>
+                          <p className="text-[11px] text-blue-600 font-bold truncate">com {professional?.name || 'Profissional'}</p>
+                          <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5"><Clock size={10} />{app.date?.split('-').reverse().join('/')} às {app.time}</p>
+                        </div>
+                        <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase flex-shrink-0 ${st.c}`}>{st.l}</span>
+                      </div>
+                      <div className="flex gap-2">
+                        {professional && (
+                          <button onClick={() => openProfile(professional, 'history')}
+                            className="flex-1 py-2.5 bg-slate-100 text-slate-600 rounded-xl text-[10px] font-black uppercase tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all"><User size={12} /> Ver perfil</button>
+                        )}
+                        {canReschedule && (
+                          <button onClick={() => startReschedule(app, professional)}
+                            className="flex-1 py-2.5 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all"><CalendarDays size={12} /> Reagendar</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══════════ AGENDAMENTO (PASSOS) ══════════ */}
+        {view === 'booking' && (
+          <div>
+            <div className="flex items-center gap-3 mb-4">
+              <button onClick={() => (step === 1 ? setView('home') : setStep(step - 1))}
+                className="w-9 h-9 rounded-full bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-700 active:scale-90 transition-all flex-shrink-0"><ArrowLeft size={16} /></button>
+              <div className="flex-1">
+                <h3 className="font-black text-slate-900 text-lg leading-tight" style={dk}>{stepTitles[step - 1]}</h3>
+                <p className="text-[10px] text-slate-400 font-bold">Passo {step} de 3</p>
+              </div>
+            </div>
+            <div className="flex gap-1.5 mb-5">
+              {[1, 2, 3].map(n => <div key={n} className={`h-1.5 flex-1 rounded-full transition-all ${n <= step ? 'bg-blue-600' : 'bg-slate-200'}`} />)}
+            </div>
+
+            {/* Aviso de reagendamento */}
+            {rescheduleInfo && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2">
+                <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-[11px] font-bold text-amber-700 leading-snug">
+                  Reagendando o horário de {rescheduleInfo.date?.split('-').reverse().join('/')} às {rescheduleInfo.time}. Ele só será cancelado quando você confirmar o novo.
+                </p>
+              </div>
+            )}
+
+            {/* PASSO 1 — serviço */}
+            {step === 1 && (
+              <div className="relative">
+                <div className="pb-24 space-y-2.5">
+                  {MS.map(s => {
+                    const sel = bookingData.service?.id === s.id;
+                    return (
+                      <button key={s.id} onClick={() => setBookingData({ ...bookingData, service: s })}
+                        className={`w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all active:scale-[0.98] text-left ${sel ? 'border-blue-600 bg-blue-50 shadow-md' : 'border-transparent bg-white shadow-sm'}`}>
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sel ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{s.icon}</div>
+                          <div>
+                            <p className="font-bold text-sm text-slate-900" style={sel ? undefined : dk}>{s.name}</p>
+                            <p className="text-[10px] text-slate-400 font-bold">⏱ {s.duration}</p>
+                          </div>
+                        </div>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${sel ? 'bg-blue-600 border-blue-600' : 'border-slate-200'}`}>{sel && <Check size={13} className="text-white" />}</div>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 z-50">
+                  <div className="max-w-md mx-auto">
+                    <button onClick={() => setStep(2)} disabled={!bookingData.service}
+                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${bookingData.service ? 'bg-slate-900 text-white active:scale-95 shadow-lg' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+                      {bookingData.service ? `Continuar: ${bookingData.service.name}` : 'Selecione um serviço'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PASSO 2 — profissional (com nuvenzinha de bio + ver perfil) */}
+            {step === 2 && (
+              <div className="relative">
+                <div className="pb-24">
+                  {(() => {
+                    const list = processedBarbers.filter(b => b.my_services?.some(s => s.id === bookingData.service?.id));
+                    if (list.length === 0) return (
+                      <div className="py-14 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
+                        <User size={26} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-sm font-black text-slate-500">Nenhum profissional faz esse serviço ainda</p>
+                        <button onClick={() => setStep(1)} className="mt-3 text-xs font-black text-blue-600">Escolher outro serviço</button>
+                      </div>
+                    );
+                    return (
+                      <div className="grid grid-cols-2 gap-3">
+                        {list.map((b, i) => {
+                          const displayPrice = b.my_services?.find(s => s.id === bookingData.service?.id)?.price || 0;
+                          const isSel = bookingData.barber?.id === b.id;
+                          return (
+                            <div key={b.id} onClick={() => setBookingData({ ...bookingData, barber: b, price: displayPrice })}
+                              className={`relative flex flex-col items-center p-3 pt-4 rounded-3xl border-2 transition-all cursor-pointer ${isSel ? 'border-slate-900 bg-slate-50 shadow-lg' : 'border-transparent bg-white shadow-sm'}`}>
+                              {isSel && <div className="absolute top-2.5 right-2.5 text-green-500"><CheckCircle size={18} /></div>}
+                              <BioCloud text={b.bio} index={i} />
+                              <div className="mt-1 mb-2"><ProAvatar barber={b} size={68} /></div>
+                              <p className="font-black text-sm truncate w-full text-center text-slate-900 mt-1" style={isSel ? undefined : dk}>{b.name}</p>
+                              <div className="mt-1"><StarRating rating={getBarberRating(b)} /></div>
+                              <BadgeList barber={b} small />
+                              {b.distanceLabel && <p className="text-[10px] text-blue-600 font-black flex items-center gap-1 mt-1.5"><MapPin size={10} />{b.distanceLabel}</p>}
+                              <p className="mt-2 text-green-600 font-black text-base">R$ {displayPrice}</p>
+                              <button onClick={(e) => { e.stopPropagation(); openProfile(b, 'booking'); }}
+                                className="mt-2.5 w-full py-2 rounded-xl bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tight flex items-center justify-center gap-1 active:scale-95 transition-all">
+                                <User size={11} /> Ver perfil
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </div>
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 z-50">
+                  <div className="max-w-md mx-auto">
+                    <button onClick={() => setStep(3)} disabled={!bookingData.barber}
+                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${bookingData.barber ? 'bg-slate-900 text-white active:scale-95 shadow-lg' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+                      {bookingData.barber ? `Continuar com ${bookingData.barber.name}` : 'Selecione um profissional'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* PASSO 3 — data e hora */}
+            {step === 3 && (
+              <div className="relative">
+                <div className="pb-24">
+                  {bookingData.barber && (
+                    <div className="flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 mb-4">
+                      <ProAvatar barber={bookingData.barber} size={52} />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-black text-slate-900 text-sm truncate" style={dk}>{bookingData.barber.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold truncate">{bookingData.service?.name} · R$ {bookingData.price}</p>
+                        <div className="mt-1"><BioCloud text={bookingData.barber.bio} inline /></div>
+                      </div>
+                      <button onClick={() => openProfile(bookingData.barber, 'booking')}
+                        className="px-3 py-2 rounded-xl bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tight active:scale-95 transition-all flex-shrink-0">Ver perfil</button>
+                    </div>
+                  )}
+
+                  <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4">
+                    <MonthCalendar availableSlots={bookingData.barber?.available_slots} selectedDate={bookingData.date}
+                      onSelectDate={dateStr => setBookingData({ ...bookingData, date: dateStr, time: null })} />
+                  </div>
+
+                  <div className="mt-5">
+                    {bookingData.date ? <>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 px-1">Horários · {dateLabel(bookingData.date)}</p>
+                      <div className="grid grid-cols-4 gap-2">
+                        {GLOBAL_TIME_SLOTS.map(t => {
+                          let isPast = false;
+                          const [y, m, d] = bookingData.date.split('-').map(Number);
+                          const now = new Date();
+                          if (y === now.getFullYear() && (m - 1) === now.getMonth() && d === now.getDate()) {
+                            const [th, tm] = t.split(':').map(Number);
+                            if (th < now.getHours() || (th === now.getHours() && tm <= now.getMinutes())) isPast = true;
+                          }
+                          const isAvail = bookingData.barber?.available_slots?.[bookingData.date]?.includes(t) && !isPast;
+                          const isLow = isAvail && availableTimesToday.length <= LOW_AVAILABILITY_THRESHOLD;
+                          const slotColor = bookingData.time === t ? 'bg-slate-900 text-white shadow-lg scale-105'
+                            : !isAvail ? 'bg-red-50 text-red-300 border border-red-100 cursor-not-allowed'
+                            : isLow ? 'bg-amber-50 text-amber-700 border border-amber-200 hover:border-amber-400'
+                            : 'bg-green-50 text-green-700 border border-green-200 hover:border-green-400';
+                          return <button key={t} disabled={!isAvail} onClick={() => setBookingData({ ...bookingData, time: t })} className={`py-2.5 rounded-xl font-bold text-xs transition-all ${slotColor}`}>{t}</button>;
+                        })}
+                      </div>
+                    </> : (
+                      <div className="p-6 bg-white rounded-2xl border-2 border-dashed border-slate-200 text-center">
+                        <Calendar size={24} className="mx-auto text-slate-300 mb-2" />
+                        <p className="text-xs text-slate-400 font-bold">Selecione um dia acima primeiro</p>
+                      </div>
+                    )}
+                  </div>
+
+                  {bookingData.time && bookingData.date && (
+                    <div className="mt-6 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                      <p className="text-[10px] text-amber-600 font-black uppercase mb-1">Resumo</p>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-sm" style={{ color: '#0f172a' }}>{bookingData.service?.name}</span>
+                        <span className="font-black text-green-600">R$ {bookingData.price}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">Com {bookingData.barber?.name} · {dateLabel(bookingData.date)} às {bookingData.time}</p>
+                      <p className="text-[10px] text-amber-700 font-bold mt-2">🪙 Você ganha 1 moeda quando o corte for confirmado</p>
+                    </div>
+                  )}
+                </div>
+                <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-100 z-50">
+                  <div className="max-w-md mx-auto">
+                    <button onClick={handleFinish} disabled={!bookingData.time || !bookingData.date}
+                      className={`w-full py-4 rounded-2xl font-black text-sm transition-all ${bookingData.time && bookingData.date ? 'bg-blue-600 text-white active:scale-95 shadow-lg shadow-blue-200' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}>
+                      {rescheduleInfo ? 'Confirmar novo horário' : 'Confirmar agendamento'}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
           </div>
         )}
       </main>
+
+      {showNav && (
+        <BottomNavBar activeTab={view} setActiveTab={setView} tabs={navTabs} tabLabels={navLabels} tabIcons={navIcons}
+          badges={{ history: myApps.filter(a => a.status === 'pending').length }} />
+      )}
     </div>
   );
 };
+
 
 // ─── BARBER DASHBOARD ─────────────────────────────────────────────────────────
 // ─── CORES DO CARDÁPIO ────────────────────────────────────────────────────────
@@ -4077,15 +5020,826 @@ const PastMonthSummary = ({ year, month, appointments }) => {
     </div>
   );
 };
+
+
+
+// ════════════════════════════════════════════════════════════════════════════
+// COLE ESTE ARQUIVO INTEIRO LOGO ACIMA DE:  const BarberDashboard = ({ user, ...
+// (depois de PastMonthSummary). Não precisa de nenhum import novo.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── AUXILIARES DA FIDELIDADE ─────────────────────────────────────────────────
+const LOYALTY_COIN_PRESETS = [0.5, 1, 2, 5];
+const LOYALTY_REDEEM_COINS = 10; // igual ao COIN_COST_FREE_CUT da tela do cliente
+const fmtBRL = (v) => `R$ ${Number(v || 0).toFixed(2).replace('.', ',')}`;
+const addDaysISO = (iso, n) => {
+  const [y, m, d] = iso.split('-').map(Number);
+  return localISO(new Date(y, m - 1, d + n));
+};
+// Helpers próprios (nomes únicos para não colidir com nada que já exista no seu arquivo)
+const loyDigits = (v) => String(v || '').replace(/\D/g, '');
+const loyMask = (v) => {
+  const d = loyDigits(v).slice(0, 11);
+  if (!d.length) return '';
+  if (d.length <= 2) return `(${d}`;
+  if (d.length <= 6) return `(${d.slice(0, 2)}) ${d.slice(2)}`;
+  if (d.length <= 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+};
+const loyTimeToMin = (t) => {
+  const [h, m] = String(t || '00:00').split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+const LOY_WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const loyDateLabel = (iso) => {
+  if (!iso) return '';
+  const hoje = localISO(new Date());
+  if (iso === hoje) return 'Hoje';
+  if (iso === addDaysISO(hoje, 1)) return 'Amanhã';
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  return `${LOY_WEEKDAYS[dt.getDay()]}, ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
+};
+
+const SUB_STATUS = {
+  ativa:     { l: 'Ativa',     c: 'bg-green-100 text-green-700' },
+  pausada:   { l: 'Pausada',   c: 'bg-amber-100 text-amber-700' },
+  cancelada: { l: 'Cancelada', c: 'bg-slate-200 text-slate-500' },
+};
+const PLAN_TEMPLATES = [
+  { name: 'Clube do Corte', price: '120', uses: '4', coins: '1' },
+  { name: 'Clube VIP Ilimitado', price: '199', uses: '0', coins: '2' },
+];
+
+// ════════════════════════════════════════════════════════════════════════════
+// CARD DE SOLICITAÇÃO PENDENTE
+// Avisa quando o horário já está ocupado e sugere o próximo horário livre
+// ════════════════════════════════════════════════════════════════════════════
+const PendingRequestCard = ({ app, pendingAll, allAppointmentsFull, effectiveUser, isGuestBarber, getBlocks, onUpdateStatus, setSlotsAvailability, sb, coinValue, isDark }) => {
+  const [conflict, setConflict] = useState(null); // { occupiedBy, suggestion }
+  const [busy, setBusy] = useState(false);
+  const dk = isDark ? { color: '#ffffff' } : undefined; // texto branco no modo noite
+
+  const blocks = getBlocks(app, pendingAll);
+  const ids = new Set(blocks.map(b => b.id));
+  // Tudo que já está confirmado/manual (menos os blocos deste próprio pedido)
+  const otherBooked = allAppointmentsFull.filter(a => !ids.has(a.id) && a.date && a.time);
+  // Outros pedidos ainda pendentes (para não sugerir um horário que já foi pedido por outro cliente)
+  const otherPending = (pendingAll || []).filter(a => !ids.has(a.id) && a.date && a.time);
+  const hitBlock = blocks.find(b => otherBooked.some(a => a.date === b.date && a.time === b.time));
+  const occupiedBy = hitBlock ? otherBooked.find(a => a.date === hitBlock.date && a.time === hitBlock.time) : null;
+  const hasConflict = !!occupiedBy;
+
+  const nome = app.client_name || app.client || 'Cliente';
+  const fmtDate = (d) => (d || '').split('-').reverse().join('/');
+
+  // Próximo horário livre (mesmo dia depois do pedido, ou nos dias seguintes)
+  const findNextSlot = () => {
+    const need = blocks.length;
+    const slots = effectiveUser.available_slots || {};
+    const step = (loyTimeToMin(GLOBAL_TIME_SLOTS[1]) - loyTimeToMin(GLOBAL_TIME_SLOTS[0])) || 30;
+    const now = new Date();
+    const todayStr = localISO(now);
+    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const takenSet = new Set([...otherBooked, ...otherPending].map(a => `${a.date}|${a.time}`));
+    const dates = Object.keys(slots).filter(d => d >= app.date && d >= todayStr).sort();
+    for (const d of dates) {
+      const open = slots[d] || [];
+      if (!open.length) continue;
+      for (let i = 0; i < GLOBAL_TIME_SLOTS.length; i++) {
+        const t0 = GLOBAL_TIME_SLOTS[i];
+        if (d === app.date && loyTimeToMin(t0) <= loyTimeToMin(app.time)) continue;
+        if (d === todayStr && loyTimeToMin(t0) <= nowMin) continue;
+        const times = [];
+        for (let k = 0; k < need; k++) {
+          const t = GLOBAL_TIME_SLOTS[i + k];
+          if (!t || loyTimeToMin(t) - loyTimeToMin(t0) !== k * step || !open.includes(t) || takenSet.has(`${d}|${t}`)) break;
+          times.push(t);
+        }
+        if (times.length === need) return { date: d, times };
+      }
+    }
+    return null;
+  };
+
+  // target = null → confirma onde está | target = {date, times} → move e confirma
+  const confirmAppointment = async (target) => {
+    setBusy(true);
+    try {
+      const date = target ? target.date : app.date;
+      const times = target ? target.times : blocks.map(b => b.time).filter(Boolean);
+      if (target) {
+        for (let i = 0; i < blocks.length; i++) {
+          const { error } = await sb.from('appointments').update({ date, time: target.times[i] }).eq('id', blocks[i].id);
+          if (error) throw error;
+        }
+      }
+      for (const b of blocks) await onUpdateStatus(b.id, 'confirmed');
+      if (date && times.length) await setSlotsAvailability(date, times, false);
+      setConflict(null);
+
+      const link = 'https://salaodigital.app.br/download';
+      const msg = encodeURIComponent(target
+        ? `Olá ${nome}! Seu horário das ${app.time} (${fmtDate(app.date)}) já estava ocupado, então reservei o próximo disponível para você ✅\n📅 ${fmtDate(date)} às ${times[0]}\n\n📲 Baixe o app Salão Digital:\n${link}`
+        : `Olá ${nome}! Seu agendamento foi CONFIRMADO! ✅\n📅 ${fmtDate(date)} às ${times[0] || app.time}\n\n📲 Baixe o app Salão Digital:\n${link}`);
+      const fone = app.phone?.toString().replace(/\D/g, '');
+      setBusy(false);
+      if (fone) window.location.href = `https://wa.me/55${fone}?text=${msg}`;
+    } catch (err) {
+      console.error(err);
+      alert('Erro ao confirmar: ' + (err?.message || 'tente novamente.'));
+      setBusy(false);
+    }
+  };
+
+  const handleAccept = () => {
+    if (isGuestBarber) { alert('Para aceitar agendamentos, faça login!'); return; }
+    if (!app.id) return;
+    if (hasConflict) { setConflict({ occupiedBy, suggestion: findNextSlot() }); return; }
+    confirmAppointment(null);
+  };
+
+  const handleReject = () => {
+    if (isGuestBarber) return;
+    blocks.forEach(b => onUpdateStatus(b.id, 'rejected'));
+    setConflict(null);
+  };
+
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
+      <div className="flex justify-between items-start mb-3">
+        <div className="min-w-0">
+          <p className="font-black text-slate-900 leading-none mb-1" style={dk}>{nome}</p>
+          <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
+          <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
+            <Clock size={12} strokeWidth={3} />
+            <span className="text-[10px]">{app.time} • {fmtDate(app.date)}</span>
+          </div>
+        </div>
+        <div className="text-right flex-shrink-0">
+          <p className="font-black text-slate-900 text-sm" style={dk}>R$ {app.price}</p>
+          <span className="text-[8px] text-orange-500 font-black uppercase">Pendente</span>
+        </div>
+      </div>
+
+      {hasConflict && (
+        <div className="mb-3 p-2.5 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
+          <AlertCircle size={14} className="text-amber-600 flex-shrink-0 mt-0.5" />
+          <p className="text-[10px] font-bold text-amber-700 leading-snug">
+            Esse horário já está ocupado por {occupiedBy.client_name || occupiedBy.client || 'outro cliente'}. Ao aceitar, o app sugere o próximo horário livre.
+          </p>
+        </div>
+      )}
+
+      {app.client_id && (
+        <div className="mb-3 inline-flex items-center gap-1.5 bg-amber-50 border border-amber-100 rounded-full px-2.5 py-1">
+          <span className="text-xs">🪙</span>
+          <span className="text-[10px] font-black text-amber-700">
+            +1 moeda para o cliente ao confirmar{coinValue > 0 ? ` (${fmtBRL(coinValue)})` : ''}
+          </span>
+        </div>
+      )}
+
+      <div className="flex gap-2">
+        <button onClick={handleAccept} disabled={busy}
+          className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95 disabled:opacity-60">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle size={14} />} Aceitar
+        </button>
+        <button onClick={handleReject}
+          className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
+          <XCircle size={18} />
+        </button>
+      </div>
+
+      {/* ── Modal: horário já ocupado ── */}
+      {conflict && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-6">
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => !busy && setConflict(null)} />
+          <div className="relative bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl">
+            <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center mb-3"><AlertCircle size={24} className="text-amber-600" /></div>
+            <h3 className="font-black text-slate-900 text-lg mb-1" style={dk}>Horário já ocupado</h3>
+            <p className="text-xs text-slate-500 mb-4">
+              <b>{conflict.occupiedBy.client_name || conflict.occupiedBy.client || 'Outro cliente'}</b> já está confirmado em {fmtDate(app.date)} às {app.time}.
+            </p>
+
+            {conflict.suggestion ? (
+              <div className="bg-green-50 border border-green-200 rounded-2xl p-4 mb-4">
+                <p className="text-[10px] font-black text-green-700 uppercase tracking-wide mb-1">Próximo horário disponível</p>
+                <p className="font-black text-slate-900 text-base" style={{ color: '#0f172a' }}>
+                  {loyDateLabel(conflict.suggestion.date)} às {conflict.suggestion.times[0]}
+                </p>
+                <p className="text-[10px] text-slate-500 mt-1">Vou mover {nome} para esse horário e avisar pelo WhatsApp.</p>
+              </div>
+            ) : (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4">
+                <p className="text-xs font-bold text-amber-700">Não achei horário livre nos próximos dias. Abra mais horários na agenda ou recuse o pedido.</p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {conflict.suggestion && (
+                <button onClick={() => confirmAppointment(conflict.suggestion)} disabled={busy}
+                  className="w-full py-3.5 bg-green-600 text-white rounded-xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-60">
+                  {busy ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />} Mover e confirmar
+                </button>
+              )}
+              <button onClick={handleReject} disabled={busy}
+                className="w-full py-3 bg-red-50 text-red-500 rounded-xl font-bold text-xs active:scale-95 transition-all">Recusar pedido</button>
+              <button onClick={() => confirmAppointment(null)} disabled={busy}
+                className="w-full py-2 text-slate-400 font-bold text-[11px]">Aceitar mesmo assim (encaixe no mesmo horário)</button>
+              <button onClick={() => setConflict(null)} disabled={busy}
+                className="w-full py-2 text-slate-400 font-bold text-xs">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// FIDELIDADE: valor da moeda + planos de assinatura + assinantes
+// ════════════════════════════════════════════════════════════════════════════
+const LoyaltySection = ({ user, isGuest, sb, clients = [], avgTicket = 0, onUpdateProfile, onBack, isDark }) => {
+  const barberId = String(user?.id || '');
+  const today = localISO(new Date());
+  const dk = isDark ? { color: '#ffffff' } : undefined; // texto branco no modo noite
+
+  // Moeda
+  const [coinInput, setCoinInput] = useState(Number(user?.coin_value) > 0 ? String(user.coin_value).replace('.', ',') : '');
+  const [savingCoin, setSavingCoin] = useState(false);
+
+  // Assinaturas
+  const [plans, setPlans] = useState([]);
+  const [subs, setSubs] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [setupError, setSetupError] = useState(false);
+  const [showPlanForm, setShowPlanForm] = useState(false);
+  const [planForm, setPlanForm] = useState({ name: '', price: '', uses: '4', coins: '1' });
+  const [showSubForm, setShowSubForm] = useState(false);
+  const [subForm, setSubForm] = useState({ planId: '', name: '', phone: '', clientKey: '' });
+  const [filter, setFilter] = useState('todos');
+  const [search, setSearch] = useState('');
+  const [expanded, setExpanded] = useState(null);
+  const [usesLog, setUsesLog] = useState({});
+  const [busyId, setBusyId] = useState(null);
+
+  const load = useCallback(async () => {
+    if (isGuest || !barberId) return;
+    setLoading(true);
+    try {
+      const [p, s] = await Promise.all([
+        sb.from('subscription_plans').select('*').eq('barber_id', barberId).order('created_at', { ascending: false }),
+        sb.from('subscriptions').select('*').eq('barber_id', barberId).order('created_at', { ascending: false }),
+      ]);
+      if (p.error) throw p.error;
+      if (s.error) throw s.error;
+      setPlans(p.data || []);
+      setSubs(s.data || []);
+      setSetupError(false);
+    } catch (e) {
+      console.error('Erro ao carregar assinaturas:', e);
+      setSetupError(true);
+    } finally { setLoading(false); }
+  }, [sb, barberId, isGuest]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // ── Moeda ──
+  const coinNum = Number(String(coinInput).replace(',', '.'));
+  const coinValid = coinNum > 0;
+  const currentCoin = Number(user?.coin_value) || 0;
+  const ticketPct = coinValid && avgTicket > 0 ? (coinNum / avgTicket) * 100 : null;
+
+  const saveCoin = async () => {
+    if (!coinValid) { alert('Digite um valor maior que zero. Ex: 0,50'); return; }
+    setSavingCoin(true);
+    try {
+      if (!isGuest) {
+        const { error } = await sb.from('profiles').update({ coin_value: coinNum }).eq('id', user.id);
+        if (error) { alert('Erro ao salvar: ' + error.message + '\n\nConfira se você rodou o SQL da fidelidade (coluna coin_value).'); return; }
+      }
+      onUpdateProfile({ ...user, coin_value: coinNum });
+      alert(`Pronto! Cada moeda agora vale ${fmtBRL(coinNum)}.`);
+    } finally { setSavingCoin(false); }
+  };
+
+  // ── Planos ──
+  const createPlan = async () => {
+    if (isGuest) { alert('Crie sua conta para criar planos de assinatura.'); return; }
+    const price = Number(String(planForm.price).replace(',', '.'));
+    const uses = parseInt(planForm.uses, 10);
+    const coins = parseInt(planForm.coins, 10);
+    if (!planForm.name.trim() || !(price > 0)) { alert('Informe o nome e o valor mensal do plano.'); return; }
+    setBusyId('plan');
+    const { data, error } = await sb.from('subscription_plans').insert({
+      barber_id: barberId, name: planForm.name.trim(), price,
+      uses_per_month: isNaN(uses) ? 0 : Math.max(0, uses),
+      coins_per_use: isNaN(coins) ? 1 : Math.max(0, coins),
+      active: true,
+    }).select().single();
+    setBusyId(null);
+    if (error) { alert('Erro ao criar plano: ' + error.message); return; }
+    setPlans(prev => [data, ...prev]);
+    setPlanForm({ name: '', price: '', uses: '4', coins: '1' });
+    setShowPlanForm(false);
+  };
+
+  const togglePlan = async (p) => {
+    setPlans(prev => prev.map(x => x.id === p.id ? { ...x, active: !x.active } : x));
+    const { error } = await sb.from('subscription_plans').update({ active: !p.active }).eq('id', p.id);
+    if (error) { alert('Erro: ' + error.message); load(); }
+  };
+
+  const deletePlan = async (p) => {
+    if (!window.confirm(`Excluir o plano "${p.name}"? Quem já assina continua com as condições atuais.`)) return;
+    const { error } = await sb.from('subscription_plans').delete().eq('id', p.id);
+    if (error) { alert('Erro: ' + error.message); return; }
+    setPlans(prev => prev.filter(x => x.id !== p.id));
+  };
+
+  // ── Assinantes ──
+  const pickClient = (key) => {
+    if (!key) { setSubForm(f => ({ ...f, clientKey: '', name: '', phone: '' })); return; }
+    const c = clients[Number(key)];
+    if (!c) return;
+    setSubForm(f => ({ ...f, clientKey: key, name: c.name || '', phone: c.phone ? loyMask(c.phone) : '' }));
+  };
+
+  const createSub = async () => {
+    if (isGuest) { alert('Crie sua conta para cadastrar assinantes.'); return; }
+    const plan = plans.find(p => p.id === subForm.planId);
+    const name = subForm.name.trim();
+    const digits = loyDigits(subForm.phone);
+    if (!plan || !name) { alert('Escolha o plano e informe o nome do cliente.'); return; }
+    setBusyId('sub');
+    try {
+      // Se o cliente já tem conta no app, liga a assinatura a ele (para usar na tela do cliente depois)
+      let clientId = null;
+      if (digits) {
+        try {
+          const { data: cp } = await sb.from('profiles').select('id').eq('role', 'client').eq('phone', digits).maybeSingle();
+          if (cp?.id) clientId = String(cp.id);
+        } catch (_) {}
+      }
+      const { data, error } = await sb.from('subscriptions').insert({
+        barber_id: barberId, plan_id: plan.id, client_id: clientId,
+        client_name: name, client_phone: digits || null,
+        plan_name: plan.name, price: plan.price,
+        uses_per_month: plan.uses_per_month, coins_per_use: plan.coins_per_use,
+        status: 'ativa', started_at: today, renews_at: addDaysISO(today, 30),
+        uses_in_cycle: 0, total_uses: 0, coins_earned: 0,
+      }).select().single();
+      if (error) throw error;
+      setSubs(prev => [data, ...prev]);
+      setSubForm({ planId: '', name: '', phone: '', clientKey: '' });
+      setShowSubForm(false);
+    } catch (e) { alert('Erro ao cadastrar assinante: ' + (e?.message || 'tente novamente.')); }
+    finally { setBusyId(null); }
+  };
+
+  const patchSub = async (s, patch) => {
+    setSubs(prev => prev.map(x => x.id === s.id ? { ...x, ...patch } : x));
+    const { error } = await sb.from('subscriptions').update(patch).eq('id', s.id);
+    if (error) { alert('Erro: ' + error.message); load(); return false; }
+    return true;
+  };
+
+  const toggleExpand = async (s, force = false) => {
+    const next = !force && expanded === s.id ? null : s.id;
+    setExpanded(next);
+    if (next && (force || !usesLog[s.id])) {
+      const { data } = await sb.from('subscription_uses').select('*').eq('subscription_id', s.id).order('used_at', { ascending: false }).limit(10);
+      setUsesLog(prev => ({ ...prev, [s.id]: data || [] }));
+    }
+  };
+
+  const registerUse = async (s) => {
+    if (s.status !== 'ativa') return;
+    const limited = Number(s.uses_per_month) > 0;
+    if (limited && s.uses_in_cycle >= s.uses_per_month) { alert('O limite de usos deste ciclo já foi atingido. Renove a assinatura.'); return; }
+    const coins = Number(s.coins_per_use) || 0;
+    setBusyId(s.id);
+    const ok = await patchSub(s, {
+      uses_in_cycle: s.uses_in_cycle + 1,
+      total_uses: s.total_uses + 1,
+      coins_earned: (s.coins_earned || 0) + coins,
+    });
+    if (ok) {
+      await sb.from('subscription_uses').insert({ subscription_id: s.id, barber_id: barberId, coins });
+      setUsesLog(prev => { const n = { ...prev }; delete n[s.id]; return n; });
+      if (expanded === s.id) toggleExpand(s, true);
+    }
+    setBusyId(null);
+  };
+
+  const renewSub = async (s) => {
+    const base = s.renews_at && s.renews_at > today ? s.renews_at : today;
+    setBusyId(s.id);
+    await patchSub(s, { uses_in_cycle: 0, renews_at: addDaysISO(base, 30), status: 'ativa' });
+    setBusyId(null);
+  };
+
+  const deleteSub = async (s) => {
+    if (!window.confirm(`Excluir a assinatura de ${s.client_name}? O histórico de usos também será apagado.`)) return;
+    const { error } = await sb.from('subscriptions').delete().eq('id', s.id);
+    if (error) { alert('Erro: ' + error.message); return; }
+    setSubs(prev => prev.filter(x => x.id !== s.id));
+  };
+
+  const sendReminder = (s) => {
+    const fone = loyDigits(s.client_phone || '');
+    if (!fone) return;
+    const venc = s.renews_at ? s.renews_at.split('-').reverse().join('/') : '';
+    const msg = encodeURIComponent(`Olá ${s.client_name}! 👋 Sua assinatura "${s.plan_name}" ${s.renews_at && s.renews_at < today ? 'venceu' : 'vence'} em ${venc}. Quer renovar para continuar aproveitando? ✂️`);
+    window.open(`https://wa.me/55${fone}?text=${msg}`, '_blank');
+  };
+
+  // ── Derivados ──
+  const isOverdue = (s) => s.status === 'ativa' && s.renews_at && s.renews_at < today;
+  const isDueSoon = (s) => s.status === 'ativa' && s.renews_at && s.renews_at >= today && s.renews_at <= addDaysISO(today, 3);
+  const activeSubs = subs.filter(s => s.status === 'ativa');
+  const mrr = activeSubs.reduce((a, s) => a + Number(s.price || 0), 0);
+  const totalUsesAll = subs.reduce((a, s) => a + Number(s.total_uses || 0), 0);
+  const totalCoinsAll = subs.reduce((a, s) => a + Number(s.coins_earned || 0), 0);
+  const overdueCount = subs.filter(isOverdue).length;
+  const activePlans = plans.filter(p => p.active);
+
+  const filtered = subs.filter(s => {
+    if (filter === 'ativa' && !(s.status === 'ativa' && !isOverdue(s))) return false;
+    if (filter === 'vencida' && !isOverdue(s)) return false;
+    if (filter === 'inativa' && s.status === 'ativa') return false;
+    if (search.trim() && !(s.client_name || '').toLowerCase().includes(search.trim().toLowerCase())) return false;
+    return true;
+  });
+
+  const filters = [
+    { id: 'todos', l: 'Todos', n: subs.length },
+    { id: 'ativa', l: 'Ativos', n: subs.filter(s => s.status === 'ativa' && !isOverdue(s)).length },
+    { id: 'vencida', l: 'Vencidos', n: overdueCount },
+    { id: 'inativa', l: 'Inativos', n: subs.filter(s => s.status !== 'ativa').length },
+  ];
+
+  const renderSub = (s) => {
+    const limited = Number(s.uses_per_month) > 0;
+    const pct = limited ? Math.min(100, (s.uses_in_cycle / s.uses_per_month) * 100) : 0;
+    const overdue = isOverdue(s);
+    const soon = isDueSoon(s);
+    const st = overdue ? { l: 'Vencida', c: 'bg-red-100 text-red-600' } : (SUB_STATUS[s.status] || SUB_STATUS.ativa);
+    const limitReached = limited && s.uses_in_cycle >= s.uses_per_month;
+    const phone = loyDigits(s.client_phone || '');
+    const open = expanded === s.id;
+    const log = usesLog[s.id];
+
+    return (
+      <div key={s.id} className={`bg-white rounded-2xl border shadow-sm p-4 border-l-4 ${overdue ? 'border-slate-100 border-l-red-500' : s.status === 'ativa' ? 'border-slate-100 border-l-purple-500' : 'border-slate-100 border-l-slate-300'}`}>
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="min-w-0">
+            <p className="font-black text-slate-900 text-sm truncate" style={dk}>{s.client_name}</p>
+            <p className="text-[10px] text-purple-600 font-bold truncate">{s.plan_name} · {fmtBRL(s.price)}/mês</p>
+            {s.client_id && <p className="text-[9px] text-blue-500 font-bold mt-0.5">📱 Tem conta no app</p>}
+          </div>
+          <span className={`text-[9px] font-black px-2 py-1 rounded-full uppercase flex-shrink-0 ${st.c}`}>{st.l}</span>
+        </div>
+
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] font-bold text-slate-500">Usos neste ciclo</span>
+            <span className="text-[10px] font-black text-slate-900" style={dk}>{limited ? `${s.uses_in_cycle}/${s.uses_per_month}` : `${s.uses_in_cycle} · ilimitado`}</span>
+          </div>
+          {limited && (
+            <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full transition-all duration-700 ${limitReached ? 'bg-red-400' : 'bg-gradient-to-r from-purple-400 to-purple-600'}`} style={{ width: `${pct}%` }} />
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          <div className="bg-slate-50 rounded-xl p-2 text-center border border-slate-100">
+            <p className="text-sm font-black" style={{ color: '#0f172a' }}>{s.total_uses || 0}</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase">Usos total</p>
+          </div>
+          <div className="bg-amber-50 rounded-xl p-2 text-center border border-amber-100">
+            <p className="text-sm font-black text-amber-600">🪙 {s.coins_earned || 0}</p>
+            <p className="text-[8px] font-bold text-amber-600 uppercase">Moedas</p>
+          </div>
+          <div className={`rounded-xl p-2 text-center border ${overdue ? 'bg-red-50 border-red-100' : soon ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100'}`}>
+            <p className="text-sm font-black" style={{ color: overdue ? '#ef4444' : '#0f172a' }}>{s.renews_at ? s.renews_at.split('-').reverse().slice(0, 2).join('/') : '—'}</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase">{overdue ? 'Venceu' : 'Renova'}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button onClick={() => registerUse(s)} disabled={busyId === s.id || s.status !== 'ativa' || limitReached}
+            className="flex-1 py-2.5 bg-purple-600 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+            {busyId === s.id ? <Loader2 size={13} className="animate-spin" /> : <Scissors size={13} />}
+            {limitReached ? 'Limite atingido' : 'Registrar uso'}
+          </button>
+          {(overdue || soon || limitReached) && s.status !== 'cancelada' && (
+            <button onClick={() => renewSub(s)} disabled={busyId === s.id}
+              className="px-3 py-2.5 bg-green-600 text-white rounded-xl text-[11px] font-black flex items-center justify-center gap-1 active:scale-95 transition-all">
+              <RefreshCw size={12} /> Renovar
+            </button>
+          )}
+          {phone && (
+            <button onClick={() => sendReminder(s)} title="Lembrar no WhatsApp"
+              className="px-3 py-2.5 bg-green-50 border border-green-200 text-green-700 rounded-xl active:scale-95 transition-all"><Phone size={14} /></button>
+          )}
+          <button onClick={() => toggleExpand(s)} className="px-3 py-2.5 bg-slate-100 text-slate-500 rounded-xl active:scale-95 transition-all">
+            <ChevronDown size={14} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+
+        {open && (
+          <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+            <div>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Últimos usos</p>
+              {!log ? <p className="text-[11px] text-slate-400">Carregando...</p>
+                : log.length === 0 ? <p className="text-[11px] text-slate-400">Nenhum uso registrado ainda.</p>
+                : (
+                  <div className="space-y-1">
+                    {log.map(u => (
+                      <div key={u.id} className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-slate-500">{new Date(u.used_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                        {Number(u.coins) > 0 && <span className="font-black text-amber-600">+{u.coins} 🪙</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {s.status === 'ativa'
+                ? <button onClick={() => patchSub(s, { status: 'pausada' })} className="px-3 py-2 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[10px] font-black">Pausar</button>
+                : <button onClick={() => patchSub(s, { status: 'ativa' })} className="px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg text-[10px] font-black">Reativar</button>}
+              {s.status !== 'cancelada' && (
+                <button onClick={() => { if (window.confirm(`Cancelar a assinatura de ${s.client_name}?`)) patchSub(s, { status: 'cancelada' }); }}
+                  className="px-3 py-2 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black">Cancelar assinatura</button>
+              )}
+              <button onClick={() => deleteSub(s)} className="px-3 py-2 bg-red-50 text-red-500 rounded-lg text-[10px] font-black ml-auto flex items-center gap-1"><Trash2 size={11} /> Excluir</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <button onClick={onBack} className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-tight">
+        <ArrowLeft size={14} /> Voltar
+      </button>
+
+      <div>
+        <h2 className="text-lg font-black text-slate-900 flex items-center gap-2" style={dk}><Gift size={20} className="text-amber-500" /> Fidelidade e Assinaturas</h2>
+        <p className="text-xs text-slate-400 mt-0.5">Faça seu cliente voltar sempre: moedas por atendimento e planos mensais</p>
+      </div>
+
+      {isGuest && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+          ⚠️ Modo demo — crie sua conta para salvar moedas e assinaturas.
+        </div>
+      )}
+
+      {/* ══ MOEDAS ══ */}
+      <section className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-br from-amber-400 to-orange-500 p-5">
+          <p className="text-white font-black text-base mb-1">🪙 Mantenha seus clientes fiéis entregando moedas</p>
+          <p className="text-white/90 text-[11px] font-bold leading-snug">
+            Cada atendimento confirmado de cliente do app entrega 1 moeda automaticamente. Quanto mais ele volta, mais moedas junta — e troca por cortes.
+          </p>
+        </div>
+        <div className="p-5 space-y-4">
+          <div>
+            <p className="font-black text-slate-900 text-sm mb-0.5" style={dk}>Quanto você quer que valha cada moeda?</p>
+            <p className="text-[10px] text-slate-400 font-bold">
+              {currentCoin > 0 ? `Valor atual: ${fmtBRL(currentCoin)} por moeda` : 'Você ainda não definiu. Escolha um valor para ativar.'}
+            </p>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {LOYALTY_COIN_PRESETS.map(v => {
+              const on = coinValid && Math.abs(coinNum - v) < 0.001;
+              return (
+                <button key={v} onClick={() => setCoinInput(String(v).replace('.', ','))}
+                  className={`py-3 rounded-xl text-xs font-black border-2 transition-all active:scale-95 ${on ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200'}`}>
+                  {fmtBRL(v)}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">R$</span>
+              <input type="text" inputMode="decimal" value={coinInput}
+                onChange={e => setCoinInput(e.target.value.replace(/[^0-9.,]/g, ''))}
+                placeholder="Outro valor (ex: 0,75)"
+                className="w-full pl-9 pr-3 py-3 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm font-black text-slate-900 outline-none focus:border-amber-400" />
+            </div>
+            <button onClick={saveCoin} disabled={savingCoin || !coinValid}
+              className="px-5 bg-amber-500 text-white rounded-xl text-xs font-black active:scale-95 transition-all disabled:opacity-40 flex items-center gap-1.5">
+              {savingCoin ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Salvar
+            </button>
+          </div>
+
+          {coinValid && (
+            <div className="bg-amber-50 border border-amber-100 rounded-2xl p-3 space-y-1.5">
+              <p className="text-[11px] font-bold text-amber-800">• 1 atendimento = 1 moeda = <b>{fmtBRL(coinNum)}</b></p>
+              <p className="text-[11px] font-bold text-amber-800">• {LOYALTY_REDEEM_COINS} moedas = <b>{fmtBRL(coinNum * LOYALTY_REDEEM_COINS)}</b> de desconto no corte</p>
+              {ticketPct !== null && (
+                <p className="text-[11px] font-bold text-amber-800">• Isso devolve ≈ <b>{ticketPct.toFixed(1).replace('.', ',')}%</b> do seu ticket médio ({fmtBRL(avgTicket)})</p>
+              )}
+              <p className="text-[10px] text-amber-600 pt-1">Dica: programas de fidelidade costumam manter clientes em sua base.</p>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ══ ASSINATURAS ══ */}
+      {setupError && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-2xl">
+          <p className="text-xs font-black text-red-600 mb-1">As tabelas de assinatura ainda não existem no Supabase</p>
+          <p className="text-[11px] text-red-500">Rode o arquivo <b>supabase_fidelidade.sql</b> no SQL Editor do Supabase e abra esta tela de novo.</p>
+        </div>
+      )}
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="font-black text-slate-900 text-sm flex items-center gap-2" style={dk}><Award size={16} className="text-purple-600" /> Assinaturas</h3>
+            <p className="text-[10px] text-slate-400 font-bold mt-0.5">Receita fixa todo mês com clientes que assinam</p>
+          </div>
+          {loading && <Loader2 size={16} className="animate-spin text-slate-300" />}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-slate-900 text-white rounded-2xl p-3.5">
+            <p className="text-[9px] text-slate-400 font-bold uppercase">Receita mensal</p>
+            <p className="text-lg font-black">{fmtBRL(mrr)}</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5">
+            <p className="text-[9px] text-slate-400 font-bold uppercase">Assinantes ativos</p>
+            <p className="text-lg font-black text-slate-900" style={dk}>{activeSubs.length}</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5">
+            <p className="text-[9px] text-slate-400 font-bold uppercase">Usos registrados</p>
+            <p className="text-lg font-black text-slate-900" style={dk}>{totalUsesAll}</p>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-3.5">
+            <p className="text-[9px] text-slate-400 font-bold uppercase">Moedas geradas</p>
+            <p className="text-lg font-black text-amber-600">🪙 {totalCoinsAll}</p>
+          </div>
+        </div>
+
+        {overdueCount > 0 && (
+          <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2">
+            <AlertCircle size={15} className="text-red-500 flex-shrink-0" />
+            <p className="text-[11px] font-bold text-red-600">{overdueCount} {overdueCount === 1 ? 'assinatura vencida' : 'assinaturas vencidas'} — renove ou lembre o cliente.</p>
+          </div>
+        )}
+
+        {/* Planos */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-black text-slate-900 text-sm" style={dk}>Meus planos</h4>
+            <button onClick={() => setShowPlanForm(v => !v)}
+              className={`p-2 rounded-xl transition-all ${showPlanForm ? 'bg-red-50 text-red-500' : 'bg-purple-50 text-purple-600'}`}>
+              {showPlanForm ? <X size={16} /> : <Plus size={16} />}
+            </button>
+          </div>
+
+          {showPlanForm && (
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3 mb-4">
+              <div className="flex gap-2 flex-wrap">
+                {PLAN_TEMPLATES.map(t => (
+                  <button key={t.name} onClick={() => setPlanForm(t)}
+                    className="px-3 py-1.5 bg-white border border-purple-200 text-purple-600 rounded-full text-[10px] font-black active:scale-95">✨ {t.name}</button>
+                ))}
+              </div>
+              <input type="text" value={planForm.name} onChange={e => setPlanForm(f => ({ ...f, name: e.target.value }))} placeholder="Nome do plano (ex: Clube do Corte)"
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Valor/mês</label>
+                  <input type="text" inputMode="decimal" value={planForm.price} onChange={e => setPlanForm(f => ({ ...f, price: e.target.value.replace(/[^0-9.,]/g, '') }))} placeholder="120"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Usos/mês</label>
+                  <input type="text" inputMode="numeric" value={planForm.uses} onChange={e => setPlanForm(f => ({ ...f, uses: e.target.value.replace(/\D/g, '') }))} placeholder="4"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+                </div>
+                <div>
+                  <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Moedas/uso</label>
+                  <input type="text" inputMode="numeric" value={planForm.coins} onChange={e => setPlanForm(f => ({ ...f, coins: e.target.value.replace(/\D/g, '') }))} placeholder="1"
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-400 font-bold">Usos/mês = 0 significa ilimitado. Moedas/uso é quanto o assinante ganha a cada vez que usa.</p>
+              <button onClick={createPlan} disabled={busyId === 'plan'}
+                className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                {busyId === 'plan' ? <Loader2 size={16} className="animate-spin" /> : <Plus size={16} />} Criar plano
+              </button>
+            </div>
+          )}
+
+          {plans.length === 0 ? (
+            <p className="text-[11px] text-slate-400 text-center py-4">Nenhum plano ainda. Toque no + para criar o primeiro.</p>
+          ) : (
+            <div className="space-y-2">
+              {plans.map(p => {
+                const n = subs.filter(s => s.plan_id === p.id && s.status === 'ativa').length;
+                return (
+                  <div key={p.id} className={`flex items-center gap-3 p-3 rounded-2xl border ${p.active ? 'bg-purple-50 border-purple-100' : 'bg-slate-50 border-slate-200 opacity-60'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-black text-sm truncate" style={{ color: '#0f172a' }}>{p.name}</p>
+                      <p className="text-[10px] text-slate-500 font-bold">
+                        {fmtBRL(p.price)}/mês · {Number(p.uses_per_month) > 0 ? `${p.uses_per_month} usos` : 'ilimitado'} · {p.coins_per_use || 0} 🪙/uso · {n} {n === 1 ? 'assinante' : 'assinantes'}
+                      </p>
+                    </div>
+                    <button onClick={() => togglePlan(p)} className={`px-2.5 py-1.5 rounded-lg text-[9px] font-black ${p.active ? 'bg-white text-slate-500 border border-slate-200' : 'bg-green-600 text-white'}`}>{p.active ? 'Arquivar' : 'Ativar'}</button>
+                    <button onClick={() => deletePlan(p)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg"><Trash2 size={14} /></button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Novo assinante */}
+        <button onClick={() => { if (activePlans.length === 0) { alert('Crie um plano primeiro (botão + em "Meus planos").'); return; } setShowSubForm(v => !v); }}
+          className="w-full py-3.5 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg">
+          {showSubForm ? <><X size={16} /> Fechar</> : <><UserPlus size={16} /> Novo assinante</>}
+        </button>
+
+        {showSubForm && (
+          <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5 space-y-3">
+            <div>
+              <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Plano</label>
+              <select value={subForm.planId} onChange={e => setSubForm(f => ({ ...f, planId: e.target.value }))}
+                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-purple-400">
+                <option value="">Escolha o plano</option>
+                {activePlans.map(p => <option key={p.id} value={p.id}>{p.name} — {fmtBRL(p.price)}/mês</option>)}
+              </select>
+            </div>
+            {clients.length > 0 && (
+              <div>
+                <label className="text-[9px] font-black text-slate-400 uppercase block mb-1">Escolher de "Meus Clientes"</label>
+                <select value={subForm.clientKey} onChange={e => pickClient(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-900 outline-none focus:border-purple-400">
+                  <option value="">Outro cliente (digitar abaixo)</option>
+                  {clients.map((c, i) => <option key={i} value={i}>{c.name || 'Cliente'}{c.count ? ` · ${c.count} visita${c.count > 1 ? 's' : ''}` : ''}</option>)}
+                </select>
+              </div>
+            )}
+            <input type="text" value={subForm.name} onChange={e => setSubForm(f => ({ ...f, name: e.target.value, clientKey: '' }))} placeholder="Nome do cliente"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+            <input type="tel" value={subForm.phone} onChange={e => setSubForm(f => ({ ...f, phone: loyMask(e.target.value) }))} placeholder="WhatsApp (41) 99999-9999"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-900 outline-none focus:border-purple-400" />
+            <button onClick={createSub} disabled={busyId === 'sub'}
+              className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+              {busyId === 'sub' ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />} Cadastrar assinante
+            </button>
+            <p className="text-[10px] text-slate-400 font-bold">O ciclo começa hoje e renova em 30 dias. Se o cliente já tem conta no app, a assinatura fica ligada a ele.</p>
+          </div>
+        )}
+
+        {/* Lista de assinantes */}
+        <div className="space-y-3">
+          <div className="flex gap-1.5 overflow-x-auto pb-1">
+            {filters.map(f => (
+              <button key={f.id} onClick={() => setFilter(f.id)}
+                className={`flex-shrink-0 px-3 py-2 rounded-xl text-[10px] font-black transition-all ${filter === f.id ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-500'}`}>
+                {f.l} · {f.n}
+              </button>
+            ))}
+          </div>
+          {subs.length > 3 && (
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar assinante pelo nome"
+                className="w-full pl-9 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-900 outline-none focus:border-purple-400" />
+            </div>
+          )}
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+              <p className="text-slate-400 text-sm">{subs.length === 0 ? 'Nenhum assinante ainda.' : 'Nenhum assinante nesse filtro.'}</p>
+              {subs.length === 0 && <p className="text-[10px] text-slate-300 mt-1">Crie um plano e cadastre seu primeiro assinante.</p>}
+            </div>
+          ) : filtered.map(renderSub)}
+        </div>
+      </section>
+    </div>
+  );
+};
+
 const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdateProfile, supabase: sb, isGuestBarber, isDark, onToggleDark }) => {
   const [activeTab, setActiveTab] = useState('home');
   const [isPaying, setIsPaying] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [showCalendar, setShowCalendar] = useState(false);
   const today = new Date();
- const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
+  const [configCalYear, setConfigCalYear] = useState(today.getFullYear());
   const [selectedDateConfig, setSelectedDateConfig] = useState(localISO(today));
- const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
+  const [configCalMonth, setConfigCalMonth] = useState(today.getMonth());
   const [showAllPending, setShowAllPending] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [manualSlotTarget, setManualSlotTarget] = useState(null);
@@ -4100,14 +5854,15 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
   const [focusComandaId, setFocusComandaId] = useState(null);
 
   const [dayModalDate, setDayModalDate] = useState(null);
-const pressTimer = useRef(null);
-const longPressFired = useRef(false);
-
+  const pressTimer = useRef(null);
+  const longPressFired = useRef(false);
 
   // Estado de confirmação de exclusão escondida
   const [deleteClickCount, setDeleteClickCount] = useState(0);
   const [showHiddenDelete, setShowHiddenDelete] = useState(false);
-  
+
+  // Texto branco no modo noite (nomes e títulos que ficavam escuros em cima do fundo escuro)
+  const dk = isDark ? { color: '#ffffff' } : undefined;
 
   const [guestBarberState, setGuestBarberState] = useState({
     ...user, name: 'Profissional Demo', plano_ativo: false, is_visible: false,
@@ -4118,13 +5873,12 @@ const longPressFired = useRef(false);
   const effectiveUser = isGuestBarber ? guestBarberState : user;
   const effectiveOnUpdateProfile = isGuestBarber ? setGuestBarberState : onUpdateProfile;
   useEffect(() => {
-  if (user?.id && !isGuestBarber && !user?.isGuest) setupPushNotifications(user.id);
-}, [user?.id, isGuestBarber]);
+    if (user?.id && !isGuestBarber && !user?.isGuest) setupPushNotifications(user.id);
+  }, [user?.id, isGuestBarber]);
 
   const [tempBio, setTempBio] = useState(effectiveUser?.bio || '');
   const [tempAddress, setTempAddress] = useState(effectiveUser?.address || '');
 
-  
   const appointmentDuration = effectiveUser.appointment_duration || '30min';
   const filteredTimeSlots = appointmentDuration === '1h' ? GLOBAL_TIME_SLOTS.filter(s => s.endsWith(':00')) : GLOBAL_TIME_SLOTS;
   const isContApp = (a) => typeof a.service_name === 'string' && a.service_name.endsWith(' (continuação)');
@@ -4161,6 +5915,13 @@ const longPressFired = useRef(false);
   const pendingToShow = showAllPending ? dedupedPending : dedupedPending.slice(0, 3);
   const totalAppointmentsForGoal = confirmed.length + manualAppointments.length;
 
+  // ── Fidelidade: valor da moeda e ticket médio ──
+  const coinValue = Number(effectiveUser.coin_value) || 0;
+  const pricedAppointments = [...confirmed, ...manualAppointments].filter(a => Number(a.price) > 0);
+  const avgTicket = pricedAppointments.length
+    ? pricedAppointments.reduce((s, a) => s + Number(a.price), 0) / pricedAppointments.length
+    : 0;
+
   const uniqueClients = useMemo(() => {
     const map = {};
     [...confirmed, ...manualAppointments].forEach(a => {
@@ -4177,23 +5938,23 @@ const longPressFired = useRef(false);
     return Object.values(map).sort((a, b) => b.count - a.count);
   }, [confirmed, manualAppointments]);
 
- const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
+  const daysInConfigMonth = getDaysInMonth(configCalYear, configCalMonth);
 
-const currentMonthIndex = today.getFullYear() * 12 + today.getMonth();
-const configMonthIndex = configCalYear * 12 + configCalMonth;
-const isPastMonth = configMonthIndex < currentMonthIndex;
-const isPrevConfigDisabled = configMonthIndex <= currentMonthIndex - 12; // volta até 12 meses
+  const currentMonthIndex = today.getFullYear() * 12 + today.getMonth();
+  const configMonthIndex = configCalYear * 12 + configCalMonth;
+  const isPastMonth = configMonthIndex < currentMonthIndex;
+  const isPrevConfigDisabled = configMonthIndex <= currentMonthIndex - 12; // volta até 12 meses
 
-const goToMonth = (d) => {
-  setConfigCalYear(d.getFullYear());
-  setConfigCalMonth(d.getMonth());
-  const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
-  setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
-};
-const goConfigPrev = () => { if (!isPrevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
-const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
+  const goToMonth = (d) => {
+    setConfigCalYear(d.getFullYear());
+    setConfigCalMonth(d.getMonth());
+    const isCurrent = d.getFullYear() === today.getFullYear() && d.getMonth() === today.getMonth();
+    setSelectedDateConfig(isCurrent ? localISO(today) : formatDate(d.getFullYear(), d.getMonth(), 1));
+  };
+  const goConfigPrev = () => { if (!isPrevConfigDisabled) goToMonth(new Date(configCalYear, configCalMonth - 1, 1)); };
+  const goConfigNext = () => goToMonth(new Date(configCalYear, configCalMonth + 1, 1));
 
-const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
+  const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] || [];
 
   const setSlotAvailability = async (date, slot, makeAvailable) => {
     const currentSlots = effectiveUser.available_slots || {};
@@ -4203,15 +5964,14 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     else { if (slotsForDay.includes(slot)) newSlots = slotsForDay.filter(s => s !== slot); else return; }
     const updatedAvailableSlots = { ...currentSlots, [date]: newSlots };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedAvailableSlots });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: updatedAvailableSlots }).eq('id', effectiveUser.id);
       if (error) console.error("Erro ao salvar horários:", error.message);
     }
   };
 
-
-    // Abre/fecha VÁRIOS horários do mesmo dia de uma vez (evita uma chamada sobrescrever a outra)
+  // Abre/fecha VÁRIOS horários do mesmo dia de uma vez (evita uma chamada sobrescrever a outra)
   const setSlotsAvailability = async (date, times, makeAvailable) => {
     const currentSlots = effectiveUser.available_slots || {};
     let day = [...(currentSlots[date] || [])];
@@ -4232,22 +5992,22 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const slotsForDay = [...(currentSlots[date] || [])];
     const isAvailable = slotsForDay.includes(slot);
- 
+
     // Um toque: abre se estiver fechado, fecha se estiver aberto
     const updatedDaySlots = isAvailable
       ? slotsForDay.filter(s => s !== slot)
       : [...slotsForDay, slot].sort();
- 
+
     const updatedSlots = { ...currentSlots, [date]: updatedDaySlots };
     const filteredManual = (effectiveUser.manual_appointments || [])
       .filter(a => !(a.date === date && a.time === slot));
- 
+
     effectiveOnUpdateProfile({
       ...effectiveUser,
       available_slots: updatedSlots,
       manual_appointments: filteredManual,
     });
- 
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles')
         .update({ available_slots: updatedSlots, manual_appointments: filteredManual })
@@ -4261,20 +6021,20 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
       .filter(a => a.date === date)
       .filter((a, i, self) => i === self.findIndex(t => t.id === a.id))
       .sort((a, b) => (a.time || '').localeCompare(b.time || ''));
- 
+
   // Horários já ocupados naquela data
   const getBookedTimes = (date) => getDayAppointments(date).map(a => a.time);
- 
+
   // Vagas realmente livres do dia (abertas e sem cliente)
   const freeSlotsCount = (date) => {
     const abertos = effectiveUser.available_slots?.[date] || [];
     const ocupados = getBookedTimes(date);
     return abertos.filter(s => !ocupados.includes(s)).length;
   };
- 
+
   const bookedForSelected = getBookedTimes(selectedDateConfig);
   const freeForSelected = slotsForSelectedDay.filter(s => !bookedForSelected.includes(s));
- 
+
   // Long press no dia do calendário
   const startDayPress = (fullDate) => {
     longPressFired.current = false;
@@ -4290,7 +6050,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     if (longPressFired.current) { longPressFired.current = false; return; }
     setSelectedDateConfig(fullDate);
   };
- 
+
   const cancelAppointmentQuick = async (app) => {
     if (isGuestBarber) {
       const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
@@ -4322,8 +6082,6 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     }
   };
 
-
-
   const handleManualBookingConfirm = async (saveWithClient) => {
     if (!manualSlotTarget) return;
     const { date, slot } = manualSlotTarget;
@@ -4334,7 +6092,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
       const newManualApp = { id: `manual-${Date.now()}`, client: manualName.trim(), date, time: slot, price: Number(manualValue) || 0, status: 'confirmed', isManual: true };
       const updatedManualApps = [...(effectiveUser.manual_appointments || []), newManualApp];
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps });
-      
+
       if (!isGuestBarber) {
         const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots, [date]: updatedDaySlots }, manual_appointments: updatedManualApps }).eq('id', effectiveUser.id);
         if (error) console.error("Erro no agendamento manual:", error.message);
@@ -4342,7 +6100,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     } else {
       const finalSlots = { ...currentSlots, [date]: updatedDaySlots };
       effectiveOnUpdateProfile({ ...effectiveUser, available_slots: finalSlots });
-      
+
       if (!isGuestBarber) {
         const { error } = await sb.from('profiles').update({ available_slots: finalSlots }).eq('id', effectiveUser.id);
         if (error) console.error("Erro ao fechar horário:", error.message);
@@ -4355,7 +6113,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [...filteredTimeSlots] };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4366,7 +6124,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     const updatedSlots = { ...currentSlots, [date]: [] };
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: updatedSlots });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: updatedSlots }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4377,7 +6135,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = [...filteredTimeSlots]; }
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4388,7 +6146,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const currentSlots = { ...(effectiveUser.available_slots || {}) };
     for (let i = 1; i <= daysInConfigMonth; i++) { const date = formatDate(configCalYear, configCalMonth, i); currentSlots[date] = []; }
     effectiveOnUpdateProfile({ ...effectiveUser, available_slots: { ...currentSlots } });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ available_slots: { ...currentSlots } }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4400,7 +6158,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     const newSvc = { id: `custom-${Date.now()}`, name: newSvcName.trim(), price: Number(newSvcPrice), duration: newSvcDuration, isCustom: true };
     const updatedCustom = [...(effectiveUser.custom_services || []), newSvc];
     effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4411,7 +6169,7 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
   const removeCustomService = async (id) => {
     const updatedCustom = (effectiveUser.custom_services || []).filter(cs => cs.id !== id);
     effectiveOnUpdateProfile({ ...effectiveUser, custom_services: updatedCustom });
-    
+
     if (!isGuestBarber) {
       const { error } = await sb.from('profiles').update({ custom_services: updatedCustom }).eq('id', effectiveUser.id);
       if (error) console.error(error.message);
@@ -4444,76 +6202,72 @@ const slotsForSelectedDay = effectiveUser.available_slots?.[selectedDateConfig] 
     effectiveOnUpdateProfile({ ...effectiveUser, my_services: newServices });
   };
 
-const handleUploadAvatar = async (event) => {
-  if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    // Lê o arquivo pra memória JÁ, antes que o Android invalide a URI content://
-    const arrayBuffer = await file.arrayBuffer();
-    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
-    const { error: uploadError } = await sb.storage
-      .from('barber-photos')
-      .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
-    if (uploadError) throw uploadError;
-    const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
-    const updated = { ...effectiveUser, avatar_url: publicUrl };
-    effectiveOnUpdateProfile(updated);
-    if (!isGuestBarber) await sb.from('profiles').update({ avatar_url: publicUrl }).eq('id', effectiveUser.id);
-    alert('Foto atualizada!');
-  } catch (err) {
-    console.error('[handleUploadAvatar]', err);
-    alert('Erro ao carregar foto: ' + (err?.message || 'tente novamente.'));
-  } finally {
-    event.target.value = '';
-  }
-};
+  const handleUploadAvatar = async (event) => {
+    if (isGuestBarber) { alert("Para alterar foto, faça login como profissional!"); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    try {
+      // Lê o arquivo pra memória JÁ, antes que o Android invalide a URI content://
+      const arrayBuffer = await file.arrayBuffer();
+      const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const fileName = `avatar-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage
+        .from('barber-photos')
+        .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      const updated = { ...effectiveUser, avatar_url: publicUrl };
+      effectiveOnUpdateProfile(updated);
+      if (!isGuestBarber) await sb.from('profiles').update({ avatar_url: publicUrl }).eq('id', effectiveUser.id);
+      alert('Foto atualizada!');
+    } catch (err) {
+      console.error('[handleUploadAvatar]', err);
+      alert('Erro ao carregar foto: ' + (err?.message || 'tente novamente.'));
+    } finally {
+      event.target.value = '';
+    }
+  };
 
-const handleUploadWorkPhoto = async (event) => {
-  if (isGuestBarber) { alert("Para adicionar fotos, faça login!"); return; }
-  const file = event.target.files[0];
-  if (!file) return;
-  const currentPhotos = effectiveUser.work_photos || [];
-  if (currentPhotos.length >= 10) { alert("Máximo 10 fotos."); return; }
-  setUploadingPhoto(true);
-  try {
-    // Mesma correção: ler pra memória antes de subir
-    const arrayBuffer = await file.arrayBuffer();
-    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const fileName = `work-${effectiveUser.id}-${Date.now()}.${fileExt}`;
-    const { error: uploadError } = await sb.storage
-      .from('barber-photos')
-      .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
-    if (uploadError) throw uploadError;
-    const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
-    const newPhotos = [...currentPhotos, publicUrl];
+  const handleUploadWorkPhoto = async (event) => {
+    if (isGuestBarber) { alert("Para adicionar fotos, faça login!"); return; }
+    const file = event.target.files[0];
+    if (!file) return;
+    const currentPhotos = effectiveUser.work_photos || [];
+    if (currentPhotos.length >= 10) { alert("Máximo 10 fotos."); return; }
+    setUploadingPhoto(true);
+    try {
+      // Mesma correção: ler pra memória antes de subir
+      const arrayBuffer = await file.arrayBuffer();
+      const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase();
+      const fileName = `work-${effectiveUser.id}-${Date.now()}.${fileExt}`;
+      const { error: uploadError } = await sb.storage
+        .from('barber-photos')
+        .upload(fileName, arrayBuffer, { contentType: file.type || 'image/jpeg', upsert: false });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = sb.storage.from('barber-photos').getPublicUrl(fileName);
+      const newPhotos = [...currentPhotos, publicUrl];
+      effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
+      await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
+    } catch (error) {
+      console.error('[handleUploadWorkPhoto]', error);
+      alert('Erro: ' + (error?.message || 'tente novamente.'));
+    } finally {
+      setUploadingPhoto(false);
+      event.target.value = '';
+    }
+  };
+
+  const handleRemoveWorkPhoto = async (index) => {
+    if (isGuestBarber) { alert("Para remover fotos, faça login!"); return; }
+    if (!window.confirm("Remover esta foto?")) return;
+    const newPhotos = (effectiveUser.work_photos || []).filter((_, i) => i !== index);
     effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
-    await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
-  } catch (error) {
-    console.error('[handleUploadWorkPhoto]', error);
-    alert('Erro: ' + (error?.message || 'tente novamente.'));
-  } finally {
-    setUploadingPhoto(false);
-    event.target.value = '';
-  }
-};
-
-
-
-const handleRemoveWorkPhoto = async (index) => {
-  if (isGuestBarber) { alert("Para remover fotos, faça login!"); return; }
-  if (!window.confirm("Remover esta foto?")) return;
-  const newPhotos = (effectiveUser.work_photos || []).filter((_, i) => i !== index);
-  effectiveOnUpdateProfile({ ...effectiveUser, work_photos: newPhotos });
-  const { error } = await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
-  if (error) {
-    console.error('[handleRemoveWorkPhoto]', error);
-    alert('Erro ao remover a foto: ' + error.message);
-  }
-};
-
-
+    const { error } = await sb.from('profiles').update({ work_photos: newPhotos }).eq('id', effectiveUser.id);
+    if (error) {
+      console.error('[handleRemoveWorkPhoto]', error);
+      alert('Erro ao remover a foto: ' + error.message);
+    }
+  };
 
   const handleDeleteAccount = async () => {
     if (isGuestBarber) return;
@@ -4531,10 +6285,10 @@ const handleRemoveWorkPhoto = async (index) => {
   // ✅ SALVA A BIO COM TRATAMENTO DE ERROS CORRETO
   const saveBio = async () => {
     if (isGuestBarber) return;
-    
+
     const bioFormatada = (tempBio || '').slice(0, 15);
     effectiveOnUpdateProfile({ ...effectiveUser, bio: bioFormatada });
-    
+
     const { error } = await sb
       .from('profiles')
       .update({ bio: bioFormatada })
@@ -4547,13 +6301,14 @@ const handleRemoveWorkPhoto = async (index) => {
       alert('Biografia salva com sucesso!');
     }
   };
-// ✅ SALVA O ENDEREÇO QUANDO APERTA OK
+
+  // ✅ SALVA O ENDEREÇO QUANDO APERTA OK
   const saveAddress = async () => {
     if (isGuestBarber) return;
-    
+
     // Atualiza a tela
     effectiveOnUpdateProfile({ ...effectiveUser, address: tempAddress });
-    
+
     // Salva no banco de dados
     const { error } = await sb
       .from('profiles')
@@ -4567,12 +6322,12 @@ const handleRemoveWorkPhoto = async (index) => {
       alert('Endereço salvo com sucesso!');
     }
   };
-// ✅ SINCRONIZA SE O PERFIL MUDAR DE CONTA
+
+  // ✅ SINCRONIZA SE O PERFIL MUDAR DE CONTA
   useEffect(() => {
     setTempBio(effectiveUser?.bio || '');
-    setTempAddress(effectiveUser?.address || ''); // Adicione esta linha
-  }, [effectiveUser?.bio, effectiveUser?.address]); // Adicione o address aqui na lista
-  
+    setTempAddress(effectiveUser?.address || '');
+  }, [effectiveUser?.bio, effectiveUser?.address]);
 
   // Lógica do botão escondido de excluir
   const handleHiddenVersionClick = () => {
@@ -4633,14 +6388,16 @@ const handleRemoveWorkPhoto = async (index) => {
           </div>
         </div>
       )}
-       {dayModalDate && (
+
+      {/* Modal do dia (toque longo no calendário) */}
+      {dayModalDate && (
         <div className="fixed inset-0 z-[300] flex items-end sm:items-center justify-center">
-          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDayModalDate(null)}/>
+          <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDayModalDate(null)} />
           <div className="relative bg-white w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl max-h-[85vh] flex flex-col shadow-2xl">
- 
+
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <div>
-                <h3 className="font-black text-slate-900 text-base leading-none mb-1">
+                <h3 className="font-black text-slate-900 text-base leading-none mb-1" style={dk}>
                   {dayModalDate.split('-').reverse().join('/')}
                 </h3>
                 <p className="text-[10px] text-slate-400 font-bold uppercase">
@@ -4649,14 +6406,14 @@ const handleRemoveWorkPhoto = async (index) => {
               </div>
               <button onClick={() => setDayModalDate(null)}
                 className="p-2 rounded-full text-slate-400 hover:bg-slate-100 active:scale-95 transition-all">
-                <X size={18}/>
+                <X size={18} />
               </button>
             </div>
- 
+
             <div className="p-5 overflow-y-auto flex-1">
               {getDayAppointments(dayModalDate).length === 0 ? (
                 <div className="py-10 text-center">
-                  <CalendarDays size={28} className="mx-auto text-slate-200 mb-2"/>
+                  <CalendarDays size={28} className="mx-auto text-slate-200 mb-2" />
                   <p className="text-xs font-bold text-slate-400">Nenhum cliente marcado nesse dia</p>
                 </div>
               ) : (
@@ -4669,7 +6426,7 @@ const handleRemoveWorkPhoto = async (index) => {
                         {app.time}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-black text-slate-900 truncate">
+                        <p className="text-xs font-black text-slate-900 truncate" style={dk}>
                           {app.client_name || app.client || 'Cliente'}
                         </p>
                         <p className="text-[9px] text-slate-400 font-bold uppercase truncate">
@@ -4683,14 +6440,14 @@ const handleRemoveWorkPhoto = async (index) => {
                       <button onClick={() => cancelAppointmentQuick(app)}
                         title="Cancelar cliente"
                         className="w-9 h-9 rounded-full bg-red-500 text-white flex items-center justify-center active:scale-90 hover:bg-red-600 transition-all flex-shrink-0">
-                        <X size={16}/>
+                        <X size={16} />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
             </div>
- 
+
             <div className="p-5 border-t border-slate-100">
               <button onClick={() => { setSelectedDateConfig(dayModalDate); setDayModalDate(null); }}
                 className="w-full py-3.5 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-tight active:scale-95 transition-all">
@@ -4706,7 +6463,7 @@ const handleRemoveWorkPhoto = async (index) => {
         <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
           <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
             <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Lock size={32}/>
+              <Lock size={32} />
             </div>
             <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
             {isGuestBarber ? (
@@ -4735,558 +6492,549 @@ const handleRemoveWorkPhoto = async (index) => {
           </div>
         </div>
       )}
- 
-    {/* ── Modal pagamento ── */}
-    {showPayModal && (
-      <div className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6">
-        <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl">
-          <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Lock size={32}/>
-          </div>
-          <h2 className="text-xl font-black text-slate-900 mb-2">Libere Serviços Ilimitados</h2>
-          {isGuestBarber ? (
-            <>
-              <p className="text-slate-500 text-sm mb-6">Para ativar o plano, crie uma conta de profissional.</p>
-              <button className="w-full py-4 bg-blue-600 text-white rounded-xl font-bold"
-                onClick={() => { setShowPayModal(false); onLogout(); }}>
-                Criar conta / Fazer Login
-              </button>
-            </>
-          ) : (
-            <>
-              <p className="text-slate-500 text-sm mb-6">
-                Você atingiu o limite de <b>3 serviços gratuitos</b>.
-              </p>
-              <button className="w-full py-4 bg-green-500 text-white rounded-xl font-bold"
-                onClick={handlePayment} disabled={isPaying}>
-                {isPaying ? 'Processando...' : 'Liberar Tudo (R$ 29,90/mês)'}
-              </button>
-            </>
-          )}
-          <button onClick={() => setShowPayModal(false)}
-            className="text-slate-400 text-sm font-bold block w-full mt-3">
-            Agora não
-          </button>
-        </div>
-      </div>
-    )}
- 
-    {/* ── Header ── */}
-    <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3">
-          <div className="flex-shrink-0">
-            <StoryRing rating={rating} size={44}>
-              {effectiveUser.avatar_url
-                ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
-                : <div className="w-full h-full flex items-center justify-center bg-slate-100">
-                    <User size={16} className="text-slate-400"/>
-                  </div>}
-            </StoryRing>
-          </div>
-          <div>
-            <h2 className="text-base font-black text-slate-900 leading-tight">
-              {isGuestBarber ? 'Painel Demo' : `Painel ${effectiveUser.plano_ativo ? 'Pro' : 'Grátis'}`}
-            </h2>
-            {effectiveUser.bio && (
-              <p className="text-[9px] text-blue-500 font-bold italic">"{effectiveUser.bio}"</p>
-            )}
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}/>
-              <p className="text-[10px] text-slate-500 font-bold uppercase">
-                {effectiveUser.is_visible ? 'Online' : 'Offline'}
-              </p>
+
+      {/* ── Header ── */}
+      <header className="bg-white p-6 border-b border-slate-100 sticky top-0 z-20">
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="flex-shrink-0">
+              <StoryRing rating={rating} size={44}>
+                {effectiveUser.avatar_url
+                  ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar" />
+                  : <div className="w-full h-full flex items-center justify-center bg-slate-100">
+                      <User size={16} className="text-slate-400" />
+                    </div>}
+              </StoryRing>
             </div>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <DarkModeToggle isDark={isDark} onToggle={onToggleDark}/>
-          <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
-            <LogOut size={18}/>
-          </button>
-        </div>
-      </div>
-    </header>
- 
-    <main className="p-6 max-w-md mx-auto pb-24">
- 
-      {/* ══════════════════════════ HOME TAB ══════════════════════════ */}
-      {activeTab === 'home' && (
-        <div className="space-y-6">
-          {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
- 
-          {/* Métricas */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
-              <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
-              <p className="text-2xl font-black">R$ {revenue}</p>
-            </div>
-            <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-              <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
-              <div className="flex gap-2 items-baseline">
-                <p className="text-2xl font-black text-slate-900">{confirmed.length}</p>
-                {dedupedPending.length > 0 && (
-                  <span className="text-xs text-orange-500 font-bold">({dedupedPending.length} novos)</span>
-                )}
+            <div>
+              <h2 className="text-base font-black text-slate-900 leading-tight">
+                {isGuestBarber ? 'Painel Demo' : `Painel ${effectiveUser.plano_ativo ? 'Pro' : 'Grátis'}`}
+              </h2>
+              {effectiveUser.bio && (
+                <p className="text-[9px] text-blue-500 font-bold italic">"{effectiveUser.bio}"</p>
+              )}
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`} />
+                <p className="text-[10px] text-slate-500 font-bold uppercase">
+                  {effectiveUser.is_visible ? 'Online' : 'Offline'}
+                </p>
               </div>
             </div>
           </div>
- 
-          {/* ── PRÓXIMOS 5 ATENDIMENTOS (com lembrete WhatsApp) ── */}
-          {(() => {
-            const now = new Date();
-            const nowDateStr = now.toISOString().split('T')[0];
-            const nowTimeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-            const upcoming = allAppointments.filter(a => {
-              if (!a.date || !a.time) return false;
-              if (a.date > nowDateStr) return true;
-              if (a.date === nowDateStr && a.time > nowTimeStr) return true;
-              return false;
-            }).slice(0, 5);
- 
-            if (!upcoming.length) return null;
- 
-            const sendReminder = (app) => {
-              const nome = app.client_name || app.client || 'Cliente';
-              const servico = app.service_name || app.service || 'seu serviço';
-              const hora = app.time || '';
-              const dia = app.date ? app.date.split('-').reverse().join('/') : '';
-              const fone = (app.phone || '').replace(/\D/g,'');
-              const msg = encodeURIComponent(
-                `Olá ${nome}! 👋 Lembrando que você tem um agendamento hoje às ${hora} para ${servico}. Te esperamos! ✂️💈`
-              );
-              if (fone) {
-                window.open(`https://wa.me/55${fone}?text=${msg}`, '_blank');
-              } else {
-                alert(`Sem número de WhatsApp para ${nome}.\nAgendamento: ${dia} às ${hora}.`);
-              }
-            };
- 
-            const isToday = (dateStr) => dateStr === nowDateStr;
-            const isSoon = (dateStr, timeStr) => {
-              if (dateStr !== nowDateStr) return false;
-              const [h,m] = timeStr.split(':').map(Number);
-              const apptMin = h*60+m;
-              const nowMin = now.getHours()*60+now.getMinutes();
-              return apptMin - nowMin <= 120 && apptMin > nowMin;
-            };
- 
-            return (
-              <section>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className="w-7 h-7 bg-blue-50 rounded-xl flex items-center justify-center">
-                    <Bell size={14} className="text-blue-500"/>
-                  </div>
-                  <h3 className="font-black text-slate-900 text-sm">Próximos Atendimentos</h3>
-                  <span className="ml-auto bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                    {upcoming.length}
-                  </span>
+          <div className="flex items-center gap-2">
+            <DarkModeToggle isDark={isDark} onToggle={onToggleDark} />
+            <button onClick={onLogout} className="p-2 bg-slate-100 rounded-full text-slate-400 hover:text-red-500">
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="p-6 max-w-md mx-auto pb-24">
+
+        {/* ══════════════════════════ HOME TAB ══════════════════════════ */}
+        {activeTab === 'home' && (
+          <div className="space-y-6">
+            {!isGuestBarber && <CopyLinkButton barber={effectiveUser} />}
+
+            {/* Métricas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-slate-900 text-white p-5 rounded-2xl shadow-lg">
+                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Faturamento</p>
+                <p className="text-2xl font-black">R$ {revenue}</p>
+              </div>
+              <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <p className="text-slate-400 text-[10px] font-bold uppercase mb-1 tracking-wider">Agendamentos</p>
+                <div className="flex gap-2 items-baseline">
+                  <p className="text-2xl font-black text-slate-900" style={dk}>{confirmed.length}</p>
+                  {dedupedPending.length > 0 && (
+                    <span className="text-xs text-orange-500 font-bold">({dedupedPending.length} novos)</span>
+                  )}
                 </div>
-                <div className="space-y-2">
-                  {upcoming.map((app, idx) => {
-                    const nome = app.client_name || app.client || '—';
-                    const servico = app.service_name || app.service || 'Serviço';
-                    const dia = app.date ? app.date.split('-').reverse().join('/') : '';
-                    const hora = app.time || '';
-                    const fone = (app.phone || '').replace(/\D/g,'');
-                    const today = isToday(app.date);
-                    const soon = isSoon(app.date, app.time);
- 
-                    return (
-                      <div key={app.id || idx}
-                        className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3
-                          ${soon ? 'border-orange-200 border-l-4 border-l-orange-400' : 'border-slate-100 border-l-4 border-l-blue-400'}`}>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                            <p className="font-black text-slate-900 text-sm truncate">{nome}</p>
-                            {soon && (
-                              <span className="text-[9px] font-black bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full animate-pulse">
-                                Em breve!
-                              </span>
-                            )}
-                            {today && !soon && (
-                              <span className="text-[9px] font-black bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full">
-                                Hoje
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{servico}</p>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <Clock size={10} className="text-blue-400"/>
-                            <span className="text-[10px] text-blue-500 font-bold">{dia} às {hora}</span>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => sendReminder(app)}
-                          title="Enviar lembrete no WhatsApp"
-                          className={`flex-shrink-0 flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95
-                            ${fone
-                              ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
-                              : 'bg-slate-50 border border-slate-200 text-slate-400'}`}>
-                          <Phone size={14}/>
-                          <span className="text-[8px] font-black uppercase">Lembrar</span>
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-[9px] text-slate-400 mt-2 text-center font-bold">
-                  💡 Toque em "Lembrar" para avisar o cliente pelo WhatsApp
-                </p>
-              </section>
-            );
-          })()}
- 
-          {/* ── Histórico de Clientes ── */}
-          <section>
-            <button onClick={() => setShowClientHistory(!showClientHistory)}
-              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
+              </div>
+            </div>
+
+            {/* ── Fidelidade: aviso das moedas ── */}
+            <button onClick={() => setActiveTab('loyalty')}
+              className="w-full text-left bg-gradient-to-br from-amber-400 to-orange-500 rounded-2xl p-4 shadow-lg active:scale-95 transition-all">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
-                  <History size={18} className="text-purple-500"/>
-                </div>
-                <div className="text-left">
-                  <p className="font-black text-slate-900 text-sm">Meus Clientes</p>
-                  <p className="text-[10px] text-slate-400">
-                    {uniqueClients.length} pessoa{uniqueClients.length !== 1 ? 's' : ''} atendida{uniqueClients.length !== 1 ? 's' : ''}
+                <div className="w-10 h-10 bg-white/25 rounded-xl flex items-center justify-center text-xl flex-shrink-0">🪙</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-black text-sm leading-tight">Mantenha seus clientes fiéis entregando moedas</p>
+                  <p className="text-white/90 text-[10px] font-bold mt-0.5 leading-snug">
+                    {coinValue > 0
+                      ? `Cada moeda vale ${fmtBRL(coinValue)}. Toque para ajustar e ver seus assinantes.`
+                      : 'Defina quanto vale cada moeda (R$ 0,50, R$ 1,00...) e crie planos de assinatura.'}
                   </p>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full">
-                  {uniqueClients.length}
-                </span>
-                <ChevronRight size={16} className={`text-slate-400 transition-transform ${showClientHistory ? 'rotate-90' : ''}`}/>
+                <ChevronRight size={18} className="text-white flex-shrink-0" />
               </div>
             </button>
-            {showClientHistory && (
-              <div className="mt-2 space-y-2">
-                {uniqueClients.length === 0
-                  ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                      <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
+
+            {/* ── PRÓXIMOS 5 ATENDIMENTOS (com lembrete WhatsApp) ── */}
+            {(() => {
+              const now = new Date();
+              const nowDateStr = localISO(now); // data LOCAL (toISOString usava UTC e errava depois das 21h)
+              const nowTimeStr = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+              const upcoming = allAppointments.filter(a => {
+                if (!a.date || !a.time) return false;
+                if (a.date > nowDateStr) return true;
+                if (a.date === nowDateStr && a.time > nowTimeStr) return true;
+                return false;
+              }).slice(0, 5);
+
+              if (!upcoming.length) return null;
+
+              const sendReminder = (app) => {
+                const nome = app.client_name || app.client || 'Cliente';
+                const servico = app.service_name || app.service || 'seu serviço';
+                const hora = app.time || '';
+                const dia = app.date ? app.date.split('-').reverse().join('/') : '';
+                const fone = (app.phone || '').replace(/\D/g, '');
+                const quando = app.date === nowDateStr ? 'hoje' : `em ${dia}`;
+                const msg = encodeURIComponent(
+                  `Olá ${nome}! 👋 Lembrando que você tem um agendamento ${quando} às ${hora} para ${servico}. Te esperamos! ✂️💈`
+                );
+                if (fone) {
+                  window.open(`https://wa.me/55${fone}?text=${msg}`, '_blank');
+                } else {
+                  alert(`Sem número de WhatsApp para ${nome}.\nAgendamento: ${dia} às ${hora}.`);
+                }
+              };
+
+              const isToday = (dateStr) => dateStr === nowDateStr;
+              const isSoon = (dateStr, timeStr) => {
+                if (dateStr !== nowDateStr) return false;
+                const [h, m] = timeStr.split(':').map(Number);
+                const apptMin = h * 60 + m;
+                const nowMin = now.getHours() * 60 + now.getMinutes();
+                return apptMin - nowMin <= 120 && apptMin > nowMin;
+              };
+
+              return (
+                <section>
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 bg-blue-50 rounded-xl flex items-center justify-center">
+                      <Bell size={14} className="text-blue-500" />
                     </div>
-                  : uniqueClients.map((c, i) => (
-                    <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <span className="text-sm font-black text-purple-600">{c.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                    <h3 className="font-black text-slate-900 text-sm" style={dk}>Próximos Atendimentos</h3>
+                    <span className="ml-auto bg-blue-100 text-blue-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                      {upcoming.length}
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {upcoming.map((app, idx) => {
+                      const nome = app.client_name || app.client || '—';
+                      const servico = app.service_name || app.service || 'Serviço';
+                      const dia = app.date ? app.date.split('-').reverse().join('/') : '';
+                      const hora = app.time || '';
+                      const fone = (app.phone || '').replace(/\D/g, '');
+                      const hoje = isToday(app.date);
+                      const soon = isSoon(app.date, app.time);
+
+                      return (
+                        <div key={app.id || idx}
+                          className={`bg-white rounded-2xl border shadow-sm p-4 flex items-center gap-3
+                            ${soon ? 'border-orange-200 border-l-4 border-l-orange-400' : 'border-slate-100 border-l-4 border-l-blue-400'}`}>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                              <p className="font-black text-slate-900 text-sm truncate" style={dk}>{nome}</p>
+                              {soon && (
+                                <span className="text-[9px] font-black bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full animate-pulse">
+                                  Em breve!
+                                </span>
+                              )}
+                              {hoje && !soon && (
+                                <span className="text-[9px] font-black bg-blue-50 text-blue-500 px-2 py-0.5 rounded-full">
+                                  Hoje
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase truncate">{servico}</p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Clock size={10} className="text-blue-400" />
+                              <span className="text-[10px] text-blue-500 font-bold">{dia} às {hora}</span>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => sendReminder(app)}
+                            title="Enviar lembrete no WhatsApp"
+                            className={`flex-shrink-0 flex flex-col items-center gap-1 p-2.5 rounded-xl transition-all active:scale-95
+                              ${fone
+                                ? 'bg-green-50 border border-green-200 text-green-700 hover:bg-green-100'
+                                : 'bg-slate-50 border border-slate-200 text-slate-400'}`}>
+                            <Phone size={14} />
+                            <span className="text-[8px] font-black uppercase">Lembrar</span>
+                          </button>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-black text-slate-900 text-sm truncate">{c.name || 'Cliente'}</p>
-                          <p className="text-[10px] text-slate-400">
-                            {c.count} visita{c.count !== 1 ? 's' : ''} · último: {c.lastDate ? c.lastDate.split('-').reverse().join('/') : '—'}
-                          </p>
-                          {c.services.length > 0 && (
-                            <p className="text-[9px] text-blue-500 font-bold truncate mt-0.5">
-                              {c.services.slice(0,2).join(' · ')}
-                            </p>
-                          )}
-                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[9px] text-slate-400 mt-2 text-center font-bold">
+                    💡 Toque em "Lembrar" para avisar o cliente pelo WhatsApp
+                  </p>
+                </section>
+              );
+            })()}
+
+            {/* ── Histórico de Clientes ── */}
+            <section>
+              <button onClick={() => setShowClientHistory(!showClientHistory)}
+                className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-purple-50 rounded-xl flex items-center justify-center">
+                    <History size={18} className="text-purple-500" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-black text-slate-900 text-sm" style={dk}>Meus Clientes</p>
+                    <p className="text-[10px] text-slate-400">
+                      {uniqueClients.length} pessoa{uniqueClients.length !== 1 ? 's' : ''} atendida{uniqueClients.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="bg-purple-100 text-purple-700 text-[10px] font-black px-2 py-0.5 rounded-full">
+                    {uniqueClients.length}
+                  </span>
+                  <ChevronRight size={16} className={`text-slate-400 transition-transform ${showClientHistory ? 'rotate-90' : ''}`} />
+                </div>
+              </button>
+              {showClientHistory && (
+                <div className="mt-2 space-y-2">
+                  {uniqueClients.length === 0
+                    ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                        <p className="text-slate-400 text-sm">Nenhum cliente ainda.</p>
                       </div>
-                      {c.phone
-                        ? <a href={`https://wa.me/55${c.phone}`} target="_blank" rel="noopener noreferrer"
-                            className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-[10px] active:scale-95 transition-all">
-                            <Phone size={11}/>
-                            {c.phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}
-                          </a>
-                        : <span className="flex-shrink-0 text-[9px] text-slate-300 font-bold">Sem tel.</span>}
+                    : uniqueClients.map((c, i) => (
+                      <div key={i} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-black text-purple-600">{c.name?.charAt(0)?.toUpperCase() || '?'}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-black text-slate-900 text-sm truncate" style={dk}>{c.name || 'Cliente'}</p>
+                            <p className="text-[10px] text-slate-400">
+                              {c.count} visita{c.count !== 1 ? 's' : ''} · último: {c.lastDate ? c.lastDate.split('-').reverse().join('/') : '—'}
+                            </p>
+                            {c.services.length > 0 && (
+                              <p className="text-[9px] text-blue-500 font-bold truncate mt-0.5">
+                                {c.services.slice(0, 2).join(' · ')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {c.phone
+                          ? <a href={`https://wa.me/55${c.phone}`} target="_blank" rel="noopener noreferrer"
+                              className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 bg-green-50 border border-green-200 rounded-xl text-green-700 font-bold text-[10px] active:scale-95 transition-all">
+                              <Phone size={11} />
+                              {c.phone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3')}
+                            </a>
+                          : <span className="flex-shrink-0 text-[9px] text-slate-300 font-bold">Sem tel.</span>}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </section>
+
+            {/* ── Novas Solicitações (agora com aviso de horário ocupado) ── */}
+            <section>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-slate-900 flex items-center gap-2" style={dk}>
+                  Novas Solicitações
+                  {dedupedPending.length > 0 && (
+                    <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                      {dedupedPending.length}
+                    </span>
+                  )}
+                </h3>
+                {dedupedPending.length > 3 && (
+                  <button onClick={() => setShowAllPending(!showAllPending)}
+                    className="text-[10px] font-black text-blue-600 uppercase tracking-tight border-b border-blue-200">
+                    {showAllPending ? 'Ver menos' : `Ver todos (${dedupedPending.length})`}
+                  </button>
+                )}
+              </div>
+              {dedupedPending.length === 0
+                ? <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                    <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
+                  </div>
+                : pendingToShow.map(app => (
+                  <PendingRequestCard
+                    key={app.id}
+                    app={app}
+                    pendingAll={pendingAll}
+                    allAppointmentsFull={allAppointmentsFull}
+                    effectiveUser={effectiveUser}
+                    isGuestBarber={isGuestBarber}
+                    getBlocks={getBlocks}
+                    onUpdateStatus={onUpdateStatus}
+                    setSlotsAvailability={setSlotsAvailability}
+                    sb={sb}
+                    coinValue={coinValue}
+                    isDark={isDark}
+                  />
+                ))}
+            </section>
+
+            {/* ── Agenda do dia / próximos ── */}
+            {(() => {
+              // ── Agrupa blocos "(continuação)" no atendimento principal ──
+              const _toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+              const _toTime = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+              const _interval = GLOBAL_TIME_SLOTS.length > 1
+                ? (_toMin(GLOBAL_TIME_SLOTS[1]) - _toMin(GLOBAL_TIME_SLOTS[0])) || 30
+                : 30;
+              const _isCont = (a) => typeof a.service_name === 'string' && a.service_name.endsWith(' (continuação)');
+
+              const unique = allAppointments.filter((app, i, self) => i === self.findIndex(t => t.id === app.id));
+              const mains = unique.filter(a => !_isCont(a));
+              const conts = unique.filter(_isCont);
+              const used = new Set();
+
+              // Cada atendimento principal vira UM card; as continuações ficam dentro dele (não aparecem separadas)
+              const groupedAppointments = mains.map(m => {
+                const blocks = [m];
+                let last = m;
+                while (true) {
+                  const next = conts.find(c =>
+                    !used.has(c.id) &&
+                    c.date === m.date &&
+                    c.client_name === m.client_name &&
+                    _toMin(c.time) - _toMin(last.time) === _interval
+                  );
+                  if (!next) break;
+                  used.add(next.id);
+                  blocks.push(next);
+                  last = next;
+                }
+                return { ...m, blocks };
+              });
+
+              return (
+                <section>
+                  <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2" style={dk}>
+                    <Calendar size={18} className="text-blue-500" /> Agenda Completa
+                  </h3>
+                  {groupedAppointments.length === 0
+                    ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
+                        <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
+                      </div>
+                    : <div className="space-y-3">
+                        {groupedAppointments.map(app => {
+                          const lastBlock = app.blocks[app.blocks.length - 1];
+                          const timeLabel = app.blocks.length > 1 && app.time && lastBlock.time
+                            ? `${app.time}–${_toTime(_toMin(lastBlock.time) + _interval)}`
+                            : app.time;
+                          return (
+                            <div key={app.id}
+                              className={`flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm
+                                ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                  {/* ✅ nome do cliente em branco no modo noite */}
+                                  <p className="font-black text-slate-900 text-sm" style={dk}>{app.client_name || app.client}</p>
+                                  <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase
+                                    ${app.isManual ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
+                                    {app.isManual ? 'Manual' : 'Confirmado'}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || app.service || 'Serviço'}</p>
+                                <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-0.5">
+                                  <Clock size={12} strokeWidth={3} />
+                                  <span className="text-[10px]">{timeLabel} • {app.date?.split('-').reverse().join('/')}</span>
+                                </div>
+                              </div>
+                              <button onClick={() => {
+                                setActiveTab('shop');
+                                setFocusComandaId(`__open__${app.id}`);
+                              }} title="Abrir comanda do Loja para este atendimento"
+                                className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
+                                <Tag size={18} />
+                                <span className="text-[8px] font-black uppercase">Bar</span>
+                              </button>
+                              <button onClick={() => {
+                                if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
+                                  if (app.isManual) {
+                                    const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
+                                    effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
+                                    if (!isGuestBarber) sb.from('profiles').update({ manual_appointments: filtered }).eq('id', effectiveUser.id);
+                                    if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
+                                  } else {
+                                    // Rejeita e libera TODOS os blocos do atendimento
+                                    app.blocks.forEach(b => {
+                                      if (!isGuestBarber) onUpdateStatus(b.id, 'rejected');
+                                      if (b.date && b.time) setSlotAvailability(b.date, b.time, true);
+                                    });
+                                  }
+                                }
+                              }} className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all">
+                                <XCircle size={20} />
+                                <span className="text-[8px] font-black uppercase">Cancelar</span>
+                              </button>
+                            </div>
+                          );
+                        })}
+                      </div>}
+                </section>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ══════════════════════════ LOYALTY TAB (Fidelidade e Assinaturas) ══════════════════════════ */}
+        {activeTab === 'loyalty' && (
+          <LoyaltySection
+            user={effectiveUser}
+            isGuest={isGuestBarber}
+            sb={sb}
+            clients={uniqueClients}
+            avgTicket={avgTicket}
+            onUpdateProfile={effectiveOnUpdateProfile}
+            onBack={() => setActiveTab('config')}
+            isDark={isDark}
+          />
+        )}
+
+        {/* ══════════════════════════ SERVICES TAB ══════════════════════════ */}
+        {activeTab === 'services' && (
+          <div className="space-y-4">
+            <button onClick={() => setActiveTab('config')}
+              className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-tight">
+              <ArrowLeft size={14} /> Voltar para Ajustes
+            </button>
+            <div className="p-4 bg-blue-50 rounded-2xl mb-4">
+              <p className="text-xs text-blue-700 font-medium">
+                {isGuestBarber ? 'Modo Demo — explore os serviços (sem salvar)'
+                  : effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa'
+                  : `Limite Grátis: ${effectiveUser.my_services?.length || 0}/3`}
+              </p>
+            </div>
+            {MASTER_SERVICES.map(service => {
+              const userServiceData = effectiveUser.my_services?.find(s => s.id === service.id);
+              const isActive = !!userServiceData;
+              return (
+                <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
+                  <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        {service.icon}
+                      </div>
+                      <div>
+                        <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`} style={isActive ? dk : undefined}>{service.name}</p>
+                        <p className="text-[10px] text-slate-400">{service.duration}</p>
+                      </div>
+                    </div>
+                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
+                      {isActive && <div className="w-2 h-2 bg-white rounded-full" />}
+                    </div>
+                  </div>
+                  {isActive && (
+                    <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
+                      <input type="number" value={userServiceData.price || ''}
+                        onChange={e => updateServicePrice(service.id, e.target.value)}
+                        className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none" />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Serviços personalizados */}
+            <div className="mt-6 pt-6 border-t-2 border-dashed border-slate-200">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2" style={dk}>
+                    <PlusCircle size={16} className="text-purple-600" /> Serviços Personalizados
+                  </h3>
+                  <p className="text-[10px] text-slate-400 mt-0.5">Aparecem apenas no seu link de agendamento</p>
+                </div>
+                <button onClick={() => setShowAddCustomSvc(!showAddCustomSvc)}
+                  className={`p-2 rounded-xl transition-all ${showAddCustomSvc ? 'bg-red-50 text-red-500' : 'bg-purple-50 text-purple-600'}`}>
+                  {showAddCustomSvc ? <X size={16} /> : <Plus size={16} />}
+                </button>
+              </div>
+              {(effectiveUser.custom_services || []).length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {(effectiveUser.custom_services || []).map(cs => (
+                    <div key={cs.id} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-100">
+                      <div>
+                        <p className="font-bold text-sm" style={{ color: '#0f172a' }}>{cs.name}</p>
+                        <p className="text-[10px] text-slate-500">{cs.duration} · R$ {cs.price}</p>
+                      </div>
+                      <button onClick={() => removeCustomService(cs.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all">
+                        <Trash2 size={14} />
+                      </button>
                     </div>
                   ))}
-              </div>
-            )}
-          </section>
- 
-          {/* ── Novas Solicitações ── */}
-          <section>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                Novas Solicitações
-                {dedupedPending.length > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-                    {dedupedPending.length}
-                  </span>
-                )}
-              </h3>
-              {dedupedPending.length > 3 && (
-                <button onClick={() => setShowAllPending(!showAllPending)}
-                  className="text-[10px] font-black text-blue-600 uppercase tracking-tight border-b border-blue-200">
-                  {showAllPending ? 'Ver menos' : `Ver todos (${dedupedPending.length})`}
-                </button>
+                </div>
+              )}
+              {showAddCustomSvc && (
+                <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Serviço</p>
+                  <input type="text" value={newSvcName} onChange={e => setNewSvcName(e.target.value)} placeholder="Ex: Progressiva, Coloração..."
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-purple-400 transition-colors" />
+                  <div className="flex gap-2">
+                    <div className="flex-1 relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
+                      <input type="number" value={newSvcPrice} onChange={e => setNewSvcPrice(e.target.value)} placeholder="Preço"
+                        className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400 transition-colors" />
+                    </div>
+                    <select value={newSvcDuration} onChange={e => setNewSvcDuration(e.target.value)}
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none">
+                      {['30min', '45min', '1h', '1h 30min', '2h'].map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+                  <button onClick={addCustomService} disabled={!newSvcName.trim() || !newSvcPrice}
+                    className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+                    <Plus size={16} /> Adicionar Serviço
+                  </button>
+                </div>
               )}
             </div>
-            {dedupedPending.length === 0
-              ? <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
-                  <p className="text-slate-400 text-sm">Nenhuma solicitação nova.</p>
-                </div>
-              : pendingToShow.map(app => (
-                <div key={app.id} className="bg-white p-4 rounded-2xl border border-slate-100 mb-3 shadow-sm">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <p className="font-black text-slate-900 leading-none mb-1">{app.client_name || app.client}</p>
-                      <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || 'Serviço'}</p>
-                      <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-2 bg-blue-50 w-fit px-2 py-1 rounded-lg">
-                        <Clock size={12} strokeWidth={3}/>
-                        <span className="text-[10px]">{app.time} • {app.date?.split('-').reverse().join('/')}</span>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-black text-slate-900 text-sm">R$ {app.price}</p>
-                      <span className="text-[8px] text-orange-500 font-black uppercase">Pendente</span>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={async () => {
-                      if (isGuestBarber) { alert('Para aceitar agendamentos, faça login!'); return; }
-                      if (!app.id) return;
-                      try {
-                        const blocks = getBlocks(app, pendingAll);
-                        for (const b of blocks) await onUpdateStatus(b.id, 'confirmed');
-                        const times = blocks.map(b => b.time).filter(Boolean);
-                        if (app.date && times.length) await setSlotsAvailability(app.date, times, false);
-                       const msg = encodeURIComponent(
-  `Olá ${app.client_name || app.client}! Seu agendamento foi CONFIRMADO! ✅\n📅 ${app.date?.split('-').reverse().join('/')} às ${app.time}\n\n📲 Baixe o app Salão Digital:\nhttps://salaodigital.app.br/download`
-);
-                        const fone = app.phone?.toString().replace(/\D/g,'');
-                        if (fone) window.location.href = `https://wa.me/55${fone}?text=${msg}`;
-                      } catch (err) { console.error(err); }
-                    }} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-green-100 transition-all active:scale-95">
-                      <CheckCircle size={14}/> Aceitar
-                    </button>
-                    <button onClick={() => !isGuestBarber && getBlocks(app, pendingAll).forEach(b => onUpdateStatus(b.id, 'rejected'))}
-                      className="p-3 bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all">
-                      <XCircle size={18}/>
-                    </button>
-                  </div>
-                </div>
-              ))}
-          </section>
- 
-          {/* ── Agenda do dia / próximos ── */}
-          {(() => {
-            // ── Agrupa blocos "(continuação)" no atendimento principal ──
-            const _toMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
-            const _toTime = (min) => `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
-            const _interval = GLOBAL_TIME_SLOTS.length > 1
-              ? (_toMin(GLOBAL_TIME_SLOTS[1]) - _toMin(GLOBAL_TIME_SLOTS[0])) || 30
-              : 30;
-            const _isCont = (a) => typeof a.service_name === 'string' && a.service_name.endsWith(' (continuação)');
-
-            const unique = allAppointments.filter((app, i, self) => i === self.findIndex(t => t.id === app.id));
-            const mains = unique.filter(a => !_isCont(a));
-            const conts = unique.filter(_isCont);
-            const used = new Set();
-
-            // Cada atendimento principal vira UM card; as continuações ficam dentro dele (não aparecem separadas)
-            const groupedAppointments = mains.map(m => {
-              const blocks = [m];
-              let last = m;
-              while (true) {
-                const next = conts.find(c =>
-                  !used.has(c.id) &&
-                  c.date === m.date &&
-                  c.client_name === m.client_name &&
-                  _toMin(c.time) - _toMin(last.time) === _interval
-                );
-                if (!next) break;
-                used.add(next.id);
-                blocks.push(next);
-                last = next;
-              }
-              return { ...m, blocks };
-            });
-
-            return (
-          <section>
-            <h3 className="font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Calendar size={18} className="text-blue-500"/> Agenda Completa
-            </h3>
-            {groupedAppointments.length === 0
-              ? <div className="py-8 text-center bg-slate-50 border border-slate-100 rounded-2xl">
-                  <p className="text-slate-400 text-sm">Sua agenda está vazia.</p>
-                </div>
-              : <div className="space-y-3">
-                  {groupedAppointments.map(app => {
-                    const lastBlock = app.blocks[app.blocks.length - 1];
-                    const timeLabel = app.blocks.length > 1 && app.time && lastBlock.time
-                      ? `${app.time}–${_toTime(_toMin(lastBlock.time) + _interval)}`
-                      : app.time;
-                    return (
-                    <div key={app.id}
-                      className={`flex items-center justify-between p-4 bg-white rounded-2xl border shadow-sm
-                        ${app.isManual ? 'border-amber-200 border-l-4 border-l-amber-500' : 'border-slate-100 border-l-4 border-l-green-500'}`}>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-black text-slate-900 text-sm">{app.client_name || app.client}</p>
-                          <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase
-                            ${app.isManual ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>
-                            {app.isManual ? 'Manual' : 'Confirmado'}
-                          </span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase">{app.service_name || app.service || 'Serviço'}</p>
-                        <div className="flex items-center gap-1.5 text-blue-600 font-bold mt-0.5">
-                          <Clock size={12} strokeWidth={3}/>
-                          <span className="text-[10px]">{timeLabel} • {app.date?.split('-').reverse().join('/')}</span>
-                        </div>
-                      </div>
-                      <button onClick={() => {
-                        setActiveTab('shop');
-                        setFocusComandaId(`__open__${app.id}`);
-                      }} title="Abrir comanda do Loja para este atendimento"
-                        className="flex flex-col items-center justify-center gap-1 ml-2 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-600 hover:bg-amber-100 transition-all active:scale-95">
-                        <Tag size={18}/>
-                        <span className="text-[8px] font-black uppercase">Bar</span>
-                      </button>
-                      <button onClick={() => {
-                        if (window.confirm(`Cancelar o horário de ${app.client_name || app.client}?`)) {
-                          if (app.isManual) {
-                            const filtered = (effectiveUser.manual_appointments || []).filter(m => m.id !== app.id);
-                            effectiveOnUpdateProfile({ ...effectiveUser, manual_appointments: filtered });
-                            if (!isGuestBarber) sb.from('profiles').update({ manual_appointments: filtered }).eq('id', effectiveUser.id);
-                            if (app.date && app.time) setSlotAvailability(app.date, app.time, true);
-                          } else {
-                            // Rejeita e libera TODOS os blocos do atendimento
-                            app.blocks.forEach(b => {
-                              if (!isGuestBarber) onUpdateStatus(b.id, 'rejected');
-                              if (b.date && b.time) setSlotAvailability(b.date, b.time, true);
-                            });
-                          }
-                        }
-                      }} className="flex flex-col items-center justify-center gap-1 ml-4 p-3 rounded-xl bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all">
-                        <XCircle size={20}/>
-                        <span className="text-[8px] font-black uppercase">Cancelar</span>
-                      </button>
-                    </div>
-                    );
-                  })}
-                </div>}
-          </section>
-            );
-          })()}
-        </div>
-      )}
-      {/* ══════════════════════════ SERVICES TAB ══════════════════════════ */}
-      {activeTab === 'services' && (
-        <div className="space-y-4">
-          <button onClick={() => setActiveTab('config')}
-            className="flex items-center gap-1.5 text-[11px] font-black text-slate-500 uppercase tracking-tight">
-            <ArrowLeft size={14}/> Voltar para Ajustes
-          </button>
-          <div className="p-4 bg-blue-50 rounded-2xl mb-4">
-            <p className="text-xs text-blue-700 font-medium">
-              {isGuestBarber ? 'Modo Demo — explore os serviços (sem salvar)'
-                : effectiveUser.plano_ativo ? 'Assinatura Profissional Ativa'
-                : `Limite Grátis: ${effectiveUser.my_services?.length || 0}/3`}
-            </p>
           </div>
-          {MASTER_SERVICES.map(service => {
-            const userServiceData = effectiveUser.my_services?.find(s => s.id === service.id);
-            const isActive = !!userServiceData;
-            return (
-              <div key={service.id} className={`p-4 rounded-2xl border-2 transition-all ${isActive ? 'border-slate-900 bg-white shadow-md' : 'border-slate-100 bg-slate-50'}`}>
-                <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleService(service.id, service.defaultPrice)}>
-                  <div className="flex items-center gap-4">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isActive ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                      {service.icon}
-                    </div>
-                    <div>
-                      <p className={`text-sm font-bold ${isActive ? 'text-slate-900' : 'text-slate-500'}`}>{service.name}</p>
-                      <p className="text-[10px] text-slate-400">{service.duration}</p>
-                    </div>
-                  </div>
-                  <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isActive ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
-                    {isActive && <div className="w-2 h-2 bg-white rounded-full"/>}
-                  </div>
-                </div>
-                {isActive && (
-                  <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400">PREÇO (R$)</span>
-                    <input type="number" value={userServiceData.price || ''}
-                      onChange={e => updateServicePrice(service.id, e.target.value)}
-                      className="w-24 text-right font-black text-lg bg-slate-50 rounded-md px-2 py-1 outline-none"/>
-                  </div>
-                )}
-              </div>
-            );
-          })}
- 
-          {/* Serviços personalizados */}
-          <div className="mt-6 pt-6 border-t-2 border-dashed border-slate-200">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
-                  <PlusCircle size={16} className="text-purple-600"/> Serviços Personalizados
-                </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Aparecem apenas no seu link de agendamento</p>
-              </div>
-              <button onClick={() => setShowAddCustomSvc(!showAddCustomSvc)}
-                className={`p-2 rounded-xl transition-all ${showAddCustomSvc ? 'bg-red-50 text-red-500' : 'bg-purple-50 text-purple-600'}`}>
-                {showAddCustomSvc ? <X size={16}/> : <Plus size={16}/>}
-              </button>
-            </div>
-            {(effectiveUser.custom_services || []).length > 0 && (
-              <div className="space-y-2 mb-3">
-                {(effectiveUser.custom_services || []).map(cs => (
-                  <div key={cs.id} className="flex items-center justify-between p-3 bg-purple-50 rounded-xl border border-purple-100">
-                    <div>
-                      <p className="font-bold text-sm text-slate-900">{cs.name}</p>
-                      <p className="text-[10px] text-slate-500">{cs.duration} · R$ {cs.price}</p>
-                    </div>
-                    <button onClick={() => removeCustomService(cs.id)} className="p-2 text-red-400 hover:bg-red-50 rounded-lg transition-all">
-                      <Trash2 size={14}/>
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {showAddCustomSvc && (
-              <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200 space-y-3">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Novo Serviço</p>
-                <input type="text" value={newSvcName} onChange={e => setNewSvcName(e.target.value)} placeholder="Ex: Progressiva, Coloração..."
-                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-purple-400 transition-colors"/>
-                <div className="flex gap-2">
-                  <div className="flex-1 relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">R$</span>
-                    <input type="number" value={newSvcPrice} onChange={e => setNewSvcPrice(e.target.value)} placeholder="Preço"
-                      className="w-full pl-8 pr-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm outline-none focus:border-purple-400 transition-colors"/>
-                  </div>
-                  <select value={newSvcDuration} onChange={e => setNewSvcDuration(e.target.value)}
-                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none">
-                    {['30min','45min','1h','1h 30min','2h'].map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-                <button onClick={addCustomService} disabled={!newSvcName.trim() || !newSvcPrice}
-                  className="w-full py-3 bg-purple-600 text-white rounded-xl font-bold text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-                  <Plus size={16}/> Adicionar Serviço
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
- 
-      {/* ══════════════════════════ CONFIG TAB ════════════════════════════ */}
-      {activeTab === 'config' && (
+        )}
+
+        {/* ══════════════════════════ CONFIG TAB ════════════════════════════ */}
+        {activeTab === 'config' && (
           <div className="space-y-6">
             {/* Atalho para gestão de serviços */}
             <button onClick={() => setActiveTab('services')}
               className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center">
-                  <Scissors size={16} className="text-blue-500"/>
+                  <Scissors size={16} className="text-blue-500" />
                 </div>
                 <div className="text-left">
-                  <p className="font-black text-slate-900 text-sm">Meus Serviços</p>
+                  <p className="font-black text-slate-900 text-sm" style={dk}>Meus Serviços</p>
                   <p className="text-[10px] text-slate-400">Gerencie os serviços e preços oferecidos</p>
                 </div>
               </div>
-              <ChevronRight size={16} className="text-slate-400"/>
+              <ChevronRight size={16} className="text-slate-400" />
+            </button>
+
+            {/* Atalho para Fidelidade e Assinaturas */}
+            <button onClick={() => setActiveTab('loyalty')}
+              className="w-full flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 shadow-sm active:scale-95 transition-all">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-amber-50 rounded-xl flex items-center justify-center">
+                  <Gift size={16} className="text-amber-500" />
+                </div>
+                <div className="text-left">
+                  <p className="font-black text-slate-900 text-sm" style={dk}>Fidelidade e Assinaturas</p>
+                  <p className="text-[10px] text-slate-400">
+                    {coinValue > 0 ? `Moeda: ${fmtBRL(coinValue)} · planos e assinantes` : 'Valor da moeda, planos e assinantes'}
+                  </p>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-slate-400" />
             </button>
 
             {/* Fotos do trabalho */}
             <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <h3 className="font-bold text-slate-900">Fotos do Trabalho</h3>
+                  <h3 className="font-bold text-slate-900" style={dk}>Fotos do Trabalho</h3>
                   <p className="text-[10px] text-slate-400 mt-0.5">Máx. 10 fotos · exibidas no link público</p>
                 </div>
                 <span className="text-[10px] font-black text-slate-500 bg-slate-100 px-2 py-1 rounded-lg">
@@ -5296,10 +7044,10 @@ const handleRemoveWorkPhoto = async (index) => {
               <div className="grid grid-cols-3 gap-3 mb-4">
                 {(effectiveUser.work_photos || []).map((url, i) => (
                   <div key={i} className="relative aspect-square rounded-2xl overflow-hidden bg-slate-100 border border-slate-200">
-                    <img src={url} alt={`Trabalho ${i+1}`} className="w-full h-full object-cover"/>
+                    <img src={url} alt={`Trabalho ${i + 1}`} className="w-full h-full object-cover" />
                     <button onClick={() => handleRemoveWorkPhoto(i)}
                       className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg">
-                      <XCircle size={14}/>
+                      <XCircle size={14} />
                     </button>
                   </div>
                 ))}
@@ -5307,182 +7055,182 @@ const handleRemoveWorkPhoto = async (index) => {
                   <label className={`aspect-square rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all
                     ${uploadingPhoto ? 'border-blue-300 bg-blue-50' : 'border-slate-200 bg-slate-50 hover:border-blue-400'}`}>
                     {uploadingPhoto
-                      ? <Loader2 size={20} className="text-blue-500 animate-spin"/>
-                      : <><Image size={20} className="text-slate-400 mb-1"/><span className="text-[9px] font-black text-slate-400 uppercase">Adicionar</span></>}
-                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadWorkPhoto} disabled={uploadingPhoto}/>
+                      ? <Loader2 size={20} className="text-blue-500 animate-spin" />
+                      : <><Image size={20} className="text-slate-400 mb-1" /><span className="text-[9px] font-black text-slate-400 uppercase">Adicionar</span></>}
+                    <input type="file" accept="image/*" className="hidden" onChange={handleUploadWorkPhoto} disabled={uploadingPhoto} />
                   </label>
                 )}
               </div>
             </section>
- 
-          {/* Configurações do perfil */}
-<section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-  <h3 className="font-bold text-slate-900 mb-6">Configurações do Perfil</h3>
-  <div className="flex flex-col items-center mb-6">
-    <div className="relative">
-      <StoryRing rating={rating} size={96}>
-        {effectiveUser.avatar_url
-          ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar"/>
-          : <div className="w-full h-full flex items-center justify-center bg-slate-100"><User size={32} className="text-slate-300"/></div>}
-      </StoryRing>
-      <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
-        <Camera size={16}/>
-      </label>
-      <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar}/>
-    </div>
-  </div>
-  <div className="space-y-4">
-    {/* ✅ BIO COM BOTÃO OK */}
-    <div>
-      <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
-        <span className="flex items-center gap-1"><Type size={11}/> Bio (tagline)</span>
-        <span className={`font-black text-[10px] ${(tempBio || '').length >= 15 ? 'text-red-500' : (tempBio || '').length >= 12 ? 'text-amber-500' : 'text-slate-400'}`}>
-          {(tempBio || '').length}/15
-        </span>
-      </label>
-      <div className="flex gap-2">
-        <input 
-          type="text" 
-          maxLength={15} 
-          value={tempBio || ''} 
-          onChange={(e) => setTempBio(e.target.value)} 
-          placeholder="Ex: Especialista em..."
-          className="flex-1 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
-        />
-        <button 
-          onClick={saveBio}
-          className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap flex items-center gap-1"
-        >
-          ✓ OK
-        </button>
-      </div>
-      {tempBio && (
-        <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
-          <span className="text-[9px] text-slate-400">Preview  :</span>
-          <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
-        </div>
-      )}
+
+            {/* Configurações do perfil */}
+            <section className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <h3 className="font-bold text-slate-900 mb-6" style={dk}>Configurações do Perfil</h3>
+              <div className="flex flex-col items-center mb-6">
+                <div className="relative">
+                  <StoryRing rating={rating} size={96}>
+                    {effectiveUser.avatar_url
+                      ? <img src={effectiveUser.avatar_url} className="w-full h-full object-cover" alt="Avatar" />
+                      : <div className="w-full h-full flex items-center justify-center bg-slate-100"><User size={32} className="text-slate-300" /></div>}
+                  </StoryRing>
+                  <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer shadow-md">
+                    <Camera size={16} />
+                  </label>
+                  <input id="avatar-upload" type="file" accept="image/*" className="hidden" onChange={handleUploadAvatar} />
                 </div>
- 
-             {/* Endereço */}
-<div>
-  <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
-  <div className="flex gap-2 mt-1">
-    <input
-      type="text"
-      value={tempAddress} 
-      onChange={(e) => setTempAddress(e.target.value)} 
-      placeholder="Digite seu endereço completo..."
-      className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"
-    />
-    <button
-      onClick={saveAddress} 
-      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-blue-700 active:scale-95 transition-all"
-    >
-      OK
-    </button>
-  </div>
-</div>
+              </div>
+              <div className="space-y-4">
+                {/* ✅ BIO COM BOTÃO OK */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1"><Type size={11} /> Bio (tagline)</span>
+                    <span className={`font-black text-[10px] ${(tempBio || '').length >= 15 ? 'text-red-500' : (tempBio || '').length >= 12 ? 'text-amber-500' : 'text-slate-400'}`}>
+                      {(tempBio || '').length}/15
+                    </span>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      maxLength={15}
+                      value={tempBio || ''}
+                      onChange={(e) => setTempBio(e.target.value)}
+                      placeholder="Ex: Especialista em..."
+                      className="flex-1 bg-slate-50 p-3 rounded-xl border-2 border-slate-200 text-sm font-medium outline-none focus:border-blue-400 transition-colors"
+                    />
+                    <button
+                      onClick={saveBio}
+                      className="px-4 py-3 bg-blue-600 text-white rounded-xl font-black text-sm hover:bg-blue-700 active:scale-95 transition-all whitespace-nowrap flex items-center gap-1"
+                    >
+                      ✓ OK
+                    </button>
+                  </div>
+                  {tempBio && (
+                    <div className="mt-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center gap-2">
+                      <span className="text-[9px] text-slate-400">Preview  :</span>
+                      <span className="text-[10px] text-blue-600 font-bold italic">"{tempBio}"</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Endereço */}
+                <div>
+                  <label className="text-[10px] font-bold text-slate-400 uppercase">Endereço</label>
+                  <div className="flex gap-2 mt-1">
+                    <input
+                      type="text"
+                      value={tempAddress}
+                      onChange={(e) => setTempAddress(e.target.value)}
+                      placeholder="Digite seu endereço completo..."
+                      className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 text-sm font-medium outline-none focus:border-blue-400"
+                    />
+                    <button
+                      onClick={saveAddress}
+                      className="px-4 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-blue-700 active:scale-95 transition-all"
+                    >
+                      OK
+                    </button>
+                  </div>
+                </div>
                 <button onClick={() => {
                   if (isGuestBarber) { alert('Para salvar localização, faça login!'); return; }
                   if ('geolocation' in navigator) {
                     navigator.geolocation.getCurrentPosition(pos => {
-                      effectiveOnUpdateProfile({...effectiveUser, latitude: pos.coords.latitude, longitude: pos.coords.longitude});
+                      effectiveOnUpdateProfile({ ...effectiveUser, latitude: pos.coords.latitude, longitude: pos.coords.longitude });
                       alert('Localização capturada!');
                     });
                   }
                 }} className="w-full py-3 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase flex items-center justify-center gap-2">
-                  <MapPin size={14}/> Capturar Minha Localização
+                  <MapPin size={14} /> Capturar Minha Localização
                 </button>
               </div>
- 
+
               {/* Toggle visibilidade */}
               <div className="mt-6 pt-6 border-t border-slate-100 flex items-center justify-between">
                 <div>
-                  <h3 className="font-bold text-slate-900 text-sm">Loja Visível para Clientes</h3>
+                  <h3 className="font-bold text-slate-900 text-sm" style={dk}>Loja Visível para Clientes</h3>
                   {isGuestBarber && <p className="text-[10px] text-amber-500 font-bold mt-0.5">Faça login para ativar</p>}
                 </div>
                 <div onClick={() => {
                   if (isGuestBarber) { alert('Para ativar sua loja, faça login!'); return; }
-                  const updated = {...effectiveUser, is_visible: !effectiveUser.is_visible};
+                  const updated = { ...effectiveUser, is_visible: !effectiveUser.is_visible };
                   effectiveOnUpdateProfile(updated);
-                  if (!isGuestBarber) sb.from('profiles').update({is_visible: !effectiveUser.is_visible}).eq('id', effectiveUser.id);
+                  if (!isGuestBarber) sb.from('profiles').update({ is_visible: !effectiveUser.is_visible }).eq('id', effectiveUser.id);
                 }} className={`w-12 h-6 rounded-full p-1 cursor-pointer transition-colors ${effectiveUser.is_visible ? 'bg-green-500' : 'bg-slate-300'}`}>
-                  <div className={`w-4 h-4 bg-white rounded-full transition-transform ${effectiveUser.is_visible ? 'translate-x-6' : 'translate-x-0'}`}/>
+                  <div className={`w-4 h-4 bg-white rounded-full transition-transform ${effectiveUser.is_visible ? 'translate-x-6' : 'translate-x-0'}`} />
                 </div>
               </div>
- 
+
               {/* Duração */}
               <div className="mt-6 pt-6 border-t border-slate-100">
-                <p className="font-bold text-slate-900 text-sm mb-1">Duração do Atendimento</p>
+                <p className="font-bold text-slate-900 text-sm mb-1" style={dk}>Duração do Atendimento</p>
                 <div className="flex gap-2">
-                  {['30min','1h'].map(dur => (
+                  {['30min', '1h'].map(dur => (
                     <button key={dur} onClick={async () => {
-                      const updated = {...effectiveUser, appointment_duration: dur};
+                      const updated = { ...effectiveUser, appointment_duration: dur };
                       effectiveOnUpdateProfile(updated);
-                      if (!isGuestBarber) await sb.from('profiles').update({appointment_duration: dur}).eq('id', effectiveUser.id).catch(console.error);
+                      if (!isGuestBarber) await sb.from('profiles').update({ appointment_duration: dur }).eq('id', effectiveUser.id).catch(console.error);
                     }} className={`flex-1 py-3 rounded-xl font-black text-sm border-2 transition-all active:scale-95
-                      ${appointmentDuration===dur ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
-                      {dur==='30min' ? '⏱ 30 min' : '🕐 1 hora'}
+                      ${appointmentDuration === dur ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-500 border-slate-200'}`}>
+                      {dur === '30min' ? '⏱ 30 min' : '🕐 1 hora'}
                     </button>
                   ))}
                 </div>
               </div>
             </section>
- 
-            {!isGuestBarber && <CopyLinkButton barber={effectiveUser}/>}
- 
-             {/* ── Agenda ── */}
+
+            {!isGuestBarber && <CopyLinkButton barber={effectiveUser} />}
+
+            {/* ── Agenda ── */}
             <section className="bg-white rounded-3xl border border-slate-200 overflow-hidden">
               <div onClick={() => setShowCalendar(!showCalendar)}
                 className="p-5 flex items-center justify-between bg-slate-50 cursor-pointer">
                 <div className="flex items-center gap-3">
-                  <CalendarDays size={20}/>
+                  <CalendarDays size={20} />
                   <h3 className="font-bold text-sm">Horários Disponíveis</h3>
                 </div>
-                <ChevronRight size={18} className={`transition-transform ${showCalendar ? 'rotate-90' : ''}`}/>
+                <ChevronRight size={18} className={`transition-transform ${showCalendar ? 'rotate-90' : ''}`} />
               </div>
               {showCalendar && (
                 <div className="p-5">
                   <div className="flex items-center justify-between mb-3">
                     <button onClick={goConfigPrev} disabled={isPrevConfigDisabled}
-                      className={`p-2 rounded-full transition-all ${isPrevConfigDisabled?'text-slate-200 cursor-not-allowed':'text-slate-600 hover:bg-slate-100'}`}>
-                      <ChevronLeft size={18}/>
+                      className={`p-2 rounded-full transition-all ${isPrevConfigDisabled ? 'text-slate-200 cursor-not-allowed' : 'text-slate-600 hover:bg-slate-100'}`}>
+                      <ChevronLeft size={18} />
                     </button>
-                    <span className="font-black text-sm text-slate-900">{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
+                    <span className="font-black text-sm text-slate-900" style={dk}>{MONTH_NAMES[configCalMonth]} {configCalYear}</span>
                     <button onClick={goConfigNext} className="p-2 rounded-full text-slate-600 hover:bg-slate-100 transition-all">
-                      <ChevronRight size={18}/>
+                      <ChevronRight size={18} />
                     </button>
                   </div>
- {isPastMonth ? (
-  <button onClick={() => goToMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
-    className="w-full mb-3 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">
-    ↩ Voltar para o mês atual
-  </button>
-) : (
-  <div className="flex gap-2 mb-3">
-    <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
-    <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
-  </div>
-)}
+                  {isPastMonth ? (
+                    <button onClick={() => goToMonth(new Date(today.getFullYear(), today.getMonth(), 1))}
+                      className="w-full mb-3 py-2.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">
+                      ↩ Voltar para o mês atual
+                    </button>
+                  ) : (
+                    <div className="flex gap-2 mb-3">
+                      <button onClick={markAllDaysInMonth} className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95">✓ Marcar Mês</button>
+                      <button onClick={unmarkAllDaysInMonth} className="flex-1 py-2.5 bg-red-500 text-white rounded-xl text-[10px] font-black uppercase tracking-tight active:scale-95 hover:bg-red-600">✕ Limpar Mês</button>
+                    </div>
+                  )}
                   {/* Aviso do toque longo */}
                   <div className="flex items-center justify-center gap-1.5 mb-3 py-2 bg-blue-50 rounded-xl border border-blue-100">
-                    <Clock size={12} className="text-blue-500"/>
+                    <Clock size={12} className="text-blue-500" />
                     <span className="text-[9px] font-black text-blue-600 uppercase tracking-tight">
                       Segure em um dia para ver os clientes
                     </span>
                   </div>
- 
+
                   <div className="grid grid-cols-7 gap-1 mb-1">
-                    {['D','S','T','Q','Q','S','S'].map((d,i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
+                    {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map((d, i) => <div key={i} className="text-[10px] font-black text-slate-300 text-center py-1">{d}</div>)}
                   </div>
- 
+
                   <div className="grid grid-cols-7 gap-1 mb-6">
-                    {Array.from({length: new Date(configCalYear, configCalMonth, 1).getDay()}, (_, i) => (
-                      <div key={`vazio-${i}`} className="aspect-square"/>
+                    {Array.from({ length: new Date(configCalYear, configCalMonth, 1).getDay() }, (_, i) => (
+                      <div key={`vazio-${i}`} className="aspect-square" />
                     ))}
-                    {Array.from({length: daysInConfigMonth}, (_,i) => {
-                      const fullDate = formatDate(configCalYear, configCalMonth, i+1);
+                    {Array.from({ length: daysInConfigMonth }, (_, i) => {
+                      const fullDate = formatDate(configCalYear, configCalMonth, i + 1);
                       const isSelected = selectedDateConfig === fullDate;
                       const slotsQty = freeSlotsCount(fullDate);
                       const agendados = getDayAppointments(fullDate).length;
@@ -5502,117 +7250,113 @@ const handleRemoveWorkPhoto = async (index) => {
                           className={`aspect-square rounded-xl text-xs font-bold border transition-all relative select-none
                             ${isSelected ? 'ring-2 ring-blue-500' : ''}
                             ${isAvail ? (isLow ? 'bg-amber-500 text-white border-amber-500' : 'bg-green-600 text-white border-green-600') : 'bg-red-500 text-white border-red-500'}`}>
-                          {i+1}
+                          {i + 1}
                           {agendados > 0 ? (
                             <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 bg-blue-600 text-white text-[8px] font-black rounded-full border border-white flex items-center justify-center">
                               {agendados}
                             </span>
                           ) : isLow && !isSelected ? (
-                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white"/>
+                            <span className="absolute -top-1 -right-1 w-2 h-2 bg-orange-400 rounded-full border border-white" />
                           ) : null}
                         </button>
                       );
                     })}
                   </div>
- 
+
                   {/* Legenda */}
                   <div className="flex flex-wrap gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 bg-green-600 rounded-sm"/>
+                      <div className="w-3 h-3 bg-green-600 rounded-sm" />
                       <span className="text-[9px] text-slate-500 font-bold">Livre</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 bg-amber-500 rounded-sm"/>
+                      <div className="w-3 h-3 bg-amber-500 rounded-sm" />
                       <span className="text-[9px] text-slate-500 font-bold">Poucas vagas</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 bg-red-500 rounded-sm"/>
+                      <div className="w-3 h-3 bg-red-500 rounded-sm" />
                       <span className="text-[9px] text-slate-500 font-bold">Fechado</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 bg-blue-600 rounded-sm"/>
+                      <div className="w-3 h-3 bg-blue-600 rounded-sm" />
                       <span className="text-[9px] text-slate-500 font-bold">Agendado</span>
                     </div>
                   </div>
-                      {isPastMonth ? (
-  <PastMonthSummary year={configCalYear} month={configCalMonth} appointments={allAppointments}/>
-) : (
-                  <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <div>
-                        <h4 className="font-bold text-xs text-slate-900">Horários — {selectedDateConfig.split('-').reverse().join('/')}</h4>
-                        <p className="text-[9px] text-slate-400 font-bold mt-0.5">
-                          {freeForSelected.length} de {filteredTimeSlots.length} abertos
-                          {bookedForSelected.length > 0 && (
-                            <span className="ml-1 text-blue-500 font-black">· {bookedForSelected.length} agendado(s)</span>
-                          )}
-                          {freeForSelected.length > 0 && freeForSelected.length < 4 && (
-                            <span className="ml-1 text-amber-500 font-black">· Poucas vagas!</span>
-                          )}
-                        </p>
+                  {isPastMonth ? (
+                    <PastMonthSummary year={configCalYear} month={configCalMonth} appointments={allAppointments} />
+                  ) : (
+                    <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <h4 className="font-bold text-xs" style={{ color: '#0f172a' }}>Horários — {selectedDateConfig.split('-').reverse().join('/')}</h4>
+                          <p className="text-[9px] text-slate-400 font-bold mt-0.5">
+                            {freeForSelected.length} de {filteredTimeSlots.length} abertos
+                            {bookedForSelected.length > 0 && (
+                              <span className="ml-1 text-blue-500 font-black">· {bookedForSelected.length} agendado(s)</span>
+                            )}
+                            {freeForSelected.length > 0 && freeForSelected.length < 4 && (
+                              <span className="ml-1 text-amber-500 font-black">· Poucas vagas!</span>
+                            )}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5">
+                          <button onClick={() => selectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95">+ Todos</button>
+                          <button onClick={() => deselectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[9px] font-black uppercase active:scale-95 hover:bg-red-600">− Todos</button>
+                        </div>
                       </div>
-                      <div className="flex gap-1.5">
-                        <button onClick={() => selectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-[9px] font-black uppercase active:scale-95">+ Todos</button>
-                        <button onClick={() => deselectAllSlotsForDay(selectedDateConfig)} className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-[9px] font-black uppercase active:scale-95 hover:bg-red-600">− Todos</button>
-                      </div>
-                    </div>
-                    <div className="h-[1px] bg-slate-200 mb-3"/>
- 
-                    <div className="grid grid-cols-4 gap-2">
-                      {filteredTimeSlots.map(slot => {
-                        const isOpen = effectiveUser.available_slots?.[selectedDateConfig]?.includes(slot);
-                        const isBooked = bookedForSelected.includes(slot); // já tem cliente = travado
- 
-                        // Bloqueia horários passados de hoje
-                        const now = new Date();
-                        const [selYear, selMonth, selDay] = selectedDateConfig.split('-').map(Number);
- 
-                        const isToday =
-                          selYear === now.getFullYear() &&
-                          (selMonth - 1) === now.getMonth() &&
-                          selDay === now.getDate();
- 
-                        let isPastSlot = false;
- 
-                        if (isToday) {
-                          const [slotHour, slotMinute] = slot.split(':').map(Number);
-                          const currentHour = now.getHours();
-                          const currentMinute = now.getMinutes();
- 
-                          if (slotHour < currentHour || (slotHour === currentHour && slotMinute <= currentMinute)) {
-                            isPastSlot = true;
+                      <div className="h-[1px] bg-slate-200 mb-3" />
+
+                      <div className="grid grid-cols-4 gap-2">
+                        {filteredTimeSlots.map(slot => {
+                          const isOpen = effectiveUser.available_slots?.[selectedDateConfig]?.includes(slot);
+                          const isBooked = bookedForSelected.includes(slot); // já tem cliente = travado
+
+                          // Bloqueia horários passados de hoje
+                          const now = new Date();
+                          const [selYear, selMonth, selDay] = selectedDateConfig.split('-').map(Number);
+
+                          const isToday =
+                            selYear === now.getFullYear() &&
+                            (selMonth - 1) === now.getMonth() &&
+                            selDay === now.getDate();
+
+                          let isPastSlot = false;
+
+                          if (isToday) {
+                            const [slotHour, slotMinute] = slot.split(':').map(Number);
+                            const currentHour = now.getHours();
+                            const currentMinute = now.getMinutes();
+
+                            if (slotHour < currentHour || (slotHour === currentHour && slotMinute <= currentMinute)) {
+                              isPastSlot = true;
+                            }
                           }
-                        }
- 
-                        return (
-                          <button
-                            key={slot}
-                            disabled={isPastSlot || isBooked}
-                            onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
-                            title={isBooked ? 'Horário com cliente agendado' : undefined}
-                            className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95
-                              ${isBooked
-                                ? 'bg-blue-600 text-white border-blue-600 cursor-not-allowed'
-                                : isPastSlot
-                                  ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-70'
-                                  : isOpen
-                                    ? 'bg-green-600 text-white border-green-600 shadow-sm'
-                                    : 'bg-red-500 text-white border-red-500 hover:bg-red-600'}`}>
-                            {slot}
-                          </button>
-                        );
-                      })}
+
+                          return (
+                            <button
+                              key={slot}
+                              disabled={isPastSlot || isBooked}
+                              onClick={() => toggleSlotForDate(selectedDateConfig, slot)}
+                              title={isBooked ? 'Horário com cliente agendado' : undefined}
+                              className={`py-2 text-[10px] font-bold rounded-lg border transition-all active:scale-95
+                                ${isBooked
+                                  ? 'bg-blue-600 text-white border-blue-600 cursor-not-allowed'
+                                  : isPastSlot
+                                    ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed opacity-70'
+                                    : isOpen
+                                      ? 'bg-green-600 text-white border-green-600 shadow-sm'
+                                      : 'bg-red-500 text-white border-red-500 hover:bg-red-600'}`}>
+                              {slot}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
-                   
-                  </div>
-                 )}
+                  )}
                 </div>
-                
               )}
             </section>
- 
 
-            
             {/* Status do plano */}
             <div className="pt-2 text-center">
               <div className="inline-block p-4 bg-slate-100 rounded-2xl border border-slate-200 w-full">
@@ -5636,7 +7380,7 @@ const handleRemoveWorkPhoto = async (index) => {
                 )}
               </div>
             </div>
- 
+
             {isGuestBarber && (
               <section className="bg-amber-50 border border-amber-200 rounded-3xl p-6 text-center">
                 <p className="text-2xl mb-2">✂️</p>
@@ -5647,7 +7391,7 @@ const handleRemoveWorkPhoto = async (index) => {
                 </button>
               </section>
             )}
- 
+
             {/* Botão de excluir conta visível e minimalista */}
             {!isGuestBarber && (
               <div className="pb-2 text-center">
@@ -5662,61 +7406,67 @@ const handleRemoveWorkPhoto = async (index) => {
             </p>
           </div>
         )}
-     {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
-      {activeTab === 'reports' && (
-        <div className="space-y-4">
-          <div className="mb-2">
-            <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2">
-              <BarChart2 size={20} className="text-blue-500"/> Relatórios
-            </h2>
-            <p className="text-xs text-slate-400">Análise do seu desempenho e tempo de trabalho</p>
-          </div>
-          {isGuestBarber && (
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
-              ⚠️ Modo demo — os dados são simulados.
+
+        {/* ══════════════════════════ REPORTS TAB ═══════════════════════════ */}
+        {activeTab === 'reports' && (
+          <div className="space-y-4">
+            <div className="mb-2">
+              <h2 className="text-lg font-black text-slate-900 mb-1 flex items-center gap-2" style={dk}>
+                <BarChart2 size={20} className="text-blue-500" /> Relatórios
+              </h2>
+              <p className="text-xs text-slate-400">Análise do seu desempenho e tempo de trabalho</p>
             </div>
-          )}
+            {isGuestBarber && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700 font-bold">
+                ⚠️ Modo demo — os dados são simulados.
+              </div>
+            )}
 
-          <ReportsSection
-            appointments={appointments}
-            user={effectiveUser}
-            isGuest={isGuestBarber}
-            onUpdateProfile={effectiveOnUpdateProfile}
-            supabase={sb}
+            <ReportsSection
+              appointments={appointments}
+              user={effectiveUser}
+              isGuest={isGuestBarber}
+              onUpdateProfile={effectiveOnUpdateProfile}
+              supabase={sb}
+            />
+
+            {/* ── Meta dos 30 ── */}
+            <GoalCard
+              totalAppointments={totalAppointmentsForGoal}
+              slug={effectiveUser.slug}
+              isGuest={isGuestBarber}
+            />
+
+            {/* ── Suporte Direto ao Administrador ── */}
+            <SupportChat user={effectiveUser} isGuest={isGuestBarber} />
+          </div>
+        )}
+
+        {/* ══════════════════════════ SHOP/BAR TAB ══════════════════════════ */}
+        {activeTab === 'shop' && (
+          <ShopBarSection
+            effectiveUser={effectiveUser}
+            isGuestBarber={isGuestBarber}
+            sb={sb}
+            activeAppointments={allAppointments}
+            focusComandaId={focusComandaId}
+            setFocusComandaId={setFocusComandaId}
           />
+        )}
+      </main>
 
-          {/* ── Meta dos 30 ── */}
-          <GoalCard
-            totalAppointments={totalAppointmentsForGoal}
-            slug={effectiveUser.slug}
-            isGuest={isGuestBarber}
-          />
-
-          {/* ── Suporte Direto ao Administrador ── */}
-          <SupportChat user={effectiveUser} isGuest={isGuestBarber} />
-        </div>
-      )}
-
-
-
-
-      {/* ══════════════════════════ SHOP/BAR TAB ══════════════════════════ */}
-      {activeTab === 'shop' && (
-        <ShopBarSection
-          effectiveUser={effectiveUser}
-          isGuestBarber={isGuestBarber}
-          sb={sb}
-          activeAppointments={allAppointments}
-          focusComandaId={focusComandaId}
-          setFocusComandaId={setFocusComandaId}
-        />
-      )}
-    </main>
-
-    <BottomNavBar activeTab={activeTab} setActiveTab={setActiveTab} tabs={tabs} tabLabels={tabLabels} tabIcons={tabIcons}/>
-  </div>
-);
+      {/* Fidelidade e Serviços são sub-telas de Ajustes: mantém "Ajustes" aceso na barra */}
+      <BottomNavBar
+        activeTab={activeTab === 'services' || activeTab === 'loyalty' ? 'config' : activeTab}
+        setActiveTab={setActiveTab}
+        tabs={tabs}
+        tabLabels={tabLabels}
+        tabIcons={tabIcons}
+      />
+    </div>
+  );
 };
+
 // ─── /download: detecta Android/iOS e manda direto para a loja ───────────────
 const DownloadRedirectPage = () => {
   const IOS_URL = 'https://apps.apple.com/br/app/salao-digital/id6821454030';
