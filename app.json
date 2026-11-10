@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "3d313765-b29c-4083-9013-2778e7d9f991"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.salaodigital.barbersaas",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "plugins": [
+      "expo-build-properties"
+    ]
+  }
+}

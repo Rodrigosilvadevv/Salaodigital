@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "642604754439",
+    "project_id": "salao-digital-6d41e",
+    "storage_bucket": "salao-digital-6d41e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:642604754439:android:8f0c01214bb3a054deaca2",
+        "android_client_info": {
+          "package_name": "com.barber.SalaoDigital"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBZ7baf9YzuaUH_6AkezEqEb0ECEMX0BoQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
