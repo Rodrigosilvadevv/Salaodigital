@@ -2690,7 +2690,7 @@ const DownloadAppSheet = ({ open, onClose, title, subtitle }) => {
   );
 };
 
-/// ───────────── FUNÇÕES AUXILIARES ─────────────
+// ───────────── FUNÇÕES AUXILIARES ─────────────
 const timeToMin = (t) => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
 
 // Converte "30 min", "1h", "1h30", "1h 30min" em minutos (fallback 30)
@@ -2724,37 +2724,12 @@ const dateLabel = (dateStr) => {
   return `${wd} ${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}`;
 };
 
-// ── Moedas e assinaturas (ajuste aqui se os nomes no seu banco forem outros) ──
-const SUBS_TABLE = 'client_subscriptions'; // tabela das assinaturas dos clientes
-const brl = (n) => Number(n || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-const isContinuation = (a) => typeof a?.service_name === 'string' && a.service_name.endsWith(' (continuação)');
-
-// Planos que o profissional criou (profiles.subscription_plans)
-// { id, name, price, uses_per_month (0 = ilimitado), bonus_coins, active }
-const getPlans = (b) => (Array.isArray(b?.subscription_plans) ? b.subscription_plans : [])
-  .filter(p => p && p.active !== false && Number(p.price) > 0);
-
-// Cliente logado na página pública: usa o que veio por prop (dentro do app)
-// ou a sessão salva no navegador (link público)
-const readStoredClient = () => {
-  try {
-    const u = JSON.parse(localStorage.getItem('salao_user_data') || 'null');
-    if (!u || !u.id || u.isGuest) return null;
-    if (u.role === 'barber' || u.role === 'professional') return null; // profissional não ganha moeda
-    return u;
-  } catch (_) { return null; }
-};
-
 // [AJUSTE 1] novas props: embedded (dentro do app) e clientUser (cliente logado)
 const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   const [bookStep,setBookStep]=useState(0), [selectedServices,setSelectedServices]=useState([]), [selectedDate,setSelectedDate]=useState(null), [selectedTime,setSelectedTime]=useState(null), [clientName,setClientName]=useState(''), [clientPhone,setClientPhone]=useState(''), [submitting,setSubmitting]=useState(false), [copied,setCopied]=useState(false);
   const [menuProducts,setMenuProducts]=useState([]), [menuCategories,setMenuCategories]=useState([]);
   const [lightbox,setLightbox]=useState(null);
   const [appPrompt,setAppPrompt]=useState(null); // null | 'start' | 'finish'
-  const [tab,setTab]=useState('services');       // 'services' | 'plans' | 'coins'
-  const [coinBalance,setCoinBalance]=useState(0);
-  const [coinsToUse,setCoinsToUse]=useState(0);
-  const [mySub,setMySub]=useState(null);
   const panelRef=useRef(null);
   const rating=getBarberRating(barber), badges=getBadges(barber), workPhotos=barber.work_photos||[];
   const masterServices=(barber.my_services||[]).map(s=>{ const master=MASTER_SERVICES.find(m=>m.id===s.id); return master?{...master,price:s.price}:null; }).filter(Boolean);
@@ -2762,44 +2737,13 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   const services=[...masterServices,...customServices];
   const barberPhone=String(barber.phone||'').replace(/\D/g,'');
 
-  // ── Quem está logado (app ou link público) ──
-  const effClient = (clientUser && !clientUser.isGuest) ? clientUser : readStoredClient();
-  const isLogged = !!effClient?.id && String(effClient.id) !== String(barber.id);
-
-  // ── Moedas e planos deste profissional ──
-  const coinValue = Number(barber.coin_value) || 0;
-  const plans = getPlans(barber);
-  const coinGoal = typeof COIN_COST_FREE_CUT === 'number' ? COIN_COST_FREE_CUT : 10;
-
-  // [AJUSTE 2] preenche nome e telefone quando tem cliente logado
+  // [AJUSTE 2] preenche nome e telefone quando é o cliente logado do app
   useEffect(()=>{
-    if (isLogged) {
-      setClientName(effClient.name||'');
-      setClientPhone(applyPhoneMask(String(effClient.phone||'')));
+    if (clientUser && !clientUser.isGuest) {
+      setClientName(clientUser.name||'');
+      setClientPhone(applyPhoneMask(String(clientUser.phone||'')));
     }
-  },[effClient?.id]);
-
-  // ── Saldo de moedas do cliente com este profissional ──
-  // ganhas = atendimentos confirmados (1 moeda cada) | usadas = coins_used dos agendamentos não cancelados
-  const loadCoins = async () => {
-    if (!isLogged) { setCoinBalance(0); setMySub(null); return; }
-    try {
-      const { data } = await supabase.from('appointments')
-        .select('status,service_name,coins_used')
-        .eq('client_id', effClient.id).eq('barber_id', barber.id);
-      const rows = data || [];
-      const earned = rows.filter(a => a.status === 'confirmed' && !isContinuation(a)).length;
-      const spent = rows.filter(a => a.status !== 'rejected').reduce((s, a) => s + (Number(a.coins_used) || 0), 0);
-      setCoinBalance(Math.max(0, earned - spent));
-    } catch (_) {}
-    try {
-      const { data } = await supabase.from(SUBS_TABLE).select('*')
-        .eq('client_id', effClient.id).eq('barber_id', barber.id);
-      const active = (data || []).find(s => !s.status || s.status === 'active');
-      setMySub(active || null);
-    } catch (_) {}
-  };
-  useEffect(()=>{ loadCoins(); },[effClient?.id, barber.id]);
+  },[clientUser?.id]);
 
   // ── Cor escolhida no cardápio ──
   const theme = MENU_THEMES[barber.menu_color] || MENU_THEMES.blue;
@@ -2809,12 +2753,13 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   const otherBadges = badges.filter(b => !/^\s*pro\b/i.test(String(b.label || '')));
   const showBadges = adminTags.length > 0 ? otherBadges : badges;
 
-  // ── Pop up de download: aparece ao abrir a página (só para quem ainda NÃO logou) ──
+  // ── Pop up de download: aparece ao abrir a página ──
+  // [AJUSTE 3] não aparece quando está dentro do app
   useEffect(()=>{
-    if (embedded || isLogged) return;
+    if (embedded) return;
     const t=setTimeout(()=>setAppPrompt('start'),1200);
     return()=>clearTimeout(t);
-  },[isLogged]);
+  },[]);
 
   // ── Pop up de download: aparece de novo quando o agendamento termina ──
   useEffect(()=>{
@@ -2823,20 +2768,14 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
     return()=>clearTimeout(t);
   },[bookStep]);
 
-  const coinHint = coinValue>0 ? ` (1 moeda = ${brl(coinValue)})` : '';
-  const sheetTitle = appPrompt==='finish' ? 'Agendamento enviado! 🎉'
-    : 'Faça login e ganhe desconto 🪙';
-  const sheetSubtitle = appPrompt==='finish'
-    ? (isLogged ? 'Acompanhe no App. Você ganha 1 moeda quando o corte for confirmado.'
-                : 'Faça login no app para ganhar moedas e descontos nos próximos cortes.')
-    : `Baixe o app Salão Digital, entre na sua conta e ganhe 1 moeda a cada corte para trocar por desconto${coinHint}.`;
-
   const appSheet=(
     <DownloadAppSheet
       open={!!appPrompt}
       onClose={()=>setAppPrompt(null)}
-      title={sheetTitle}
-      subtitle={sheetSubtitle}
+      title={appPrompt==='finish'?'Agendamento enviado! 🎉':'Leve a agenda no bolso 📱'}
+      subtitle={appPrompt==='finish'
+        ?'Acompanhe seu agendamento no App.'
+        :'Baixe o app Salão Digital e participe de descontos.'}
     />
   );
 
@@ -2873,14 +2812,6 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   const totalMinutes = selectedServices.reduce((acc, s) => acc + parseDuration(s.duration), 0);
   const servicesLabel = selectedServices.map(s => s.name).join(' + ');
   const isSelected = (service) => selectedServices.some(s => s.id === service.id);
-
-  // ── Aplicar moedas (desconto) ──
-  // libera quando o cliente está logado, a moeda tem valor e o saldo atingiu a meta de troca
-  const maxUsable = coinValue > 0 ? Math.min(coinBalance, Math.floor(totalPrice / coinValue)) : 0;
-  const canUseCoins = isLogged && coinValue > 0 && coinBalance >= coinGoal && maxUsable >= 1;
-  const coinsApplied = canUseCoins ? Math.min(coinsToUse, maxUsable) : 0;
-  const discount = coinsApplied * coinValue;
-  const finalPrice = Math.max(0, totalPrice - discount);
 
   // ── Intervalo entre os horários e quantos blocos o atendimento ocupa ──
   const slotInterval = GLOBAL_TIME_SLOTS.length > 1
@@ -2933,36 +2864,21 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
     navigator.clipboard.writeText(url).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),2000); });
   };
 
-  // Ir para o login (guarda o link para voltar depois, se o app quiser usar)
-  const goLogin=()=>{
-    try { localStorage.setItem('redirect_after_login', window.location.href); } catch(_) {}
-    window.location.href='/';
-  };
-
-  // Pedido de assinatura: abre o WhatsApp do profissional já com o plano escolhido
-  const handleSubscribe=(plan)=>{
-    if (!isLogged) { goLogin(); return; }
-    if (!barberPhone) { alert('Este profissional ainda não informou o WhatsApp.'); return; }
-    const msg = encodeURIComponent(`Olá ${barber.name}! Quero assinar o plano "${plan.name}" (${brl(plan.price)}/mês). Meu nome é ${effClient.name||''}.`);
-    window.open(`https://wa.me/55${barberPhone}?text=${msg}`,'_blank');
-  };
-
   // Adiciona/remove serviço da seleção (e zera data/hora, pois a duração mudou)
   const handleToggleService=(service)=>{
     setSelectedServices(prev => prev.some(s=>s.id===service.id) ? prev.filter(s=>s.id!==service.id) : [...prev, service]);
-    setSelectedDate(null); setSelectedTime(null); setCoinsToUse(0);
+    setSelectedDate(null); setSelectedTime(null);
   };
 
   // Ao cancelar/refazer, mantém nome e telefone do cliente logado preenchidos
   const resetBooking=()=>{
-    setBookStep(0); setSelectedServices([]); setSelectedDate(null); setSelectedTime(null); setCoinsToUse(0);
-    if (isLogged) {
-      setClientName(effClient.name||'');
-      setClientPhone(applyPhoneMask(String(effClient.phone||'')));
+    setBookStep(0); setSelectedServices([]); setSelectedDate(null); setSelectedTime(null);
+    if (clientUser && !clientUser.isGuest) {
+      setClientName(clientUser.name||'');
+      setClientPhone(applyPhoneMask(String(clientUser.phone||'')));
     } else {
       setClientName(''); setClientPhone('');
     }
-    loadCoins();
   };
 
   const handleSubmitBooking=async()=>{
@@ -2974,14 +2890,12 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
       const startIdx = GLOBAL_TIME_SLOTS.indexOf(selectedTime);
       const blocks = GLOBAL_TIME_SLOTS.slice(startIdx, startIdx + slotsNeeded);
       // [AJUSTE 4] liga o agendamento ao cliente logado (é isso que conta as moedas)
-      const base = { date:selectedDate, barber_id:barber.id, client_id:isLogged?effClient.id:null, client_name:clientName.trim(), phone:clientPhone.trim(), status:'pending' };
+      const base = { date:selectedDate, barber_id:barber.id, client_id:(clientUser&&!clientUser.isGuest)?clientUser.id:null, client_name:clientName.trim(), phone:clientPhone.trim(), status:'pending' };
       const rows = blocks.map((t,i)=>({
         ...base,
         time: t,
         service_name: i===0 ? servicesLabel : `${servicesLabel} (continuação)`,
-        price: i===0 ? finalPrice : 0,                 // valor já com o desconto das moedas
-        coins_used: i===0 ? coinsApplied : 0,
-        discount: i===0 ? discount : 0,
+        price: i===0 ? totalPrice : 0
       }));
       const {error}=await supabase.from('appointments').insert(rows);
       if (error) throw error;
@@ -2991,34 +2905,19 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
 
   // ───────────── TELA DE SUCESSO ─────────────
   if (bookStep===4) {
-    const waMsg = encodeURIComponent(`Olá ${barber.name}! Acabei de agendar ${servicesLabel} para ${selectedDate?.split('-').reverse().join('/')} às ${selectedTime}. Meu nome é ${clientName}.${coinsApplied>0?` Usei ${coinsApplied} moedas (desconto de ${brl(discount)}).`:''}`);
+    const waMsg = encodeURIComponent(`Olá ${barber.name}! Acabei de agendar ${servicesLabel} para ${selectedDate?.split('-').reverse().join('/')} às ${selectedTime}. Meu nome é ${clientName}.`);
     return (
       <div className="min-h-screen bg-gradient-to-b from-green-50 to-white flex flex-col items-center justify-center p-8 text-center">
         <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center mb-6 shadow-xl shadow-green-200 animate-bounce"><CheckCircle size={48} className="text-white"/></div>
         <h2 className="text-3xl font-black text-slate-900 mb-2">Tudo certo! 🎉</h2>
         <p className="text-slate-600 text-sm mb-1">Seu pedido foi enviado para <b>{barber.name}</b>.</p>
-        <p className="text-slate-400 text-xs mb-6">Você receberá a confirmação pelo WhatsApp.</p>
-        <div className="bg-white rounded-3xl p-5 w-full max-w-xs text-left space-y-3 mb-4 border border-slate-100 shadow-lg">
+        <p className="text-slate-400 text-xs mb-8">Você receberá a confirmação pelo WhatsApp.</p>
+        <div className="bg-white rounded-3xl p-5 w-full max-w-xs text-left space-y-3 mb-6 border border-slate-100 shadow-lg">
           <div className="flex justify-between gap-4"><span className="text-xs text-slate-400">{selectedServices.length>1?'Serviços':'Serviço'}</span><span className="text-xs font-black text-slate-900 text-right">{servicesLabel}</span></div>
           <div className="flex justify-between"><span className="text-xs text-slate-400">Quando</span><span className="text-xs font-black text-slate-900">{selectedDate&&dateLabel(selectedDate)} · {selectedTime}</span></div>
           <div className="flex justify-between"><span className="text-xs text-slate-400">Duração</span><span className="text-xs font-black text-slate-900">{formatDuration(totalMinutes)}</span></div>
-          {coinsApplied>0&&<div className="flex justify-between"><span className="text-xs text-amber-600">🪙 {coinsApplied} {coinsApplied===1?'moeda usada':'moedas usadas'}</span><span className="text-xs font-black text-amber-600">− {brl(discount)}</span></div>}
-          <div className="flex justify-between pt-3 border-t border-slate-100"><span className="text-xs text-slate-400">Valor</span><span className="text-sm font-black text-green-600">{brl(finalPrice)}</span></div>
+          <div className="flex justify-between pt-3 border-t border-slate-100"><span className="text-xs text-slate-400">Valor</span><span className="text-sm font-black text-green-600">R$ {totalPrice}</span></div>
         </div>
-
-        {isLogged ? (
-          <div className="w-full max-w-xs bg-amber-50 border border-amber-200 rounded-2xl p-3 mb-4 flex items-center gap-3 text-left">
-            <span className="text-2xl">🪙</span>
-            <p className="text-[11px] font-bold text-amber-700">Quando o corte for confirmado, você ganha 1 moeda!</p>
-          </div>
-        ) : (
-          <div className="w-full max-w-xs bg-amber-50 border border-amber-200 rounded-2xl p-4 mb-4 text-left">
-            <p className="text-xs font-black text-amber-800 mb-1">🪙 Faça login e ganhe desconto</p>
-            <p className="text-[11px] font-bold text-amber-700 mb-3">Entrando na sua conta, cada corte confirmado vira moeda{coinValue>0?` (1 moeda = ${brl(coinValue)})`:''} para abater nos próximos.</p>
-            <button onClick={goLogin} className="w-full py-2.5 bg-amber-500 text-white rounded-xl text-xs font-black active:scale-95 transition-all">Fazer login</button>
-          </div>
-        )}
-
         {barberPhone&&(
           <a href={`https://wa.me/55${barberPhone}?text=${waMsg}`} target="_blank" rel="noopener noreferrer"
             className="w-full max-w-xs py-3.5 bg-green-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 active:scale-95 transition-all shadow-lg shadow-green-200 mb-3">
@@ -3033,11 +2932,6 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
 
   // ───────────── PÁGINA PRINCIPAL ─────────────
   const stepNames = ['Serviços', 'Horário', 'Seus dados'];
-  const tabItems = [
-    { id: 'services', label: 'Serviços' },
-    { id: 'plans', label: `Assinaturas${plans.length ? ` (${plans.length})` : ''}` },
-    { id: 'coins', label: 'Moedas' },
-  ];
 
   return (
     <div className="min-h-screen bg-slate-50 pb-28">
@@ -3045,13 +2939,8 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
       <div className={`${theme.solid} pb-10 pt-12 px-6 relative overflow-hidden`}>
         {barber.avatar_url&&<img src={barber.avatar_url} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20 blur-2xl scale-125"/>}
         <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/70"/>
-        {/* [AJUSTE 5] "Login" só aparece para quem ainda não logou e fora do app */}
-        {!embedded&&!isLogged&&<a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-white/60 hover:text-white transition-colors">Login</a>}
-        {!embedded&&isLogged&&(
-          <button onClick={()=>setTab('coins')} className="absolute top-3 right-4 z-20 flex items-center gap-1 bg-white/15 border border-white/20 rounded-full px-2.5 py-1 text-[10px] font-black text-white active:scale-95 transition-all">
-            🪙 {coinBalance} {coinBalance===1?'moeda':'moedas'}
-          </button>
-        )}
+        {/* [AJUSTE 5] esconde o "Login" quando está dentro do app */}
+        {!embedded&&<a href="/" className="absolute top-3 right-4 z-20 text-[10px] font-bold text-white/60 hover:text-white transition-colors">Login</a>}
 
         <div className="max-w-md mx-auto relative z-10 flex flex-col items-center text-center">
           <div className="mb-4">
@@ -3069,13 +2958,6 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
               {adminTags.map((t,i)=><span key={`tag-${i}`} className="bg-white/15 border border-white/25 text-white text-[10px] font-black px-2.5 py-1 rounded-full">{t}</span>)}
               {showBadges.map((b,i)=><span key={`b-${i}`} className={`flex items-center gap-0.5 px-2 py-1 rounded-full font-bold text-[9px] ${b.color}`}>{b.icon} {b.label}</span>)}
             </div>
-          )}
-
-          {/* Valor da moeda deste profissional */}
-          {coinValue>0&&(
-            <button onClick={()=>setTab('coins')} className="mb-3 flex items-center gap-1.5 bg-amber-400/90 text-amber-950 rounded-full px-3 py-1 text-[11px] font-black active:scale-95 transition-all">
-              🪙 Aqui 1 moeda vale {brl(coinValue)}
-            </button>
           )}
 
           {/* Disponibilidade em tempo real */}
@@ -3189,53 +3071,11 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
                         <div key={s.id} className="flex justify-between items-center"><p className="font-bold text-slate-900 text-xs">{s.name} <span className="text-slate-400 font-normal">· {s.duration}</span></p><p className="font-bold text-slate-600 text-xs">R$ {s.price}</p></div>
                       ))}
                     </div>
-                    {coinsApplied>0&&(
-                      <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed border-slate-200">
-                        <p className="font-bold text-amber-600 text-xs">🪙 {coinsApplied} {coinsApplied===1?'moeda':'moedas'}</p>
-                        <p className="font-bold text-amber-600 text-xs">− {brl(discount)}</p>
-                      </div>
-                    )}
                     <div className="border-t border-slate-200 mt-3 pt-3 flex justify-between items-center">
                       <div><p className="font-black text-slate-900 text-sm">Total · {formatDuration(totalMinutes)}</p><p className="text-[10px] text-slate-500">{selectedDate&&dateLabel(selectedDate)} às {selectedTime}</p></div>
-                      <p className="font-black text-green-600 text-lg">{brl(finalPrice)}</p>
+                      <p className="font-black text-green-600 text-lg">R$ {totalPrice}</p>
                     </div>
                   </div>
-
-                  {/* ── Moedas: logado usa, deslogado vê o convite ── */}
-                  {isLogged ? (
-                    coinValue>0 ? (
-                      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                        <div className="flex items-center justify-between mb-1">
-                          <p className="text-xs font-black text-amber-800">🪙 Suas moedas: {coinBalance}</p>
-                          <p className="text-[10px] font-bold text-amber-600">1 moeda = {brl(coinValue)}</p>
-                        </div>
-                        {canUseCoins ? (
-                          <>
-                            <p className="text-[11px] font-bold text-amber-700 mb-3">Use até {maxUsable} {maxUsable===1?'moeda':'moedas'} neste agendamento (até {brl(maxUsable*coinValue)} de desconto).</p>
-                            <div className="flex items-center gap-2">
-                              <button onClick={()=>setCoinsToUse(Math.max(0,coinsApplied-1))} disabled={coinsApplied<=0} className="w-9 h-9 rounded-full bg-white border border-amber-200 text-amber-700 font-black disabled:opacity-40 active:scale-90">−</button>
-                              <div className="flex-1 text-center"><p className="font-black text-amber-700 text-lg leading-none">{coinsApplied}</p><p className="text-[9px] font-bold text-amber-500 uppercase">moedas aplicadas</p></div>
-                              <button onClick={()=>setCoinsToUse(Math.min(maxUsable,coinsApplied+1))} disabled={coinsApplied>=maxUsable} className="w-9 h-9 rounded-full bg-white border border-amber-200 text-amber-700 font-black disabled:opacity-40 active:scale-90">+</button>
-                              <button onClick={()=>setCoinsToUse(coinsApplied===maxUsable?0:maxUsable)} className="px-3 h-9 rounded-xl bg-amber-500 text-white text-[10px] font-black active:scale-95">{coinsApplied===maxUsable?'Limpar':'Usar tudo'}</button>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-[11px] font-bold text-amber-700">
-                            {coinBalance>=coinGoal ? 'O valor deste agendamento é menor que 1 moeda.' : `Junte ${coinGoal} moedas para começar a usar (faltam ${Math.max(0,coinGoal-coinBalance)}).`}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-amber-700 font-bold bg-amber-50 border border-amber-200 rounded-2xl p-3">🪙 Você ganha 1 moeda quando o corte for confirmado.</p>
-                    )
-                  ) : (
-                    <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4">
-                      <p className="text-xs font-black text-amber-800 mb-1">🪙 Faça login e ganhe desconto</p>
-                      <p className="text-[11px] font-bold text-amber-700 mb-3">Cada corte confirmado vira 1 moeda{coinValue>0?` (1 moeda = ${brl(coinValue)})`:''} para abater nos próximos agendamentos.</p>
-                      <button onClick={goLogin} className="w-full py-2.5 bg-amber-500 text-white rounded-xl text-xs font-black active:scale-95 transition-all">Fazer login</button>
-                    </div>
-                  )}
-
                   <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label><input type="text" value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Nome e sobrenome" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-slate-400 transition-colors"/></div>
                   <div><label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">WhatsApp</label><input type="tel" value={clientPhone} onChange={e=>setClientPhone(applyPhoneMask(e.target.value))} placeholder="(41) 99999-9999" className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-sm outline-none focus:border-slate-400 transition-colors"/></div>
                   <button onClick={handleSubmitBooking} disabled={submitting} className={`w-full py-4 ${theme.solid} text-white rounded-2xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2`}>
@@ -3262,138 +3102,28 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
           </div>
         )}
 
-        {/* ══ ABAS: SERVIÇOS | ASSINATURAS | MOEDAS ══ */}
-        <div className="mt-8 flex gap-1.5 bg-slate-200/60 rounded-2xl p-1">
-          {tabItems.map(t=>(
-            <button key={t.id} onClick={()=>setTab(t.id)}
-              className={`flex-1 py-2.5 rounded-xl text-[11px] font-black transition-all active:scale-95 ${tab===t.id?`bg-white shadow-sm ${theme.text}`:'text-slate-500'}`}>{t.label}</button>
-          ))}
+        {/* ══ SERVIÇOS ══ */}
+        <div className="mt-8">
+          <div className="flex items-end justify-between mb-3 px-1">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Serviços</p>
+            <span className={`${theme.text} text-[10px] font-bold`}>toque para montar seu combo</span>
+          </div>
+          <div className="space-y-2">{services.map(s=>{
+            const sel=isSelected(s);
+            return (
+              <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full rounded-2xl border-2 p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer ${sel?`${theme.soft} ${theme.border} shadow-md`:'bg-white border-transparent shadow-sm hover:border-slate-200'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sel?`${theme.solid} text-white`:'bg-slate-100 text-slate-600'}`}>{React.cloneElement(s.icon,{size:18})}</div>
+                  <div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">⏱ {s.duration}</p></div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${sel?`${theme.solid} ${theme.border}`:'border-slate-200'}`}>{sel&&<CheckCircle size={13} className="text-white"/>}</div>
+                </div>
+              </button>
+            );
+          })}</div>
         </div>
-
-        {/* ── Serviços ── */}
-        {tab==='services'&&(
-          <div className="mt-5">
-            <div className="flex items-end justify-between mb-3 px-1">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Serviços</p>
-              <span className={`${theme.text} text-[10px] font-bold`}>toque para montar seu combo</span>
-            </div>
-            <div className="space-y-2">{services.map(s=>{
-              const sel=isSelected(s);
-              return (
-                <button key={s.id} onClick={()=>handleToggleService(s)} className={`w-full rounded-2xl border-2 p-4 flex items-center justify-between active:scale-[0.98] transition-all cursor-pointer ${sel?`${theme.soft} ${theme.border} shadow-md`:'bg-white border-transparent shadow-sm hover:border-slate-200'}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sel?`${theme.solid} text-white`:'bg-slate-100 text-slate-600'}`}>{React.cloneElement(s.icon,{size:18})}</div>
-                    <div className="text-left"><p className="font-bold text-sm text-slate-900">{s.name}</p><p className="text-[10px] text-slate-400">⏱ {s.duration}</p></div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <p className="font-black text-green-600 text-sm">R$ {s.price}</p>
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center border-2 transition-all ${sel?`${theme.solid} ${theme.border}`:'border-slate-200'}`}>{sel&&<CheckCircle size={13} className="text-white"/>}</div>
-                  </div>
-                </button>
-              );
-            })}</div>
-          </div>
-        )}
-
-        {/* ── Assinaturas ── */}
-        {tab==='plans'&&(
-          <div className="mt-5 space-y-3">
-            {/* Saldo da assinatura (quem já assina) */}
-            {mySub&&(()=>{
-              const limited = Number(mySub.uses_per_month) > 0;
-              const left = limited ? Math.max(0, Number(mySub.uses_per_month) - (Number(mySub.uses_in_cycle)||0)) : null;
-              return (
-                <div className="bg-purple-50 border border-purple-200 rounded-3xl p-4">
-                  <p className="text-[10px] font-black text-purple-400 uppercase tracking-widest mb-1">Sua assinatura</p>
-                  <p className="font-black text-slate-900 text-sm" style={{color:'#0f172a'}}>{mySub.plan_name}</p>
-                  <p className="text-[11px] font-bold text-purple-700 mt-0.5">
-                    {limited ? (left===0 ? 'Todos os usos deste ciclo foram usados' : `Restam ${left} ${left===1?'uso':'usos'} neste ciclo`) : 'Cortes ilimitados neste ciclo'}
-                  </p>
-                </div>
-              );
-            })()}
-
-            {plans.length===0 ? (
-              <div className="py-12 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
-                <p className="text-3xl mb-1">💎</p>
-                <p className="text-sm font-black text-slate-500">Nenhum plano de assinatura por aqui ainda</p>
-                <p className="text-[11px] text-slate-400 mt-1">Você pode agendar normalmente e juntar moedas.</p>
-              </div>
-            ) : plans.map(pl=>{
-              const unlimited = !(Number(pl.uses_per_month) > 0);
-              const bonus = Number(pl.bonus_coins) || 0;
-              const already = !!mySub && String(mySub.plan_id ?? mySub.plan_name) === String(pl.id ?? pl.name);
-              return (
-                <div key={pl.id||pl.name} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="font-black text-sm" style={{color:'#0f172a'}}>💎 {pl.name}</p>
-                      <p className="text-[11px] text-slate-500 font-bold mt-0.5">{unlimited?'Cortes ilimitados':`${pl.uses_per_month} ${Number(pl.uses_per_month)===1?'uso':'usos'} por mês`}</p>
-                      {bonus>0&&<p className="text-[11px] text-purple-600 font-black mt-0.5">+{bonus} {bonus===1?'moeda':'moedas'} a cada uso{coinValue>0?` (${brl(bonus*coinValue)})`:''}</p>}
-                    </div>
-                    <p className="font-black text-green-600 text-lg flex-shrink-0">{brl(pl.price)}<span className="text-[9px] text-slate-400">/mês</span></p>
-                  </div>
-                  <button onClick={()=>handleSubscribe(pl)} disabled={already}
-                    className={`w-full mt-3 py-3 rounded-xl text-xs font-black transition-all ${already?'bg-slate-100 text-slate-400 cursor-not-allowed':'bg-purple-600 text-white active:scale-95 shadow-md shadow-purple-100'}`}>
-                    {already?'✓ Você já assina este plano':isLogged?'Quero assinar':'Faça login para assinar'}
-                  </button>
-                </div>
-              );
-            })}
-            {plans.length>0&&!isLogged&&<p className="text-center text-[10px] text-slate-400 font-bold">Entre na sua conta para assinar e acompanhar seu saldo de usos.</p>}
-          </div>
-        )}
-
-        {/* ── Moedas ── */}
-        {tab==='coins'&&(
-          <div className="mt-5 space-y-3">
-            {isLogged ? (
-              <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-amber-400 via-amber-500 to-orange-500 p-5 text-white shadow-lg">
-                <div className="absolute -bottom-8 -right-4 text-[110px] opacity-20 leading-none select-none">🪙</div>
-                <div className="relative">
-                  <p className="text-white/80 text-xs font-bold">Suas moedas com {barber.name}</p>
-                  <p className="text-5xl font-black my-1">{coinBalance}</p>
-                  <p className="text-white/90 text-xs font-bold">
-                    {coinValue>0 ? `Equivale a ${brl(coinBalance*coinValue)} em desconto` : 'Este profissional ainda não definiu o valor da moeda'}
-                  </p>
-                  <div className="h-2 bg-white/30 rounded-full overflow-hidden mt-3">
-                    <div className="h-full bg-white rounded-full transition-all duration-700" style={{width:`${Math.min(100,(coinBalance/coinGoal)*100)}%`}}/>
-                  </div>
-                  <p className="text-white/90 text-[10px] font-bold mt-1.5">
-                    {coinBalance>=coinGoal ? 'Você já pode usar suas moedas! 🎉' : `Faltam ${coinGoal-coinBalance} ${coinGoal-coinBalance===1?'moeda':'moedas'} para começar a usar`}
-                  </p>
-                  <button onClick={()=>setBookStep(1)} disabled={coinValue<=0||coinBalance<coinGoal}
-                    className="w-full mt-4 py-3 bg-white text-amber-600 rounded-xl text-xs font-black active:scale-95 transition-all disabled:opacity-60">
-                    🎁 Usar moedas no próximo agendamento
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-3xl bg-gradient-to-br from-amber-400 to-orange-500 p-5 text-white shadow-lg">
-                <p className="text-3xl mb-1">🪙</p>
-                <p className="font-black text-base leading-tight">Faça login e ganhe desconto</p>
-                <p className="text-white/90 text-xs font-bold mt-1 mb-4">
-                  A cada corte confirmado você ganha 1 moeda{coinValue>0?`, e cada moeda vale ${brl(coinValue)} aqui`:''}. Junte e use como desconto nos próximos agendamentos.
-                </p>
-                <button onClick={goLogin} className="w-full py-3 bg-white text-amber-600 rounded-xl text-xs font-black active:scale-95 transition-all">Fazer login</button>
-              </div>
-            )}
-
-            <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-5">
-              <p className="font-black text-sm mb-3" style={{color:'#0f172a'}}>Como funciona</p>
-              <div className="space-y-2.5">
-                {[
-                  ['✂️','Cada corte confirmado vale 1 moeda'],
-                  ['💎','Assinantes ganham moedas extras a cada uso do plano'],
-                  ['💰',coinValue>0?`Neste profissional, 1 moeda = ${brl(coinValue)}`:'Cada profissional define quanto vale a moeda dele'],
-                  ['🎁',`Com ${coinGoal} moedas você já pode abater o valor no agendamento`],
-                ].map(([ic,tx],i)=>(
-                  <div key={i} className="flex items-center gap-3"><div className="w-8 h-8 bg-slate-100 rounded-xl flex items-center justify-center text-sm flex-shrink-0">{ic}</div><p className="text-xs font-bold text-slate-600">{tx}</p></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ══ E ainda contamos com mais... (vitrine, só visualização, sem preço) ══ */}
         {menuSections.length>0&&(
@@ -3452,13 +3182,174 @@ const PublicBarberPage = ({ barber, embedded = false, clientUser = null }) => {
   );
 };
 
-// O PublicMenuPage (cardápio público) continua exatamente como estava, logo abaixo deste arquivo.
+// ─── CLIENT APP ───────────────────────────────────────────────────────────────
+// ─── CARDÁPIO PÚBLICO (CLIENTE) ───────────────────────────────────────────────
+const PublicMenuPage = ({ slug }) => {
+  const [barber, setBarber] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+  const [activeCat, setActiveCat] = useState('all');
+  const [cart, setCart] = useState({});
+  const [showCheckout, setShowCheckout] = useState(false);
+  const [clientName, setClientName] = useState(() => { try { return localStorage.getItem('menu_client_name') || ''; } catch (_) { return ''; } });
+  const [sending, setSending] = useState(false);
+  const [done, setDone] = useState(false);
 
-/* ─────────────── SQL (rode uma vez no Supabase) ───────────────
-alter table appointments
-  add column if not exists coins_used int not null default 0,
-  add column if not exists discount numeric not null default 0;
-──────────────────────────────────────────────────────────────── */
+  const load = async () => {
+    const { data: prof } = await supabase.from('profiles').select('id,name,avatar_url,bio,menu_color').eq('slug', slug).maybeSingle();
+    if (!prof) { setNotFound(true); setLoading(false); return; }
+    setBarber(prof);
+    const [p, c] = await Promise.all([
+      supabase.from('products').select('*').eq('barber_id', prof.id).order('created_at', { ascending: false }),
+      supabase.from('product_categories').select('*').eq('barber_id', prof.id).order('created_at', { ascending: true }),
+    ]);
+    setProducts(p.data || []); setCategories(c.data || []); setLoading(false);
+  };
+  useEffect(() => { load(); }, [slug]);
+
+  const theme = MENU_THEMES[barber?.menu_color] || MENU_THEMES.blue;
+  const hasStock = (p) => p.stock === null || p.stock === undefined || p.stock > 0;
+
+  const add = (p) => setCart(prev => {
+    const cur = prev[p.id] || 0;
+    if (p.stock !== null && p.stock !== undefined && cur >= p.stock) return prev;
+    return { ...prev, [p.id]: cur + 1 };
+  });
+  const remove = (p) => setCart(prev => {
+    const cur = prev[p.id] || 0;
+    const n = { ...prev };
+    if (cur <= 1) delete n[p.id]; else n[p.id] = cur - 1;
+    return n;
+  });
+
+  const cartItems = products.filter(p => cart[p.id]).map(p => ({ ...p, qty: cart[p.id] }));
+  const total = cartItems.reduce((s, i) => s + Number(i.price) * i.qty, 0);
+  const count = cartItems.reduce((s, i) => s + i.qty, 0);
+  const visible = activeCat === 'all' ? products : products.filter(p => p.category_id === activeCat);
+
+  const submit = async () => {
+    if (!clientName.trim()) { alert('Digite seu nome.'); return; }
+    setSending(true);
+    try { localStorage.setItem('menu_client_name', clientName.trim()); } catch (_) {}
+    const { error } = await supabase.rpc('place_menu_order', {
+      p_barber: String(barber.id),
+      p_client: clientName.trim(),
+      p_items: cartItems.map(i => ({ product_id: String(i.id), qty: i.qty })),
+    });
+    setSending(false);
+    if (error) { alert(error.message); load(); return; }
+    setCart({}); setShowCheckout(false); setDone(true); load();
+  };
+
+  if (loading) return <div className="min-h-screen bg-slate-50 flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" size={28}/></div>;
+  if (notFound) return <div className="min-h-screen bg-slate-50 flex items-center justify-center p-8 text-center"><p className="text-slate-500 font-bold">Cardápio não encontrado.</p></div>;
+
+  if (done) return (
+    <div className="min-h-screen bg-white flex flex-col items-center justify-center p-8 text-center">
+      <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mb-6"><CheckCircle size={40} className="text-green-600"/></div>
+      <h2 className="text-2xl font-black text-slate-900 mb-2">Pedido enviado!</h2>
+      <p className="text-slate-500 text-sm mb-8">{barber.name} já recebeu o seu pedido.</p>
+      <button onClick={() => setDone(false)} className={`px-6 py-3 ${theme.solid} text-white rounded-xl font-black text-sm active:scale-95 transition-all`}>Fazer outro pedido</button>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 pb-28">
+      <div className={`${theme.solid} px-6 pt-10 pb-8 text-center`}>
+        <div className="w-20 h-20 rounded-full overflow-hidden bg-white/20 mx-auto mb-3 border-4 border-white/40">
+          {barber.avatar_url ? <img src={barber.avatar_url} className="w-full h-full object-cover" alt={barber.name}/>
+            : <div className="w-full h-full flex items-center justify-center"><User size={30} className="text-white"/></div>}
+        </div>
+        <h1 className="text-white font-black text-xl leading-tight">{barber.name}</h1>
+        <p className="text-white/80 text-xs font-bold uppercase tracking-widest mt-1">Cardápio</p>
+      </div>
+
+      <div className="max-w-md mx-auto px-4">
+        {categories.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto py-4">
+            {[{ id: 'all', name: 'Todos' }, ...categories].map(c => (
+              <button key={c.id} onClick={() => setActiveCat(c.id)}
+                className={`flex-shrink-0 px-4 py-2 rounded-full text-xs font-black transition-all ${activeCat === c.id ? `${theme.solid} text-white` : 'bg-white border border-slate-200 text-slate-500'}`}>{c.name}</button>
+            ))}
+          </div>
+        )}
+
+        {visible.length === 0 ? (
+          <p className="text-center text-slate-400 text-sm py-16">Nenhum produto disponível.</p>
+        ) : (
+          <div className="space-y-3 mt-2">
+            {visible.map(p => {
+              const qty = cart[p.id] || 0;
+              const ok = hasStock(p);
+              return (
+                <div key={p.id} className={`flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 ${ok ? '' : 'opacity-50'}`}>
+                  <div className="w-20 h-20 rounded-xl bg-slate-100 overflow-hidden flex-shrink-0">
+                    {p.photo_url ? <img src={p.photo_url} className="w-full h-full object-cover" alt={p.name}/>
+                      : <div className="w-full h-full flex items-center justify-center text-slate-300"><Tag size={22}/></div>}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-black text-slate-900 text-sm leading-tight">{p.name}</p>
+                    <p className={`font-black text-sm mt-1 ${theme.text}`}>R$ {Number(p.price).toFixed(2)}</p>
+                    {!ok && <p className="text-[10px] font-black text-red-500 uppercase mt-0.5">Esgotado</p>}
+                  </div>
+                  {ok && (qty === 0 ? (
+                    <button onClick={() => add(p)} className={`w-10 h-10 rounded-full ${theme.solid} text-white text-xl font-black active:scale-90 transition-all`}>+</button>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => remove(p)} className="w-8 h-8 rounded-full bg-slate-100 text-slate-600 font-black active:scale-90">−</button>
+                      <span className="w-5 text-center font-black text-sm">{qty}</span>
+                      <button onClick={() => add(p)} className={`w-8 h-8 rounded-full ${theme.solid} text-white font-black active:scale-90`}>+</button>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {count > 0 && !showCheckout && (
+        <div className="fixed bottom-0 inset-x-0 p-4 z-40">
+          <button onClick={() => setShowCheckout(true)} className={`max-w-md mx-auto w-full ${theme.solid} text-white rounded-2xl py-4 px-5 flex items-center justify-between font-black text-sm shadow-xl active:scale-95 transition-all`}>
+            <span>🛒 {count} {count > 1 ? 'itens' : 'item'}</span>
+            <span>Ver pedido · R$ {total.toFixed(2)}</span>
+          </button>
+        </div>
+      )}
+
+      {showCheckout && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center">
+          <div className="absolute inset-0 bg-slate-900/70" onClick={() => setShowCheckout(false)}/>
+          <div className="relative bg-white w-full max-w-md rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto">
+            <h3 className="font-black text-slate-900 text-lg mb-4">Seu pedido</h3>
+            <div className="space-y-2 mb-4">
+              {cartItems.map(i => (
+                <div key={i.id} className="flex justify-between text-sm">
+                  <span className="text-slate-700">{i.qty}x {i.name}</span>
+                  <span className="font-bold text-slate-900">R$ {(Number(i.price) * i.qty).toFixed(2)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between pt-2 border-t border-slate-100">
+                <span className="font-black text-slate-900">Total</span>
+                <span className={`font-black ${theme.text}`}>R$ {total.toFixed(2)}</span>
+              </div>
+            </div>
+            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-1">Seu nome</label>
+            <input value={clientName} onChange={e => setClientName(e.target.value)} placeholder="Como podemos te chamar?"
+              className="w-full bg-slate-50 border-2 border-slate-200 rounded-xl px-4 py-3 text-sm outline-none focus:border-slate-400 mb-4"/>
+            <button onClick={submit} disabled={sending || !clientName.trim()}
+              className={`w-full py-4 ${theme.solid} text-white rounded-xl font-black text-sm active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2`}>
+              {sending ? <Loader2 className="animate-spin" size={18}/> : 'Enviar pedido'}
+            </button>
+            <button onClick={() => setShowCheckout(false)} className="w-full text-slate-400 font-bold text-xs mt-3">Voltar ao cardápio</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 const COIN_COST_FREE_CUT = 10;   // moedas para trocar por 1 corte (igual ao LOYALTY_REDEEM_COINS do profissional)
 const DEFAULT_COIN_VALUE = 5;    // usado SÓ na demonstração (FAKE_BONUS_COINS). O valor real vem de barber.coin_value
 const FAKE_BONUS_COINS = 0;      // coloque 7, por exemplo, para ver a tela de moedas "cheia"
@@ -3810,44 +3701,6 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
     } catch (error) { alert("Falha ao agendar: " + error.message); }
   };
 
-
- // ───────────── MOEDAS + ASSINATURAS: dados derivados ─────────────
-  // COLE ESTE BLOCO logo depois de onde `coinsByPro`, `subs` e `barbers` já existem
-  // e ANTES do primeiro `if (view === ...)`. São só constantes simples (sem hooks).
-  const coinValueOf = (b) => Number(b?.coin_value) || 0;
-
-  // Planos de assinatura que o profissional criou no LoyaltySection.
-  // Formato esperado em profiles.subscription_plans (array JSON):
-  // { id, name, price, uses_per_month (0 = ilimitado), bonus_coins (moedas extras por uso), active }
-  const plansOf = (b) => (Array.isArray(b?.subscription_plans) ? b.subscription_plans : [])
-    .filter(p => p && p.active !== false && Number(p.price) > 0);
-
-  // Quem oferece moedas (valor da moeda definido), com o saldo do cliente em cada um
-  const prosWithCoins = (barbers || [])
-    .filter(b => coinValueOf(b) > 0)
-    .map(b => {
-      const mine = (coinsByPro || []).find(p => String(p.id) === String(b.id));
-      return { barber: b, coinValue: coinValueOf(b), myCoins: mine?.coins || 0, plans: plansOf(b) };
-    })
-    .sort((a, b) => b.myCoins - a.myCoins || b.coinValue - a.coinValue);
-
-  // Profissionais com planos de assinatura disponíveis
-  const prosWithPlans = prosWithCoins.filter(p => p.plans.length > 0);
-
-  // Saldo por assinatura do cliente (usos restantes + moedas ganhas pelo plano)
-  const subBalance = (s) => {
-    const limited = Number(s.uses_per_month) > 0;
-    const used = Number(s.uses_in_cycle) || 0;
-    const left = limited ? Math.max(0, Number(s.uses_per_month) - used) : null;
-    const pro = (coinsByPro || []).find(p => String(p.id) === String(s.barber_id));
-    const b = (barbers || []).find(x => String(x.id) === String(s.barber_id));
-    const subCoins = pro?.subCoins || 0;
-    const cv = coinValueOf(b);
-    return { limited, used, left, subCoins, subValue: subCoins * cv, coinValue: cv, barber: b || null };
-  };
-  const totalSubCoins = (subs || []).reduce((acc, s) => acc + subBalance(s).subCoins, 0);
-  const totalSubValue = (subs || []).reduce((acc, s) => acc + subBalance(s).subValue, 0);
-
   // ───────────── PERFIL DO PROFISSIONAL (a página do link, dentro do app) ─────────────
   if (view === 'profile' && profileBarber) {
     return (
@@ -4115,124 +3968,19 @@ const ClientApp = ({ user, barbers, onLogout, onBookingSubmit, appointments, onU
               </div>
             </div>
 
-            {/* Minhas assinaturas + saldo (só aparece para quem é assinante) */}
+            {/* Minhas assinaturas (só aparece para quem é assinante) */}
             {subs.length > 0 && (
               <div>
-                <div className="flex items-center justify-between mb-2 px-1">
-                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Minhas assinaturas</p>
-                  {totalSubCoins > 0 && (
-                    <span className="text-[10px] font-black text-purple-600">💎 {totalSubCoins} {totalSubCoins === 1 ? 'moeda' : 'moedas'}{totalSubValue > 0 ? ` · ${brlMoney(totalSubValue)}` : ''}</span>
-                  )}
-                </div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Minhas assinaturas</p>
                 <div className="space-y-3">
-                  {subs.map(s => {
-                    const bal = subBalance(s);
-                    return (
-                      <div key={s.id} className="space-y-2">
-                        <ClientSubscriptionCard
-                          sub={s}
-                          barber={bal.barber}
-                          isDark={isDark}
-                          onOpenPro={(b) => openProfile(b, 'wallet')}
-                        />
-                        {/* Saldo da assinatura */}
-                        <div className="grid grid-cols-3 gap-2 -mt-1">
-                          <div className="bg-purple-50 border border-purple-100 rounded-xl p-2.5 text-center">
-                            <p className="text-[8px] font-black text-purple-400 uppercase">Usos restantes</p>
-                            <p className="text-sm font-black text-purple-700">{bal.limited ? bal.left : '∞'}</p>
-                          </div>
-                          <div className="bg-amber-50 border border-amber-100 rounded-xl p-2.5 text-center">
-                            <p className="text-[8px] font-black text-amber-500 uppercase">Moedas do plano</p>
-                            <p className="text-sm font-black text-amber-600">🪙 {bal.subCoins}</p>
-                          </div>
-                          <div className="bg-green-50 border border-green-100 rounded-xl p-2.5 text-center">
-                            <p className="text-[8px] font-black text-green-500 uppercase">Equivale a</p>
-                            <p className="text-sm font-black text-green-600">{bal.coinValue > 0 ? brlMoney(bal.subValue) : '—'}</p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Quem oferece moedas e quanto vale cada uma */}
-            <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Quem oferece moedas</p>
-              {prosWithCoins.length === 0 ? (
-                <div className="py-8 text-center bg-white border-2 border-dashed border-slate-200 rounded-3xl">
-                  <p className="text-2xl mb-1">🪙</p>
-                  <p className="text-sm font-black text-slate-500">Nenhum profissional definiu o valor da moeda ainda</p>
-                </div>
-              ) : (
-                <div className="space-y-2.5">
-                  {prosWithCoins.map(({ barber: b, coinValue, myCoins, plans }) => (
-                    <button key={b.id} onClick={() => openProfile(b, 'wallet')}
-                      className="w-full flex items-center gap-3 bg-white rounded-2xl border border-slate-100 shadow-sm p-3 active:scale-[0.98] transition-all text-left">
-                      <ProAvatar barber={b} size={48} />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-black text-slate-900 text-sm truncate" style={dk}>{b.name}</p>
-                        <p className="text-[11px] text-amber-600 font-black">🪙 1 moeda = {brlMoney(coinValue)}</p>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                          {COIN_COST_FREE_CUT} moedas = {brlMoney(coinValue * COIN_COST_FREE_CUT)} de desconto
-                          {plans.length > 0 ? ` · 💎 ${plans.length} ${plans.length === 1 ? 'plano' : 'planos'}` : ''}
-                        </p>
-                      </div>
-                      <div className="text-right flex-shrink-0">
-                        <p className="text-[9px] text-slate-400 font-bold uppercase">Você tem</p>
-                        <p className="font-black text-amber-500">🪙 {myCoins}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Planos de assinatura disponíveis */}
-            {prosWithPlans.length > 0 && (
-              <div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-1">Planos de assinatura</p>
-                <div className="space-y-3">
-                  {prosWithPlans.map(({ barber: b, coinValue, plans }) => (
-                    <div key={b.id} className="bg-white rounded-3xl border border-slate-100 shadow-sm p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <ProAvatar barber={b} size={40} />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-black text-slate-900 text-sm truncate" style={dk}>{b.name}</p>
-                          <p className="text-[10px] text-amber-600 font-bold">Moeda vale {brlMoney(coinValue)}</p>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        {plans.map(pl => {
-                          const unlimited = !(Number(pl.uses_per_month) > 0);
-                          const bonus = Number(pl.bonus_coins) || 0;
-                          const alreadySub = (subs || []).some(s => String(s.barber_id) === String(b.id) && String(s.plan_id ?? s.plan_name) === String(pl.id ?? pl.name));
-                          return (
-                            <div key={pl.id || pl.name} className="rounded-2xl border border-purple-100 bg-purple-50/60 p-3">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <p className="font-black text-sm" style={{ color: '#0f172a' }}>{pl.name}</p>
-                                  <p className="text-[10px] text-slate-500 font-bold mt-0.5">
-                                    {unlimited ? 'Cortes ilimitados' : `${pl.uses_per_month} ${Number(pl.uses_per_month) === 1 ? 'uso' : 'usos'} por mês`}
-                                  </p>
-                                  {bonus > 0 && (
-                                    <p className="text-[10px] text-purple-600 font-black mt-0.5">
-                                      💎 +{bonus} {bonus === 1 ? 'moeda' : 'moedas'} a cada uso{coinValue > 0 ? ` (${brlMoney(bonus * coinValue)})` : ''}
-                                    </p>
-                                  )}
-                                </div>
-                                <p className="font-black text-green-600 text-base flex-shrink-0">{brlMoney(Number(pl.price))}<span className="text-[9px] text-slate-400">/mês</span></p>
-                              </div>
-                              <button onClick={() => openProfile(b, 'wallet')} disabled={alreadySub}
-                                className={`w-full mt-3 py-2.5 rounded-xl text-[11px] font-black transition-all ${alreadySub ? 'bg-slate-100 text-slate-400 cursor-not-allowed' : 'bg-purple-600 text-white active:scale-95 shadow-md shadow-purple-100'}`}>
-                                {alreadySub ? '✓ Você já assina este plano' : 'Quero assinar'}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+                  {subs.map(s => (
+                    <ClientSubscriptionCard
+                      key={s.id}
+                      sub={s}
+                      barber={(barbers || []).find(b => String(b.id) === String(s.barber_id)) || null}
+                      isDark={isDark}
+                      onOpenPro={(b) => openProfile(b, 'wallet')}
+                    />
                   ))}
                 </div>
               </div>
