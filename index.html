@@ -1,10 +1,53 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Salão Digital</title>
-    
+
+    <!-- ═══ SEO: o que aparece na pesquisa do Google ═══ -->
+    <title>Salão Digital | Agendamento Online para Salões e Barbearias</title>
+    <meta name="description" content="Agendamento online para salões e barbearias: agenda, link próprio, confirmação por WhatsApp, fidelidade e assinaturas de clientes. Comece grátis." />
+    <meta name="keywords" content="agendamento online, agenda para salão, app para barbearia, sistema de agendamento, agenda para barbeiro, programa de fidelidade, assinatura de clientes, link de agendamento, salão de beleza, manicure, sobrancelha" />
+    <meta name="author" content="Salão Digital" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://salaodigital.app.br/" />
+
+    <!-- ═══ Compartilhamento (WhatsApp, Facebook, LinkedIn) ═══ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Salão Digital" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://salaodigital.app.br/" />
+    <meta property="og:title" content="Salão Digital | Agendamento Online para Salões e Barbearias" />
+    <meta property="og:description" content="Receba agendamentos pelo seu link, confirme pelo WhatsApp e fidelize clientes com moedas e assinaturas. Comece grátis." />
+    <meta property="og:image" content="https://salaodigital.app.br/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <!-- ═══ Compartilhamento (X / Twitter) ═══ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Salão Digital | Agendamento Online para Salões e Barbearias" />
+    <meta name="twitter:description" content="Receba agendamentos pelo seu link, confirme pelo WhatsApp e fidelize clientes com moedas e assinaturas." />
+    <meta name="twitter:image" content="https://salaodigital.app.br/og-image.png" />
+
+    <!-- ═══ Dados estruturados (ajuda o Google a entender o app) ═══ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Salão Digital",
+      "applicationCategory": "BusinessApplication",
+      "operatingSystem": "Android, iOS, Web",
+      "inLanguage": "pt-BR",
+      "description": "Aplicativo de agendamento online para salões, barbearias e profissionais de beleza, com agenda, link próprio, confirmação por WhatsApp, moedas de fidelidade e assinaturas de clientes.",
+      "url": "https://salaodigital.app.br/",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "BRL"
+      }
+    }
+    </script>
+
     <link rel="icon" href="/icon.png" />
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#0f172a">
@@ -14,10 +57,8 @@
     <meta name="apple-mobile-web-app-title" content="Salão Digital">
     <link rel="apple-touch-icon" href="/icon-192.png">
 
-    <meta name="description" content="Sistema de gestão para barbearias">
-
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <style>
       @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
       .animate-in { animation: fadeIn 0.5s ease-out; }
@@ -25,7 +66,7 @@
         padding-top: env(safe-area-inset-top);
         min-height: 100vh;
         background-color: #0f172a;
-        overscroll-behavior-y: contain; /* Evita o "puxar para atualizar" que quebra o clima de app */
+        overscroll-behavior-y: contain;
       }
     </style>
   </head>

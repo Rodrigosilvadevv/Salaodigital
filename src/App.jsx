@@ -137,7 +137,54 @@ const injectDarkModeCSS = (isDark) => {
   `;
 };
 
+// ─── TRAVA DE ZOOM / ROLAGEM (somente no app nativo) ──────────────────────────
+let nativeLockApplied = false;
+const applyNativeViewportLock = () => {
+  if (!Capacitor.isNativePlatform() || nativeLockApplied) return;
+  nativeLockApplied = true;
 
+  // 1) Viewport sem zoom
+  let meta = document.querySelector('meta[name="viewport"]');
+  if (!meta) {
+    meta = document.createElement('meta');
+    meta.name = 'viewport';
+    document.head.appendChild(meta);
+  }
+  meta.setAttribute(
+    'content',
+    'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover'
+  );
+
+  // 2) CSS: só rola na vertical + campos com 16px (evita o zoom ao focar)
+  let el = document.getElementById('native-lock');
+  if (!el) {
+    el = document.createElement('style');
+    el.id = 'native-lock';
+    document.head.appendChild(el);
+  }
+  el.textContent = `
+    html, body, #root {
+      touch-action: pan-y;            /* só cima/baixo; também desliga zoom por toque duplo e pinça */
+      overscroll-behavior-x: none;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+    }
+    /* carrosséis horizontais (galeria, profissionais, categorias) continuam arrastando de lado */
+    .overflow-x-auto { touch-action: pan-x pan-y; }
+
+    /* iOS dá zoom em qualquer campo com fonte < 16px */
+    input, select, textarea { font-size: 16px !important; }
+  `;
+
+  // 3) iOS: bloqueia o gesto de pinça (gesturestart é do WebKit)
+  const stop = (e) => e.preventDefault();
+  document.addEventListener('gesturestart', stop);
+  document.addEventListener('gesturechange', stop);
+  document.addEventListener('gestureend', stop);
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches && e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+};
 
 // ─── CHAT DO PROFISSIONAL ───
 const SupportChat = ({ user, isGuest }) => {
@@ -7412,6 +7459,9 @@ export default function App() {
     injectDarkModeCSS(isDark);
     localStorage.setItem('salao_dark_mode', isDark);
   }, [isDark]);
+  useEffect(() => {
+  applyNativeViewportLock();
+}, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
