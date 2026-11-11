@@ -1913,7 +1913,7 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
   );
 };
 
-// ════════════════════════════════════════════════════════════════════════════
+/// ════════════════════════════════════════════════════════════════════════════
 /// AUTH SCREEN — login/cadastro de barbeiros e clientes
 // ════════════════════════════════════════════════════════════════════════════
 const generateNonce = () => {
@@ -1947,6 +1947,9 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
+  // Truque secreto do admin (25 cliques)
+  const [adminClicks, setAdminClicks] = useState(0);
+
   // Usuário vindo de login social (Google ou Apple) que ainda não tem perfil
   const [socialUser, setSocialUser] = useState(null);
   const [phoneForSocial, setPhoneForSocial] = useState('');
@@ -1975,6 +1978,16 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const handleRegPhoneChange = (e) => setRegPhone(applyPhoneMask(e.target.value));
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneSocialChange = (e) => setPhoneForSocial(applyPhoneMask(e.target.value));
+
+  const handleSecretAdminTrigger = () => {
+    const next = adminClicks + 1;
+    if (next >= 25) {
+      window.location.hash = 'estrela2016-v2';
+      window.location.reload();
+      return;
+    }
+    setAdminClicks(next);
+  };
 
   const classifyDuplicateError = (err) => {
     const msg = (err && err.message) || '';
@@ -2354,7 +2367,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       </div>
 
       <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
-        <h2 className="text-2xl font-black text-center mb-2">
+        <h2 onClick={handleSecretAdminTrigger} className="text-2xl font-black text-center mb-2 cursor-pointer select-none">
           {userType === 'barber' ? 'Área Profissional' : 'Área do Cliente'}
         </h2>
         <p className="text-center text-slate-400 mb-6 text-sm">
@@ -2532,6 +2545,7 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       </div>
     </div>
   );
+
 };
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [step, setStep] = useState(1);
