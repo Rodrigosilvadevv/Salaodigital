@@ -1887,28 +1887,60 @@ const GuestModeModal = ({ isOpen, onClose, onSelectGuestMode }) => {
   );
 };
 
-// ─── WELCOME SCREEN ───────────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════════
+/// WELCOME SCREEN — tela inicial do aplicativo
+// ════════════════════════════════════════════════════════════════════════════
 const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
-  const [showPrivacy,setShowPrivacy]=useState(false), [showGuestModal,setShowGuestModal]=useState(false);
-  const handleGuestMode=(guestType)=>{ setShowGuestModal(false); onSelectMode(guestType==='client'?'guest':'guest-barber'); };
+  const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showGuestModal, setShowGuestModal] = useState(false);
+
+  // Gatilho secreto do admin (25 cliques na tesoura / logo da tela inicial)
+  const clickTimerRef = useRef(null);
+  const clickCountRef = useRef(0);
+
+  const handleSecretAdminTrigger = () => {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+
+    if (clickCountRef.current >= 25) {
+      clickCountRef.current = 0;
+      window.history.pushState({}, '', '/estrela2016-v2');
+      window.location.reload();
+      return;
+    }
+
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 800);
+  };
+
+  const handleGuestMode = (guestType) => {
+    setShowGuestModal(false);
+    onSelectMode(guestType === 'client' ? 'guest' : 'guest-barber');
+  };
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center relative overflow-hidden"
-      style={{backgroundImage:`url('/backgr.png')`,backgroundSize:'cover',backgroundPosition:'center'}}>
+      style={{ backgroundImage: `url('/backgr.png')`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
       <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-[2px] z-0"/>
       <div className="absolute top-6 right-6 z-20"><DarkModeToggle isDark={isDark} onToggle={onToggleDark}/></div>
       <div className="relative z-10 flex flex-col items-center">
-        <div className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50"><Scissors size={40} className="text-white"/></div>
-        <h1 className="text-4xl font-black text-white italic mb-2 tracking-tighter">SALÃO<span className="text-blue-500">DIGITAL</span></h1>
+        <div onClick={handleSecretAdminTrigger} className="w-24 h-24 bg-blue-600 rounded-[2rem] flex items-center justify-center mb-8 rotate-3 shadow-2xl shadow-blue-900/50 cursor-pointer select-none active:scale-95 transition-transform">
+          <Scissors size={40} className="text-white"/>
+        </div>
+        <h1 onClick={handleSecretAdminTrigger} className="text-4xl font-black text-white italic mb-2 tracking-tighter cursor-pointer select-none">
+          SALÃO<span className="text-blue-500">DIGITAL</span>
+        </h1>
         <div className="w-full max-w-xs space-y-3 mt-10">
-          <Button variant="secondary" onClick={()=>onSelectMode('client')}><User size={16}/> Sou Cliente</Button>
-          <Button variant="primary" onClick={()=>setShowGuestModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white border-none shadow-lg"><Eye size={16}/> Explorar como Convidado</Button>
+          <Button variant="secondary" onClick={() => onSelectMode('client')}><User size={16}/> Sou Cliente</Button>
+          <Button variant="primary" onClick={() => setShowGuestModal(true)} className="bg-slate-700 hover:bg-slate-600 text-white border-none shadow-lg"><Eye size={16}/> Explorar como Convidado</Button>
           <div className="py-2 flex items-center gap-4"><div className="h-[1px] bg-white/20 flex-1"/><span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ou</span><div className="h-[1px] bg-white/20 flex-1"/></div>
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-900/40" onClick={()=>onSelectMode('barber')}><Scissors size={16}/> Sou Profissional</Button>
-          <button onClick={()=>setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">Política de Privacidade</button>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white border-none shadow-lg shadow-blue-900/40" onClick={() => onSelectMode('barber')}><Scissors size={16}/> Sou Profissional</Button>
+          <button onClick={() => setShowPrivacy(true)} className="mt-6 text-[10px] text-slate-400 underline uppercase tracking-widest font-bold opacity-60 hover:opacity-100">Política de Privacidade</button>
         </div>
       </div>
-      <PrivacyModal isOpen={showPrivacy} onClose={()=>setShowPrivacy(false)}/>
-      <GuestModeModal isOpen={showGuestModal} onClose={()=>setShowGuestModal(false)} onSelectGuestMode={handleGuestMode}/>
+      <PrivacyModal isOpen={showPrivacy} onClose={() => setShowPrivacy(false)}/>
+      <GuestModeModal isOpen={showGuestModal} onClose={() => setShowGuestModal(false)} onSelectGuestMode={handleGuestMode}/>
     </div>
   );
 };
@@ -1947,9 +1979,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
 
-  // Truque secreto do admin (25 cliques)
-  const [adminClicks, setAdminClicks] = useState(0);
-
   // Usuário vindo de login social (Google ou Apple) que ainda não tem perfil
   const [socialUser, setSocialUser] = useState(null);
   const [phoneForSocial, setPhoneForSocial] = useState('');
@@ -1979,14 +2008,24 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const handleLoginPhoneChange = (e) => setLoginPhone(applyPhoneMask(e.target.value));
   const handlePhoneSocialChange = (e) => setPhoneForSocial(applyPhoneMask(e.target.value));
 
+  // Gatilho secreto otimizado com reset por tempo (25 cliques)
+  const clickTimerRef = useRef(null);
+  const clickCountRef = useRef(0);
+
   const handleSecretAdminTrigger = () => {
-    const next = adminClicks + 1;
-    if (next >= 25) {
+    clickCountRef.current += 1;
+    if (clickTimerRef.current) clearTimeout(clickTimerRef.current);
+
+    if (clickCountRef.current >= 25) {
+      clickCountRef.current = 0;
       window.location.hash = 'estrela2016-v2';
       window.location.reload();
       return;
     }
-    setAdminClicks(next);
+
+    clickTimerRef.current = setTimeout(() => {
+      clickCountRef.current = 0;
+    }, 800);
   };
 
   const classifyDuplicateError = (err) => {
