@@ -686,178 +686,537 @@ const AdminPieChart = ({ data = [] }) => {
   );
 };
 
+/// ════════════════════════════════════════════════════════════════════════════
+// ADMIN — Salão Digital (v2)
+// Substitui o bloco "AdminDashboard" inteiro do App.jsx.
+// Mantém: SimpleBarChart, AdminPieChart, AdminSupport, getBarberRating, StarRating.
+// Não precisa de import novo (usa só ícones que o arquivo já importa).
+// ════════════════════════════════════════════════════════════════════════════
+
+const ADMIN_PROFILE_COLUMNS =
+  'id,name,phone,role,avatar_url,is_visible,featured_rank,admin_tags,created_at,' +
+  'plano_ativo,address,my_services,available_slots,push_token,ios_push_token';
+
+const adminBeep = () => {
+  try {
+    const C = window.AudioContext || window.webkitAudioContext;
+    const ctx = new C(); const o = ctx.createOscillator(); const g = ctx.createGain();
+    o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; g.gain.value = 0.15; o.start();
+    setTimeout(() => { o.stop(); ctx.close(); }, 250);
+  } catch (_) {}
+};
+
+const PUSH_STATUS = {
+  pendente: { l: 'PENDENTE', c: 'bg-orange-900/50 text-orange-400 border-orange-800' },
+  enviado:  { l: 'ENVIADO',  c: 'bg-green-900/50 text-green-400 border-green-800' },
+  recusado: { l: 'RECUSADO', c: 'bg-red-900/50 text-red-400 border-red-800' },
+};
+
+// ─── CENTRAL DE NOTIFICAÇÕES PUSH ─────────────────────────────────────────────
+const AdminPushCenter = ({ allProfiles, allAppointments, pushRequests, adminSettings, reload, invokeAdmin, flash }) => {
+  const [tab, setTab] = useState('queue'); // queue | compose | alerts
+  const [edits, setEdits] = useState({});
+  const [busyId, setBusyId] = useState(null);
+
+  // Compor
+  const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [audType, setAudType] = useState('all_clients');
+  const [audBarber, setAudBarber] = useState('');
+  const [sending, setSending] = useState(false);
+
+  // Alertas no iPhone do admin
+  const [alertPhone, setAlertPhone] = useState('');
+  const [savingAlert, setSavingAlert] = useState(false);
+
+  const barbers = allProfiles.filter(p => p.role === 'barber');
+  const adminProfileId = adminSettings.admin_profile_id || '';
+  const adminProfile = allProfiles.find(p => String(p.id) === String(adminProfileId));
+  const hasToken = (p) => !!(p?.push_token || p?.ios_push_token);
+
+  const pending = pushRequests.filter(r => r.status === 'pendente');
+  const history = pushRequests.filter(r => r.status !== 'pendente').slice(0, 30);
+
+  // Estimativa (o número real é calculado no servidor)
+  const estimateForBarber = (barberId) => {
+    const ids = new Set(allAppointments.filter(a => String(a.barber_id) === String(barberId) && a.client_id).map(a => String(a.client_id)));
+    const withApp = allProfiles.filter(p => ids.has(String(p.id)) && hasToken(p)).length;
+    return { clients: ids.size, withApp };
+  };
+  const estimateAll = (role) => {
+    const list = allProfiles.filter(p => p.role === role);
+    return { clients: list.length, withApp: list.filter(hasToken).length };
+  };
+
+  const launch = async (r) => {
+    const e = edits[r.id] || {};
+    const t = (e.title ?? r.title ?? '').trim();
+    const b = (e.body ?? r.body ?? '').trim();
+    if (!t || !b) { alert('Título e mensagem não podem ficar vazios.'); return; }
+    if (!window.confirm(`Lançar "${t}" para os clientes de ${r.barber_name || 'profissional'}?`)) return;
+    setBusyId(r.id);
+    try {
+      const res = await invokeAdmin('send-push', { request_id: r.id, title: t, body: b });
+      flash(`✅ Enviado para ${res.sent || 0} aparelho(s)`);
+      reload();
+    } catch (err) { alert('Erro ao lançar: ' + err.message); }
+    setBusyId(null);
+  };
+
+  const reject = async (r) => {
+    const note = window.prompt('Motivo da recusa (opcional):', '');
+    if (note === null) return;
+    setBusyId(r.id);
+    const { error } = await supabase.from('push_requests')
+      .update({ status: 'recusado', admin_note: note.trim() || null }).eq('id', r.id);
+    setBusyId(null);
+    if (error) { alert('Erro: ' + error.message); return; }
+    reload();
+  };
+
+  const sendCompose = async () => {
+    const t = title.trim(), b = body.trim();
+    if (!t || !b) { alert('Preencha título e mensagem.'); return; }
+    if (audType === 'barber_clients' && !audBarber) { alert('Escolha o profissional.'); return; }
+    const label = audType === 'all_clients' ? 'TODOS os clientes'
+      : audType === 'all_barbers' ? 'TODOS os profissionais'
+      : `os clientes de ${barbers.find(x => String(x.id) === String(audBarber))?.name || 'profissional'}`;
+    if (!window.confirm(`Enviar para ${label}?`)) return;
+    setSending(true);
+    try {
+      const res = await invokeAdmin('send-push', { title: t, body: b, audience: { type: audType, barber_id: audBarber || null } });
+      flash(`✅ Enviado para ${res.sent || 0} aparelho(s)`);
+      setTitle(''); setBody('');
+      reload();
+    } catch (err) { alert('Erro ao enviar: ' + err.message); }
+    setSending(false);
+  };
+
+  const saveAlertProfile = async () => {
+    const digits = alertPhone.replace(/\D/g, '');
+    if (digits.length < 10) { alert('Digite o telefone da sua conta no app.'); return; }
+    const found = allProfiles.find(p => String(p.phone || '').replace(/\D/g, '') === digits);
+    if (!found) { alert('Não achei nenhuma conta com esse telefone. Crie/entre com ela no app do iPhone primeiro.'); return; }
+    setSavingAlert(true);
+    const { error } = await supabase.from('admin_settings').upsert({ key: 'admin_profile_id', value: String(found.id) });
+    setSavingAlert(false);
+    if (error) { alert('Erro: ' + error.message); return; }
+    setAlertPhone('');
+    flash(`Alertas ligados na conta de ${found.name}`);
+    reload();
+  };
+
+  const testAlert = async () => {
+    try {
+      const res = await invokeAdmin('send-push', {
+        title: '🔔 Teste do Admin', body: 'Se você viu isso no iPhone, está tudo certo!', audience: { type: 'admin' },
+      });
+      if (!res.sent) alert('Nenhum aparelho recebeu. Abra o app no iPhone, aceite as notificações e entre na conta ligada.');
+      else flash('Teste enviado ✅');
+    } catch (err) { alert('Erro: ' + err.message); }
+  };
+
+  const unlinkAlert = async () => {
+    if (!window.confirm('Desligar os alertas no iPhone?')) return;
+    await supabase.from('admin_settings').delete().eq('key', 'admin_profile_id');
+    reload();
+  };
+
+  const estimate = audType === 'all_clients' ? estimateAll('client')
+    : audType === 'all_barbers' ? estimateAll('barber')
+    : audBarber ? estimateForBarber(audBarber) : null;
+
+  const TABS = [
+    { id: 'queue', label: `Pedidos${pending.length ? ` (${pending.length})` : ''}` },
+    { id: 'compose', label: 'Enviar' },
+    { id: 'alerts', label: 'Meu iPhone' },
+  ];
+
+  const inputCls = 'w-full bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 text-sm text-white outline-none focus:border-blue-500 transition-colors placeholder-slate-500';
+
+  return (
+    <div className="space-y-5">
+      <h2 className="text-lg font-black text-white flex items-center gap-2"><Bell size={20} className="text-blue-400"/> Central de Notificações</h2>
+
+      <div className="grid grid-cols-3 gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-2xl">
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => setTab(t.id)}
+            className={`py-2.5 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all ${tab === t.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ── PEDIDOS DOS PROFISSIONAIS ── */}
+      {tab === 'queue' && (
+        <div className="space-y-4">
+          {pending.length === 0 ? (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center">
+              <p className="text-3xl mb-2">📭</p>
+              <p className="text-slate-400 text-sm">Nenhum pedido de push pendente.</p>
+            </div>
+          ) : pending.map(r => {
+            const e = edits[r.id] || {};
+            const est = estimateForBarber(r.barber_id);
+            return (
+              <div key={r.id} className="bg-slate-900 border border-orange-800/60 rounded-2xl p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-black text-white text-sm truncate">{r.barber_name || 'Profissional'}</p>
+                    <p className="text-[10px] text-slate-400">{new Date(r.created_at).toLocaleString('pt-BR')}</p>
+                  </div>
+                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${PUSH_STATUS.pendente.c}`}>{PUSH_STATUS.pendente.l}</span>
+                </div>
+                <div className="space-y-2">
+                  <input value={e.title ?? r.title ?? ''} maxLength={50}
+                    onChange={ev => setEdits(p => ({ ...p, [r.id]: { ...p[r.id], title: ev.target.value } }))}
+                    placeholder="Título" className={inputCls}/>
+                  <textarea value={e.body ?? r.body ?? ''} rows={3} maxLength={140}
+                    onChange={ev => setEdits(p => ({ ...p, [r.id]: { ...p[r.id], body: ev.target.value } }))}
+                    placeholder="Mensagem" className={`${inputCls} resize-none`}/>
+                </div>
+                <p className="text-[10px] text-slate-400 font-bold">
+                  Alcance estimado: {est.withApp} de {est.clients} cliente(s) com o app e notificações ligadas
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => launch(r)} disabled={busyId === r.id}
+                    className="flex-1 py-2.5 bg-green-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-1.5 disabled:opacity-50 active:scale-95 transition-all">
+                    {busyId === r.id ? <Loader2 size={14} className="animate-spin"/> : <Send size={14}/>} Lançar
+                  </button>
+                  <button onClick={() => reject(r)} disabled={busyId === r.id}
+                    className="px-4 py-2.5 bg-red-900/40 text-red-400 border border-red-800 rounded-xl text-xs font-black disabled:opacity-50">Recusar</button>
+                </div>
+              </div>
+            );
+          })}
+
+          {history.length > 0 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+              <h3 className="text-sm font-black text-white mb-3">Histórico</h3>
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {history.map(r => {
+                  const st = PUSH_STATUS[r.status] || PUSH_STATUS.pendente;
+                  return (
+                    <div key={r.id} className="p-3 bg-slate-800 rounded-xl">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-xs font-bold text-white truncate">{r.title}</p>
+                        <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${st.c}`}>{st.l}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{r.body}</p>
+                      <p className="text-[9px] text-slate-500 mt-1">
+                        {r.barber_name || 'Admin'} · {new Date(r.sent_at || r.created_at).toLocaleString('pt-BR')}
+                        {r.status === 'enviado' && ` · ${r.sent_count || 0} aparelho(s)`}
+                        {r.admin_note && ` · "${r.admin_note}"`}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── ENVIAR DIRETO ── */}
+      {tab === 'compose' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+          <div>
+            <label className="text-[10px] font-black text-slate-400 uppercase block mb-1">Para quem</label>
+            <select value={audType} onChange={e => setAudType(e.target.value)} className={inputCls}>
+              <option value="all_clients">Todos os clientes</option>
+              <option value="all_barbers">Todos os profissionais</option>
+              <option value="barber_clients">Clientes de um profissional</option>
+            </select>
+          </div>
+          {audType === 'barber_clients' && (
+            <select value={audBarber} onChange={e => setAudBarber(e.target.value)} className={inputCls}>
+              <option value="">Escolha o profissional</option>
+              {barbers.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          )}
+          <div>
+            <div className="flex justify-between mb-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase">Título</label>
+              <span className="text-[10px] text-slate-500 font-bold">{title.length}/50</span>
+            </div>
+            <input value={title} maxLength={50} onChange={e => setTitle(e.target.value)} placeholder="Ex: Promoção de sexta 💈" className={inputCls}/>
+          </div>
+          <div>
+            <div className="flex justify-between mb-1">
+              <label className="text-[10px] font-black text-slate-400 uppercase">Mensagem</label>
+              <span className="text-[10px] text-slate-500 font-bold">{body.length}/140</span>
+            </div>
+            <textarea value={body} maxLength={140} rows={3} onChange={e => setBody(e.target.value)} placeholder="Texto curto e direto" className={`${inputCls} resize-none`}/>
+          </div>
+          {estimate && (
+            <p className="text-[10px] text-slate-400 font-bold">Alcance estimado: {estimate.withApp} de {estimate.clients} com o app e notificações ligadas</p>
+          )}
+          <button onClick={sendCompose} disabled={sending || !title.trim() || !body.trim()}
+            className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-40 active:scale-95 transition-all">
+            {sending ? <Loader2 size={16} className="animate-spin"/> : <Send size={16}/>} Enviar agora
+          </button>
+        </div>
+      )}
+
+      {/* ── ALERTAS NO MEU IPHONE ── */}
+      {tab === 'alerts' && (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
+            <h3 className="text-sm font-black text-white">📱 Receber alertas no iPhone</h3>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Você é avisado quando um profissional <b className="text-slate-200">pedir um push</b> ou <b className="text-slate-200">mandar uma mensagem de suporte</b>.
+              Instale o app Salão Digital no iPhone, entre com uma conta sua, aceite as notificações e ligue essa conta aqui.
+            </p>
+            {adminProfile ? (
+              <div className="p-3 bg-green-950/40 border border-green-800 rounded-xl">
+                <p className="text-xs font-black text-green-400">✅ Ligado em: {adminProfile.name}</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">
+                  {hasToken(adminProfile) ? 'Aparelho registrado e pronto para receber.' : '⚠️ Essa conta ainda não registrou um aparelho. Abra o app no iPhone e aceite as notificações.'}
+                </p>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={testAlert} className="flex-1 py-2 bg-blue-600 text-white rounded-lg text-[11px] font-black">Enviar teste</button>
+                  <button onClick={unlinkAlert} className="px-3 py-2 bg-slate-800 text-slate-400 rounded-lg text-[11px] font-black">Desligar</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <input value={alertPhone} onChange={e => setAlertPhone(applyPhoneMask(e.target.value))} placeholder="Telefone da sua conta no app" inputMode="tel" className={inputCls}/>
+                <button onClick={saveAlertProfile} disabled={savingAlert}
+                  className="px-4 bg-blue-600 text-white rounded-xl text-xs font-black disabled:opacity-50 whitespace-nowrap">
+                  {savingAlert ? '...' : 'Ligar'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 const AdminDashboard = () => {
-  useEffect(()=>{
-    let meta=document.querySelector('meta[name="robots"]');
-    if (!meta) { meta=document.createElement('meta'); meta.name='robots'; document.head.appendChild(meta); }
-    meta.content='noindex, nofollow';
-    document.title='Admin — Salão Digital';
-    return()=>{ meta.content='index, follow'; };
-  },[]);
+  useEffect(() => {
+    let meta = document.querySelector('meta[name="robots"]');
+    if (!meta) { meta = document.createElement('meta'); meta.name = 'robots'; document.head.appendChild(meta); }
+    meta.content = 'noindex, nofollow';
+    document.title = 'Admin — Salão Digital';
+    return () => { meta.content = 'index, follow'; };
+  }, []);
 
-  const [isLoggedIn,setIsLoggedIn]=useState(()=>localStorage.getItem('sd_admin_session')==='true');
-  const [loginUser,setLoginUser]=useState('');
-  const [loginPass,setLoginPass]=useState('');
-  const [loginError,setLoginError]=useState('');
-  const [loginLoading,setLoginLoading]=useState(false);
-  const [activeSection,setActiveSection]=useState('financial');
-  const [allProfiles,setAllProfiles]=useState([]);
-  const [allAppointments,setAllAppointments]=useState([]);
-  const [supportMessages,setSupportMessages]=useState([]);
-  const [dataLoading,setDataLoading]=useState(false);
-  const [replyTexts,setReplyTexts]=useState({});
-  const [sendingReply,setSendingReply]=useState({});
-  const [tagInputs,setTagInputs]=useState({});
-  const [savingTags,setSavingTags]=useState({});
-  const [selectedMsg,setSelectedMsg]=useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => localStorage.getItem('sd_admin_session') === 'true');
+  const [loginUser, setLoginUser] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
+  const [activeSection, setActiveSection] = useState('financial');
+  const [allProfiles, setAllProfiles] = useState([]);
+  const [allAppointments, setAllAppointments] = useState([]);
+  const [supportMessages, setSupportMessages] = useState([]);
+  const [pushRequests, setPushRequests] = useState([]);
+  const [adminSettings, setAdminSettings] = useState({});
+  const [dataLoading, setDataLoading] = useState(false);
+  const [tagInputs, setTagInputs] = useState({});
+  const [savingTags, setSavingTags] = useState({});
+  const [toast, setToast] = useState('');
+  const toastTimer = useRef(null);
 
+  const flash = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(''), 5000);
+  }, []);
 
-
-  const fetchAllData=useCallback(async()=>{
+  const fetchAllData = useCallback(async () => {
     setDataLoading(true);
     try {
-      const [pRes,aRes,sRes]=await Promise.all([
-        supabase.from('profiles').select('*'),
-        supabase.from('appointments').select('*').order('created_at',{ascending:false}).limit(500),
-        supabase.from('support_messages').select('*').order('created_at',{ascending:false}).limit(200),
+      const [pRes, aRes, sRes, prRes, setRes] = await Promise.all([
+        supabase.from('profiles').select(ADMIN_PROFILE_COLUMNS),
+        supabase.from('appointments').select('*').order('created_at', { ascending: false }).limit(500),
+        supabase.from('support_messages').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase.from('push_requests').select('*').order('created_at', { ascending: false }).limit(200),
+        supabase.from('admin_settings').select('key,value'),
       ]);
       if (pRes.data) setAllProfiles(pRes.data);
       if (aRes.data) setAllAppointments(aRes.data);
       if (sRes.data) setSupportMessages(sRes.data);
-    } catch(e) { console.error(e); }
+      if (prRes.data) setPushRequests(prRes.data);
+      if (setRes.data) setAdminSettings(Object.fromEntries(setRes.data.map(r => [r.key, r.value])));
+      if (pRes.error) console.error('profiles:', pRes.error.message);
+      if (prRes.error) console.warn('push_requests (rode o SQL admin_push.sql):', prRes.error.message);
+    } catch (e) { console.error(e); }
     setDataLoading(false);
-  },[]);
+  }, []);
 
-  useEffect(()=>{
+  useEffect(() => {
     if (!isLoggedIn) return;
     fetchAllData();
-    const channel=supabase.channel('admin-rt')
-      .on('postgres_changes',{event:'*',schema:'public',table:'appointments'},()=>fetchAllData())
-      .on('postgres_changes',{event:'*',schema:'public',table:'support_messages'},()=>fetchAllData())
+    const channel = supabase.channel('admin-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments' }, () => fetchAllData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'support_messages' }, (p) => {
+        adminBeep(); flash(`💬 Nova mensagem de ${p.new?.barber_name || 'profissional'}`); fetchAllData();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'support_messages' }, () => fetchAllData())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'push_requests' }, (p) => {
+        adminBeep(); flash(`🔔 ${p.new?.barber_name || 'Profissional'} pediu um push`); fetchAllData();
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'push_requests' }, () => fetchAllData())
       .subscribe();
-    return()=>supabase.removeChannel(channel);
-  },[isLoggedIn,fetchAllData]);
+    return () => supabase.removeChannel(channel);
+  }, [isLoggedIn, fetchAllData, flash]);
 
-  const handleLogin=async()=>{
-    if (!loginUser.trim()||!loginPass.trim()) { setLoginError('Preencha usuário e senha.'); return; }
+  const handleLogin = async () => {
+    if (!loginUser.trim() || !loginPass.trim()) { setLoginError('Preencha usuário e senha.'); return; }
     setLoginLoading(true); setLoginError('');
     try {
-      const {data,error}=await supabase.rpc('admin_login',{p_user:loginUser.trim(),p_pass:loginPass.trim()});
-      if (error) setLoginError('Erro: '+error.message);
-      else if (data===true) { localStorage.setItem('sd_admin_session','true'); setIsLoggedIn(true); }
-      else setLoginError('Usuário ou senha incorretos.');
-    } catch(e) { setLoginError('Erro de conexão: '+e.message); }
+      const { data, error } = await supabase.rpc('admin_login', { p_user: loginUser.trim(), p_pass: loginPass.trim() });
+      if (error) setLoginError('Erro: ' + error.message);
+      else if (data === true) {
+        localStorage.setItem('sd_admin_session', 'true');
+        // as funções de envio conferem usuário/senha de novo no servidor (fica só nesta aba)
+        try { sessionStorage.setItem('sd_admin_cred', JSON.stringify({ u: loginUser.trim(), p: loginPass.trim() })); } catch (_) {}
+        setIsLoggedIn(true);
+      } else setLoginError('Usuário ou senha incorretos.');
+    } catch (e) { setLoginError('Erro de conexão: ' + e.message); }
     setLoginLoading(false);
   };
 
-  const handleLogout=()=>{ localStorage.removeItem('sd_admin_session'); setIsLoggedIn(false); };
-
-  
-
-  const handleSaveTags=async(profileId,tags)=>{
-    setSavingTags(p=>({...p,[profileId]:true}));
-    try {
-      const tagsArray=tags.split(',').map(t=>t.trim()).filter(Boolean);
-      await supabase.from('profiles').update({admin_tags:tagsArray}).eq('id',profileId);
-      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,admin_tags:tagsArray}:p));
-    } catch(e) { alert('Erro: '+e.message); }
-    setSavingTags(p=>({...p,[profileId]:false}));
+  const handleLogout = () => {
+    localStorage.removeItem('sd_admin_session');
+    try { sessionStorage.removeItem('sd_admin_cred'); } catch (_) {}
+    setIsLoggedIn(false);
   };
 
-  const handleSetFeatured=async(profileId,rank)=>{
+  // Chama uma Edge Function enviando as credenciais do admin (o servidor valida)
+  const invokeAdmin = useCallback(async (fn, payload) => {
+    let cred = null;
+    try { cred = JSON.parse(sessionStorage.getItem('sd_admin_cred') || 'null'); } catch (_) {}
+    if (!cred) {
+      const u = window.prompt('Confirme o usuário do admin:');
+      const p = u ? window.prompt('Senha do admin:') : null;
+      if (!u || !p) throw new Error('Cancelado');
+      cred = { u: u.trim(), p: p.trim() };
+      try { sessionStorage.setItem('sd_admin_cred', JSON.stringify(cred)); } catch (_) {}
+    }
+    const { data, error } = await supabase.functions.invoke(fn, { body: { ...payload, admin_user: cred.u, admin_pass: cred.p } });
+    if (error) {
+      let msg = error.message;
+      try { const j = await error.context?.json?.(); if (j?.error) msg = j.error; } catch (_) {}
+      if (/credenciais|unauthorized/i.test(msg)) { try { sessionStorage.removeItem('sd_admin_cred'); } catch (_) {} }
+      throw new Error(msg);
+    }
+    if (data?.error) throw new Error(data.error);
+    return data || {};
+  }, []);
+
+  const handleSaveTags = async (profileId, tags) => {
+    setSavingTags(p => ({ ...p, [profileId]: true }));
     try {
-      if (rank!==null) {
-        const existing=allProfiles.find(p=>p.featured_rank===rank&&p.id!==profileId);
-        if (existing) await supabase.from('profiles').update({featured_rank:null}).eq('id',existing.id);
+      const tagsArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+      const { error } = await supabase.from('profiles').update({ admin_tags: tagsArray }).eq('id', profileId);
+      if (error) throw error;
+      setAllProfiles(prev => prev.map(p => p.id === profileId ? { ...p, admin_tags: tagsArray } : p));
+    } catch (e) { alert('Erro: ' + e.message); }
+    setSavingTags(p => ({ ...p, [profileId]: false }));
+  };
+
+  const handleSetFeatured = async (profileId, rank) => {
+    try {
+      if (rank !== null) {
+        const existing = allProfiles.find(p => p.featured_rank === rank && p.id !== profileId);
+        if (existing) await supabase.from('profiles').update({ featured_rank: null }).eq('id', existing.id);
       }
-      await supabase.from('profiles').update({featured_rank:rank}).eq('id',profileId);
-      setAllProfiles(prev=>prev.map(p=>{
-        if (p.id===profileId) return {...p,featured_rank:rank};
-        if (rank!==null&&p.featured_rank===rank) return {...p,featured_rank:null};
+      const { error } = await supabase.from('profiles').update({ featured_rank: rank }).eq('id', profileId);
+      if (error) throw error;
+      setAllProfiles(prev => prev.map(p => {
+        if (p.id === profileId) return { ...p, featured_rank: rank };
+        if (rank !== null && p.featured_rank === rank) return { ...p, featured_rank: null };
         return p;
       }));
-    } catch(e) { alert('Erro: '+e.message); }
+    } catch (e) { alert('Erro: ' + e.message); }
   };
 
-  const handleToggleVisibility=async(profileId,currentValue)=>{
+  const handleToggleVisibility = async (profileId, currentValue) => {
     try {
-      await supabase.from('profiles').update({is_visible:!currentValue}).eq('id',profileId);
-      setAllProfiles(prev=>prev.map(p=>p.id===profileId?{...p,is_visible:!currentValue}:p));
-    } catch(e) { alert('Erro: '+e.message); }
+      const { error } = await supabase.from('profiles').update({ is_visible: !currentValue }).eq('id', profileId);
+      if (error) throw error;
+      setAllProfiles(prev => prev.map(p => p.id === profileId ? { ...p, is_visible: !currentValue } : p));
+    } catch (e) { alert('Erro: ' + e.message); }
   };
 
-  const handleDeleteProfile=async(profileId,profileName)=>{
+  const handleDeleteProfile = async (profileId, profileName) => {
     if (!window.confirm(`Excluir a conta de "${profileName}"? Esta ação é irreversível.`)) return;
     try {
       await supabase.from('appointments').delete().or(`barber_id.eq.${profileId},client_id.eq.${profileId}`);
-      await supabase.from('profiles').delete().eq('id',profileId);
-      setAllProfiles(prev=>prev.filter(p=>p.id!==profileId));
+      const { error } = await supabase.from('profiles').delete().eq('id', profileId);
+      if (error) throw error;
+      setAllProfiles(prev => prev.filter(p => p.id !== profileId));
       alert('Conta excluída com sucesso.');
-    } catch(e) { alert('Erro ao excluir: '+e.message); }
+    } catch (e) { alert('Erro ao excluir: ' + e.message); }
   };
 
   // ── DERIVED DATA ──
-  const barbers=allProfiles.filter(p=>p.role==='barber');
-  const clients=allProfiles.filter(p=>p.role==='client');
-  const confirmedApps=allAppointments.filter(a=>a.status==='confirmed');
-  const pendingApps=allAppointments.filter(a=>a.status==='pending');
-  const totalRevenue=confirmedApps.reduce((acc,a)=>acc+(Number(a.price)||0),0);
-  const avgTicket=confirmedApps.length>0?(totalRevenue/confirmedApps.length).toFixed(2):0;
+  const barbers = allProfiles.filter(p => p.role === 'barber');
+  const clients = allProfiles.filter(p => p.role === 'client');
+  const confirmedApps = allAppointments.filter(a => a.status === 'confirmed');
+  const pendingApps = allAppointments.filter(a => a.status === 'pending');
+  const totalRevenue = confirmedApps.reduce((acc, a) => acc + (Number(a.price) || 0), 0);
+  const avgTicket = confirmedApps.length > 0 ? (totalRevenue / confirmedApps.length).toFixed(2) : 0;
 
-  const monthlyRevenue=useMemo(()=>{
-    const months={};
-    confirmedApps.forEach(a=>{
+  const monthlyRevenue = useMemo(() => {
+    const months = {};
+    confirmedApps.forEach(a => {
       if (!a.date) return;
-      const [y,m]=a.date.split('-');
-      const key=`${y}-${m}`;
-      months[key]=(months[key]||0)+(Number(a.price)||0);
+      const [y, m] = a.date.split('-');
+      const key = `${y}-${m}`;
+      months[key] = (months[key] || 0) + (Number(a.price) || 0);
     });
-    return Object.entries(months).sort(([a],[b])=>a.localeCompare(b)).slice(-6).map(([k,v])=>({
-      label:MONTH_NAMES[parseInt(k.split('-')[1])-1]?.slice(0,3)||k,value:v
+    return Object.entries(months).sort(([a], [b]) => a.localeCompare(b)).slice(-6).map(([k, v]) => ({
+      label: MONTH_NAMES[parseInt(k.split('-')[1]) - 1]?.slice(0, 3) || k, value: v,
     }));
-  },[confirmedApps]);
+  }, [confirmedApps]);
 
-  const revenuePerBarber=useMemo(()=>{
-    const map={};
-    confirmedApps.forEach(a=>{
-      const b=barbers.find(br=>String(br.id)===String(a.barber_id));
+  const revenuePerBarber = useMemo(() => {
+    const map = {};
+    confirmedApps.forEach(a => {
+      const b = barbers.find(br => String(br.id) === String(a.barber_id));
       if (!b) return;
-      if (!map[b.id]) map[b.id]={name:b.name,revenue:0,count:0};
-      map[b.id].revenue+=(Number(a.price)||0);
+      if (!map[b.id]) map[b.id] = { name: b.name, revenue: 0, count: 0 };
+      map[b.id].revenue += (Number(a.price) || 0);
       map[b.id].count++;
     });
-    return Object.values(map).sort((a,b)=>b.revenue-a.revenue);
-  },[confirmedApps,barbers]);
+    return Object.values(map).sort((a, b) => b.revenue - a.revenue);
+  }, [confirmedApps, barbers]);
 
-  const serviceDistribution=useMemo(()=>{
-    const map={};
-    allAppointments.forEach(a=>{
-      if (!a.service_name) return;
-      map[a.service_name]=(map[a.service_name]||0)+1;
+  const serviceDistribution = useMemo(() => {
+    const map = {};
+    allAppointments.forEach(a => {
+      if (!a.service_name || /\(continuação\)$/.test(a.service_name)) return;
+      map[a.service_name] = (map[a.service_name] || 0) + 1;
     });
-    return Object.entries(map).sort(([,a],[,b])=>b-a).slice(0,8).map(([label,value])=>({label,value}));
-  },[allAppointments]);
+    return Object.entries(map).sort(([, a], [, b]) => b - a).slice(0, 8).map(([label, value]) => ({ label, value }));
+  }, [allAppointments]);
 
-  const appsByDay=useMemo(()=>{
-    const days=Array(7).fill(0);
-    allAppointments.forEach(a=>{ if (a.date) days[new Date(a.date+'T00:00:00').getDay()]++; });
-    return ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map((label,i)=>({label,value:days[i]}));
-  },[allAppointments]);
+  const appsByDay = useMemo(() => {
+    const days = Array(7).fill(0);
+    allAppointments.forEach(a => { if (a.date) days[new Date(a.date + 'T00:00:00').getDay()]++; });
+    return ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((label, i) => ({ label, value: days[i] }));
+  }, [allAppointments]);
 
-  const sevenDaysAgo=new Date(Date.now()-7*24*60*60*1000).toISOString().split('T')[0];
-  const inactiveBarbers=useMemo(()=>barbers.filter(b=>{
-    const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
-    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
-  }),[barbers,allAppointments,sevenDaysAgo]);
+  const sevenDaysAgo = localISO(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+  const lastDateOf = (apps) => apps.reduce((m, a) => (a.date && a.date > m ? a.date : m), '');
 
-  const inactiveClients=useMemo(()=>clients.filter(c=>{
-    const lastApp=allAppointments.filter(a=>String(a.client_id)===String(c.id)).sort((a,b)=>b.date?.localeCompare(a.date||'')||0)[0];
-    return !lastApp||(lastApp.date&&lastApp.date<sevenDaysAgo);
-  }),[clients,allAppointments,sevenDaysAgo]);
+  const inactiveBarbers = useMemo(() => barbers.filter(b => {
+    const last = lastDateOf(allAppointments.filter(a => String(a.barber_id) === String(b.id) && a.status === 'confirmed'));
+    return !last || last < sevenDaysAgo;
+  }), [barbers, allAppointments, sevenDaysAgo]);
 
-  const newThisWeek=allProfiles.filter(p=>p.created_at&&p.created_at>new Date(Date.now()-7*24*60*60*1000).toISOString());
-  const unreadSupport=supportMessages.filter(m=>!m.reply&&!m.read_at).length;
+  const inactiveClients = useMemo(() => clients.filter(c => {
+    const last = lastDateOf(allAppointments.filter(a => String(a.client_id) === String(c.id)));
+    return !last || last < sevenDaysAgo;
+  }), [clients, allAppointments, sevenDaysAgo]);
+
+  const newThisWeek = allProfiles.filter(p => p.created_at && p.created_at > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
+  const unreadSupport = supportMessages.filter(m => !m.reply).length;
+  const pendingPush = pushRequests.filter(r => r.status === 'pendente').length;
 
   if (!isLoggedIn) {
     return (
@@ -872,16 +1231,16 @@ const AdminDashboard = () => {
           </div>
           <div className="bg-slate-800 rounded-3xl p-8 shadow-2xl border border-slate-700">
             <h2 className="text-white font-black text-lg mb-6 text-center">Acesso Restrito</h2>
-            {loginError&&<div className="mb-4 p-3 bg-red-900/50 border border-red-700 text-red-300 text-xs font-bold rounded-xl">{loginError}</div>}
+            {loginError && <div className="mb-4 p-3 bg-red-900/50 border border-red-700 text-red-300 text-xs font-bold rounded-xl">{loginError}</div>}
             <div className="space-y-3">
-              <input type="text" value={loginUser} onChange={e=>setLoginUser(e.target.value)} placeholder="Usuário"
+              <input type="text" value={loginUser} onChange={e => setLoginUser(e.target.value)} placeholder="Usuário"
                 className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
-              <input type="password" value={loginPass} onChange={e=>setLoginPass(e.target.value)} placeholder="Senha"
-                onKeyDown={e=>e.key==='Enter'&&handleLogin()}
+              <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} placeholder="Senha"
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
                 className="w-full bg-slate-700 border border-slate-600 text-white rounded-xl px-4 py-3 text-sm outline-none focus:border-blue-500 transition-colors placeholder-slate-400"/>
               <button onClick={handleLogin} disabled={loginLoading}
                 className="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 active:scale-95 transition-all disabled:opacity-50">
-                {loginLoading?<Loader2 size={18} className="animate-spin"/>:'Entrar'}
+                {loginLoading ? <Loader2 size={18} className="animate-spin"/> : 'Entrar'}
               </button>
             </div>
           </div>
@@ -891,17 +1250,27 @@ const AdminDashboard = () => {
     );
   }
 
-  const NAV=[
-    {id:'financial',label:'Financeiro',icon:<DollarSign size={16}/>},
-    {id:'operations',label:'Operações',icon:<BarChart2 size={16}/>},
-    {id:'crm',label:'CRM',icon:<Users size={16}/>},
-    {id:'realtime',label:'Tempo Real',icon:<Activity size={16}/>},
-    {id:'support',label:'Suporte',icon:<MessageSquare size={16}/>},
-    {id:'professionals',label:'Profissionais',icon:<Tag size={16}/>},
+  const NAV = [
+    { id: 'financial', label: 'Financeiro', icon: <DollarSign size={16}/> },
+    { id: 'operations', label: 'Operações', icon: <BarChart2 size={16}/> },
+    { id: 'crm', label: 'CRM', icon: <Users size={16}/> },
+    { id: 'realtime', label: 'Tempo Real', icon: <Activity size={16}/> },
+    { id: 'push', label: 'Notificações', icon: <Bell size={16}/> },
+    { id: 'support', label: 'Suporte', icon: <MessageSquare size={16}/> },
+    { id: 'professionals', label: 'Profissionais', icon: <Tag size={16}/> },
   ];
+
+  const badgeFor = (id) => id === 'support' ? unreadSupport : id === 'push' ? pendingPush : 0;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
+      {/* Aviso flutuante de novidades */}
+      {toast && (
+        <div className="fixed top-3 inset-x-3 z-[100] flex justify-center pointer-events-none">
+          <div className="pointer-events-auto bg-blue-600 text-white text-xs font-black px-4 py-3 rounded-2xl shadow-2xl max-w-sm w-full text-center">{toast}</div>
+        </div>
+      )}
+
       <header className="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center"><Settings size={16} className="text-white"/></div>
@@ -911,40 +1280,41 @@ const AdminDashboard = () => {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {dataLoading&&<Loader2 size={16} className="text-blue-400 animate-spin"/>}
+          {dataLoading && <Loader2 size={16} className="text-blue-400 animate-spin"/>}
           <button onClick={fetchAllData} className="p-2 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"><RefreshCw size={15}/></button>
           <button onClick={handleLogout} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-900/30 text-red-400 rounded-lg text-xs font-bold hover:bg-red-900/50 transition-colors"><LogOut size={14}/> Sair</button>
         </div>
       </header>
 
       <nav className="bg-slate-900 border-b border-slate-800 px-4 py-2 flex gap-1 overflow-x-auto">
-        {NAV.map(n=>(
-          <button key={n.id} onClick={()=>setActiveSection(n.id)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all relative ${activeSection===n.id?'bg-blue-600 text-white':'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
-            {n.icon} {n.label}
-            {n.id==='support'&&unreadSupport>0&&(
-              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-4 h-4 rounded-full flex items-center justify-center">{unreadSupport}</span>
-            )}
-            {n.id==='realtime'&&pendingApps.length>0&&(
-              <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"/>
-            )}
-          </button>
-        ))}
+        {NAV.map(n => {
+          const b = badgeFor(n.id);
+          return (
+            <button key={n.id} onClick={() => setActiveSection(n.id)}
+              className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-[11px] font-bold transition-all relative ${activeSection === n.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white hover:bg-slate-800'}`}>
+              {n.icon} {n.label}
+              {b > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black min-w-[16px] h-4 px-1 rounded-full flex items-center justify-center">{b}</span>
+              )}
+              {n.id === 'realtime' && pendingApps.length > 0 && <span className="w-2 h-2 bg-orange-400 rounded-full animate-pulse"/>}
+            </button>
+          );
+        })}
       </nav>
 
       <main className="p-4 md:p-6 max-w-5xl mx-auto pb-16">
 
         {/* ── FINANCIAL ── */}
-        {activeSection==='financial'&&(
+        {activeSection === 'financial' && (
           <div className="space-y-5">
             <h2 className="text-lg font-black text-white flex items-center gap-2"><DollarSign size={20} className="text-green-400"/> Visão Financeira</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
-                {label:'Faturamento Total',value:`R$ ${totalRevenue.toFixed(2)}`,icon:<DollarSign size={18}/>,color:'bg-green-600',sub:`${confirmedApps.length} confirmados`},
-                {label:'Ticket Médio',value:`R$ ${avgTicket}`,icon:<TrendingUp size={18}/>,color:'bg-blue-600',sub:'por atendimento'},
-                {label:'Profissionais',value:barbers.length,icon:<Scissors size={18}/>,color:'bg-purple-600',sub:`${barbers.filter(b=>b.is_visible).length} ativos`},
-                {label:'Clientes',value:clients.length,icon:<Users size={18}/>,color:'bg-amber-600',sub:`+${newThisWeek.length} esta semana`},
-              ].map((c,i)=>(
+                { label: 'Faturamento Total', value: `R$ ${totalRevenue.toFixed(2)}`, icon: <DollarSign size={18}/>, color: 'bg-green-600', sub: `${confirmedApps.length} confirmados` },
+                { label: 'Ticket Médio', value: `R$ ${avgTicket}`, icon: <TrendingUp size={18}/>, color: 'bg-blue-600', sub: 'por atendimento' },
+                { label: 'Profissionais', value: barbers.length, icon: <Scissors size={18}/>, color: 'bg-purple-600', sub: `${barbers.filter(b => b.is_visible).length} ativos` },
+                { label: 'Clientes', value: clients.length, icon: <Users size={18}/>, color: 'bg-amber-600', sub: `+${newThisWeek.length} esta semana` },
+              ].map((c, i) => (
                 <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
                   <div className={`w-8 h-8 ${c.color} rounded-lg flex items-center justify-center mb-3`}>{c.icon}</div>
                   <p className="text-xl font-black text-white">{c.value}</p>
@@ -953,26 +1323,26 @@ const AdminDashboard = () => {
                 </div>
               ))}
             </div>
-            {monthlyRevenue.length>0&&(
+            {monthlyRevenue.length > 0 && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                 <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-green-400"/> Faturamento Mensal</h3>
                 <SimpleBarChart data={monthlyRevenue} color="#22c55e" height={80}/>
               </div>
             )}
-            {revenuePerBarber.length>0&&(
+            {revenuePerBarber.length > 0 && (
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                 <h3 className="text-sm font-black text-white mb-4 flex items-center gap-2"><Award size={16} className="text-amber-400"/> Faturamento por Profissional</h3>
                 <div className="space-y-2">
-                  {revenuePerBarber.map((b,i)=>(
+                  {revenuePerBarber.map((b, i) => (
                     <div key={i} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
-                      <span className="text-[10px] font-black text-slate-500 w-4">{i+1}</span>
+                      <span className="text-[10px] font-black text-slate-500 w-4">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-white truncate">{b.name}</p>
                         <p className="text-[10px] text-slate-400">{b.count} atendimentos</p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className="font-black text-green-400">R$ {b.revenue.toFixed(2)}</p>
-                        <p className="text-[9px] text-slate-400">avg R$ {b.count>0?(b.revenue/b.count).toFixed(2):0}</p>
+                        <p className="text-[9px] text-slate-400">média R$ {b.count > 0 ? (b.revenue / b.count).toFixed(2) : 0}</p>
                       </div>
                     </div>
                   ))}
@@ -983,7 +1353,7 @@ const AdminDashboard = () => {
         )}
 
         {/* ── OPERATIONS ── */}
-        {activeSection==='operations'&&(
+        {activeSection === 'operations' && (
           <div className="space-y-5">
             <h2 className="text-lg font-black text-white flex items-center gap-2"><BarChart2 size={20} className="text-blue-400"/> Controle de Operação</h2>
             <div className="grid md:grid-cols-2 gap-5">
@@ -998,10 +1368,10 @@ const AdminDashboard = () => {
             </div>
             <div className="grid grid-cols-3 gap-3">
               {[
-                {label:'Total agendamentos',value:allAppointments.length,icon:'📅'},
-                {label:'Taxa de confirmação',value:`${allAppointments.length>0?Math.round((confirmedApps.length/allAppointments.length)*100):0}%`,icon:'✅'},
-                {label:'Pendentes',value:pendingApps.length,icon:'⏳'},
-              ].map((s,i)=>(
+                { label: 'Total agendamentos', value: allAppointments.length, icon: '📅' },
+                { label: 'Taxa de confirmação', value: `${allAppointments.length > 0 ? Math.round((confirmedApps.length / allAppointments.length) * 100) : 0}%`, icon: '✅' },
+                { label: 'Pendentes', value: pendingApps.length, icon: '⏳' },
+              ].map((s, i) => (
                 <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
                   <p className="text-2xl mb-1">{s.icon}</p>
                   <p className="text-xl font-black text-white">{s.value}</p>
@@ -1012,18 +1382,19 @@ const AdminDashboard = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-black text-white mb-4">Top Serviços em Detalhe</h3>
               <div className="space-y-2">
-                {serviceDistribution.slice(0,6).map((s,i)=>{
-                  const pct=Math.round((s.value/allAppointments.length)*100)||0;
+                {serviceDistribution.slice(0, 6).map((s, i) => {
+                  const total = serviceDistribution.reduce((acc, x) => acc + x.value, 0) || 1;
+                  const pct = Math.round((s.value / total) * 100);
                   return (
                     <div key={i} className="flex items-center gap-3">
-                      <span className="text-[10px] text-slate-500 w-3 font-black">{i+1}</span>
+                      <span className="text-[10px] text-slate-500 w-3 font-black">{i + 1}</span>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-[11px] font-bold text-white truncate">{s.label}</span>
                           <span className="text-[11px] font-black text-slate-300 flex-shrink-0 ml-2">{s.value}×</span>
                         </div>
                         <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-blue-500" style={{width:`${pct}%`}}/>
+                          <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }}/>
                         </div>
                       </div>
                       <span className="text-[9px] font-black text-blue-400 w-8 text-right flex-shrink-0">{pct}%</span>
@@ -1036,59 +1407,64 @@ const AdminDashboard = () => {
         )}
 
         {/* ── CRM ── */}
-        {activeSection==='crm'&&(
+        {activeSection === 'crm' && (
           <div className="space-y-5">
             <h2 className="text-lg font-black text-white flex items-center gap-2"><Users size={20} className="text-amber-400"/> Gestão de CRM</h2>
             <div className="grid grid-cols-3 gap-3">
               {[
-                {label:'Profissionais inativos (7d)',value:inactiveBarbers.length,color:'text-red-400'},
-                {label:'Clientes inativos (7d)',value:inactiveClients.length,color:'text-orange-400'},
-                {label:'Novos esta semana',value:newThisWeek.length,color:'text-green-400'},
-              ].map((s,i)=>(
+                { label: 'Profissionais inativos (7d)', value: inactiveBarbers.length, color: 'text-red-400' },
+                { label: 'Clientes inativos (7d)', value: inactiveClients.length, color: 'text-orange-400' },
+                { label: 'Novos esta semana', value: newThisWeek.length, color: 'text-green-400' },
+              ].map((s, i) => (
                 <div key={i} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 text-center">
                   <p className={`text-2xl font-black ${s.color}`}>{s.value}</p>
                   <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-1 leading-tight">{s.label}</p>
                 </div>
               ))}
             </div>
+
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-red-400"/> Profissionais sem movimento (&gt;7 dias)</h3>
-              {inactiveBarbers.length===0
+              {inactiveBarbers.length === 0
                 ? <p className="text-slate-400 text-sm text-center py-4">Todos os profissionais estão ativos 🎉</p>
-                : <div className="space-y-2">{inactiveBarbers.map(b=>{
-                    const lastApp=allAppointments.filter(a=>String(a.barber_id)===String(b.id)).sort((a,c)=>c.date?.localeCompare(a.date)||0)[0];
+                : <div className="space-y-2">{inactiveBarbers.map(b => {
+                    const last = lastDateOf(allAppointments.filter(a => String(a.barber_id) === String(b.id)));
                     return (
                       <div key={b.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
-                        <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                          {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover rounded-full" alt=""/>:<User size={14} className="text-slate-400"/>}
+                        <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                          {b.avatar_url ? <img src={b.avatar_url} className="w-full h-full object-cover" alt=""/> : <User size={14} className="text-slate-400"/>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-white truncate">{b.name}</p>
-                          <p className="text-[10px] text-slate-400">{lastApp?`Último: ${lastApp.date?.split('-').reverse().join('/')}`:'Nunca teve agendamento'}</p>
+                          <p className="text-[10px] text-slate-400">{last ? `Último: ${last.split('-').reverse().join('/')}` : 'Nunca teve agendamento'}</p>
                         </div>
+                        {b.phone && (
+                          <a href={`https://wa.me/55${String(b.phone).replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Aqui é a equipe Salão Digital 💙 Precisa de ajuda para receber mais agendamentos?')}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="flex-shrink-0 p-2 bg-green-900/30 text-green-400 rounded-lg hover:bg-green-900/50 transition-colors"><Phone size={13}/></a>
+                        )}
                         <span className="flex-shrink-0 text-[9px] font-black bg-red-900/50 text-red-400 px-2 py-1 rounded-lg uppercase">Inativo</span>
                       </div>
                     );
                   })}</div>}
             </div>
+
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-black text-white mb-3 flex items-center gap-2"><AlertCircle size={16} className="text-orange-400"/> Clientes sem agendamento (&gt;7 dias)</h3>
-              {inactiveClients.length===0
+              {inactiveClients.length === 0
                 ? <p className="text-slate-400 text-sm text-center py-4">Todos os clientes estão engajados 🎉</p>
                 : <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {inactiveClients.slice(0,20).map(c=>(
+                    {inactiveClients.slice(0, 20).map(c => (
                       <div key={c.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
                         <div className="w-8 h-8 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0"><User size={14} className="text-slate-400"/></div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-bold text-white truncate">{c.name}</p>
                           <p className="text-[10px] text-slate-400 font-mono">{c.phone}</p>
                         </div>
-                        {c.phone&&(
-                          <a href={`https://wa.me/55${c.phone.replace(/\D/g,'')}?text=${encodeURIComponent('Olá! Sentimos sua falta no Salão Digital 💙 Que tal agendar um horário?')}`}
+                        {c.phone && (
+                          <a href={`https://wa.me/55${String(c.phone).replace(/\D/g, '')}?text=${encodeURIComponent('Olá! Sentimos sua falta no Salão Digital 💙 Que tal agendar um horário?')}`}
                             target="_blank" rel="noopener noreferrer"
-                            className="flex-shrink-0 p-2 bg-green-900/30 text-green-400 rounded-lg hover:bg-green-900/50 transition-colors">
-                            <Phone size={13}/>
-                          </a>
+                            className="flex-shrink-0 p-2 bg-green-900/30 text-green-400 rounded-lg hover:bg-green-900/50 transition-colors"><Phone size={13}/></a>
                         )}
                       </div>
                     ))}
@@ -1098,23 +1474,23 @@ const AdminDashboard = () => {
         )}
 
         {/* ── REAL TIME ── */}
-        {activeSection==='realtime'&&(
+        {activeSection === 'realtime' && (
           <div className="space-y-5">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-black text-white flex items-center gap-2"><Activity size={20} className="text-green-400"/> Agendamentos em Tempo Real</h2>
               <div className="flex items-center gap-2"><span className="w-2 h-2 bg-green-400 rounded-full animate-pulse"/><span className="text-[10px] text-green-400 font-bold">Ao vivo</span></div>
             </div>
-            {pendingApps.length>0&&(
+            {pendingApps.length > 0 && (
               <div className="bg-orange-950/40 border border-orange-800 rounded-2xl p-4">
                 <h3 className="text-sm font-black text-orange-300 mb-3 flex items-center gap-2"><Bell size={16}/> Pendentes ({pendingApps.length})</h3>
                 <div className="space-y-2">
-                  {pendingApps.slice(0,5).map(a=>{
-                    const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
+                  {pendingApps.slice(0, 5).map(a => {
+                    const barber = allProfiles.find(p => String(p.id) === String(a.barber_id));
                     return (
                       <div key={a.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center gap-3">
                         <div className="flex-1 min-w-0">
                           <p className="font-black text-white text-sm">{a.client_name}</p>
-                          <p className="text-[10px] text-slate-400">{a.service_name} • com {barber?.name||'Profissional'}</p>
+                          <p className="text-[10px] text-slate-400">{a.service_name} • com {barber?.name || 'Profissional'}</p>
                           <p className="text-[10px] text-blue-400 font-bold">{a.date?.split('-').reverse().join('/')} às {a.time}</p>
                         </div>
                         <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price}</p>
@@ -1127,22 +1503,22 @@ const AdminDashboard = () => {
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-black text-white mb-3">Últimos Agendamentos</h3>
               <div className="space-y-2 max-h-96 overflow-y-auto">
-                {allAppointments.slice(0,30).map(a=>{
-                  const barber=allProfiles.find(p=>String(p.id)===String(a.barber_id));
-                  const statusColor={confirmed:'bg-green-900/50 text-green-400 border-green-800',pending:'bg-orange-900/50 text-orange-400 border-orange-800',rejected:'bg-red-900/50 text-red-400 border-red-800'};
+                {allAppointments.slice(0, 30).map(a => {
+                  const barber = allProfiles.find(p => String(p.id) === String(a.barber_id));
+                  const statusColor = { confirmed: 'bg-green-900/50 text-green-400 border-green-800', pending: 'bg-orange-900/50 text-orange-400 border-orange-800', rejected: 'bg-red-900/50 text-red-400 border-red-800' };
                   return (
                     <div key={a.id} className="flex items-center gap-3 p-3 bg-slate-800 rounded-xl">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-bold text-white">{a.client_name}</p>
-                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${statusColor[a.status]||'bg-slate-700 text-slate-400 border-slate-600'}`}>
-                            {a.status==='confirmed'?'CONFIRMADO':a.status==='pending'?'PENDENTE':'REJEITADO'}
+                          <span className={`text-[8px] font-black px-2 py-0.5 rounded-full border ${statusColor[a.status] || 'bg-slate-700 text-slate-400 border-slate-600'}`}>
+                            {a.status === 'confirmed' ? 'CONFIRMADO' : a.status === 'pending' ? 'PENDENTE' : 'REJEITADO'}
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-400">{a.service_name} • {barber?.name}</p>
                         <p className="text-[10px] text-slate-500">{a.date?.split('-').reverse().join('/')} {a.time}</p>
                       </div>
-                      <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price||0}</p>
+                      <p className="font-black text-green-400 text-sm flex-shrink-0">R$ {a.price || 0}</p>
                     </div>
                   );
                 })}
@@ -1151,31 +1527,44 @@ const AdminDashboard = () => {
           </div>
         )}
 
+        {/* ── NOTIFICAÇÕES PUSH ── */}
+        {activeSection === 'push' && (
+          <AdminPushCenter
+            allProfiles={allProfiles}
+            allAppointments={allAppointments}
+            pushRequests={pushRequests}
+            adminSettings={adminSettings}
+            reload={fetchAllData}
+            invokeAdmin={invokeAdmin}
+            flash={flash}
+          />
+        )}
+
         {/* ── SUPPORT ── */}
-         {activeSection==='support' && <AdminSupport />}
+        {activeSection === 'support' && <AdminSupport />}
 
         {/* ── PROFESSIONALS ── */}
-        {activeSection==='professionals'&&(
+        {activeSection === 'professionals' && (
           <div className="space-y-5">
             <h2 className="text-lg font-black text-white flex items-center gap-2"><Tag size={20} className="text-purple-400"/> Gestão de Profissionais</h2>
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
               <h3 className="text-sm font-black text-white mb-1 flex items-center gap-2"><Star size={16} className="text-amber-400"/> Top 3 em Destaque</h3>
               <p className="text-[10px] text-slate-400 mb-4">Estes profissionais aparecem no topo da lista de clientes, independente de localização.</p>
               <div className="grid grid-cols-3 gap-3">
-                {[1,2,3].map(rank=>{
-                  const featured=allProfiles.find(p=>p.featured_rank===rank);
+                {[1, 2, 3].map(rank => {
+                  const featured = allProfiles.find(p => p.featured_rank === rank);
                   return (
-                    <div key={rank} className={`rounded-xl border p-3 text-center ${featured?'border-amber-600 bg-amber-950/30':'border-slate-700 bg-slate-800'}`}>
+                    <div key={rank} className={`rounded-xl border p-3 text-center ${featured ? 'border-amber-600 bg-amber-950/30' : 'border-slate-700 bg-slate-800'}`}>
                       <p className="text-[10px] font-black text-amber-400 mb-2">#{rank}</p>
-                      {featured?(
+                      {featured ? (
                         <>
                           <div className="w-10 h-10 rounded-full bg-slate-700 mx-auto mb-1.5 overflow-hidden">
-                            {featured.avatar_url?<img src={featured.avatar_url} className="w-full h-full object-cover" alt=""/>:<User size={18} className="text-slate-400 mx-auto mt-1"/>}
+                            {featured.avatar_url ? <img src={featured.avatar_url} className="w-full h-full object-cover" alt=""/> : <User size={18} className="text-slate-400 mx-auto mt-2.5"/>}
                           </div>
                           <p className="text-[10px] font-bold text-white truncate">{featured.name}</p>
-                          <button onClick={()=>handleSetFeatured(featured.id,null)} className="mt-2 text-[9px] text-red-400 font-bold">Remover</button>
+                          <button onClick={() => handleSetFeatured(featured.id, null)} className="mt-2 text-[9px] text-red-400 font-bold">Remover</button>
                         </>
-                      ):(
+                      ) : (
                         <div className="text-slate-500"><p className="text-2xl mb-1">＋</p><p className="text-[9px]">Vaga livre</p></div>
                       )}
                     </div>
@@ -1183,40 +1572,42 @@ const AdminDashboard = () => {
                 })}
               </div>
             </div>
+
             <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
               <div className="p-4 border-b border-slate-800 flex items-center justify-between">
                 <h3 className="font-black text-white text-sm">Todos os Profissionais ({barbers.length})</h3>
               </div>
               <div className="divide-y divide-slate-800 max-h-[600px] overflow-y-auto">
-                {barbers.map(b=>{
-                  const currentTags=(b.admin_tags||[]).join(', ');
-                  const tagInput=tagInputs[b.id]!==undefined?tagInputs[b.id]:currentTags;
-                  const rating=getBarberRating(b);
-                  const appCount=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').length;
-                  const revenue=allAppointments.filter(a=>String(a.barber_id)===String(b.id)&&a.status==='confirmed').reduce((acc,a)=>acc+(Number(a.price)||0),0);
+                {barbers.map(b => {
+                  const currentTags = (b.admin_tags || []).join(', ');
+                  const tagInput = tagInputs[b.id] !== undefined ? tagInputs[b.id] : currentTags;
+                  const rating = getBarberRating(b);
+                  const mine = allAppointments.filter(a => String(a.barber_id) === String(b.id) && a.status === 'confirmed');
+                  const appCount = mine.length;
+                  const revenue = mine.reduce((acc, a) => acc + (Number(a.price) || 0), 0);
+                  const pushOn = !!(b.push_token || b.ios_push_token);
                   return (
                     <div key={b.id} className="p-4">
                       <div className="flex items-start gap-3">
                         <div className="w-10 h-10 rounded-full bg-slate-700 flex-shrink-0 overflow-hidden">
-                          {b.avatar_url?<img src={b.avatar_url} className="w-full h-full object-cover" alt=""/>:<div className="w-full h-full flex items-center justify-center"><User size={16} className="text-slate-400"/></div>}
+                          {b.avatar_url ? <img src={b.avatar_url} className="w-full h-full object-cover" alt=""/> : <div className="w-full h-full flex items-center justify-center"><User size={16} className="text-slate-400"/></div>}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-black text-white text-sm">{b.name}</p>
                             <StarRating rating={rating}/>
                             <span className="text-[9px] font-bold text-amber-400">{rating}</span>
-                            {b.featured_rank&&<span className="text-[9px] font-black bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded-full">★ Top #{b.featured_rank}</span>}
+                            {b.featured_rank && <span className="text-[9px] font-black bg-amber-900/50 text-amber-400 px-2 py-0.5 rounded-full">★ Top #{b.featured_rank}</span>}
                           </div>
                           <p className="text-[10px] text-slate-400 font-mono">{b.phone}</p>
                           <div className="flex items-center gap-3 mt-1 flex-wrap">
                             <span className="text-[9px] text-slate-500">{appCount} atend. · R$ {revenue}</span>
-                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${b.is_visible?'bg-green-900/50 text-green-400':'bg-red-900/50 text-red-400'}`}>
-                              {b.is_visible?'Visível':'Oculto'}
-                            </span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${b.is_visible ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}`}>{b.is_visible ? 'Visível' : 'Oculto'}</span>
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${pushOn ? 'bg-blue-900/50 text-blue-400' : 'bg-slate-800 text-slate-500'}`}>{pushOn ? '🔔 Push ativo' : 'Sem push'}</span>
                           </div>
-                          {(b.admin_tags||[]).length>0&&(
+                          {(b.admin_tags || []).length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
-                              {(b.admin_tags||[]).map((tag,i)=>(
+                              {(b.admin_tags || []).map((tag, i) => (
                                 <span key={i} className="text-[9px] font-bold bg-purple-900/40 text-purple-400 border border-purple-800 px-2 py-0.5 rounded-full">{tag}</span>
                               ))}
                             </div>
@@ -1226,26 +1617,26 @@ const AdminDashboard = () => {
                       <div className="mt-3 space-y-2">
                         <div className="flex gap-2">
                           <input type="text" value={tagInput}
-                            onChange={e=>setTagInputs(p=>({...p,[b.id]:e.target.value}))}
+                            onChange={e => setTagInputs(p => ({ ...p, [b.id]: e.target.value }))}
                             placeholder="Tags separadas por vírgula (ex: destaque, vip)"
                             className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white outline-none focus:border-purple-500 transition-colors placeholder-slate-500"/>
-                          <button onClick={()=>handleSaveTags(b.id,tagInput)} disabled={savingTags[b.id]}
+                          <button onClick={() => handleSaveTags(b.id, tagInput)} disabled={savingTags[b.id]}
                             className="px-3 py-1.5 bg-purple-600 text-white rounded-lg text-[10px] font-bold disabled:opacity-50 flex items-center gap-1 whitespace-nowrap">
-                            {savingTags[b.id]?<Loader2 size={10} className="animate-spin"/>:<Tag size={10}/>} Salvar
+                            {savingTags[b.id] ? <Loader2 size={10} className="animate-spin"/> : <Tag size={10}/>} Salvar
                           </button>
                         </div>
                         <div className="flex gap-2 flex-wrap">
-                          {[1,2,3].map(rank=>(
-                            <button key={rank} onClick={()=>handleSetFeatured(b.id,b.featured_rank===rank?null:rank)}
-                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.featured_rank===rank?'bg-amber-500 text-white':'bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700'}`}>
+                          {[1, 2, 3].map(rank => (
+                            <button key={rank} onClick={() => handleSetFeatured(b.id, b.featured_rank === rank ? null : rank)}
+                              className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.featured_rank === rank ? 'bg-amber-500 text-white' : 'bg-slate-800 text-slate-400 hover:text-amber-400 border border-slate-700'}`}>
                               ★ #{rank}
                             </button>
                           ))}
-                          <button onClick={()=>handleToggleVisibility(b.id,b.is_visible)}
-                            className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.is_visible?'bg-red-900/40 text-red-400 border border-red-800':'bg-green-900/40 text-green-400 border border-green-800'}`}>
-                            {b.is_visible?'Ocultar':'Mostrar'}
+                          <button onClick={() => handleToggleVisibility(b.id, b.is_visible)}
+                            className={`px-2.5 py-1 rounded-lg text-[9px] font-black transition-all ${b.is_visible ? 'bg-red-900/40 text-red-400 border border-red-800' : 'bg-green-900/40 text-green-400 border border-green-800'}`}>
+                            {b.is_visible ? 'Ocultar' : 'Mostrar'}
                           </button>
-                          <button onClick={()=>handleDeleteProfile(b.id,b.name)}
+                          <button onClick={() => handleDeleteProfile(b.id, b.name)}
                             className="px-2.5 py-1 rounded-lg text-[9px] font-black transition-all bg-red-900/60 text-red-300 border border-red-800 hover:bg-red-800 ml-auto">
                             <Trash2 size={10}/>
                           </button>
@@ -1521,9 +1912,9 @@ const WelcomeScreen = ({ onSelectMode, isDark, onToggleDark }) => {
     </div>
   );
 };
+
 // ════════════════════════════════════════════════════════════════════════════
 /// AUTH SCREEN — login/cadastro de barbeiros e clientes
-// ════════════════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════════════════
 const generateNonce = () => {
   const bytes = new Uint8Array(16);
@@ -1562,7 +1953,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   const [nameForSocial, setNameForSocial] = useState('');
 
   const [noAccountHint, setNoAccountHint] = useState(false);
-
   const [duplicateHint, setDuplicateHint] = useState(null);
 
   // Login com Apple só aparece no app do iPhone; o Google fica escondido no iPhone
@@ -1634,6 +2024,27 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     setError('Este telefone já tem uma conta cadastrada. Faça login para continuar.');
   };
 
+  // Garante a gravação do created_at se o perfil estiver com o campo nulo
+  const ensureCreatedAt = async (profileId) => {
+    if (!profileId) return;
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('created_at')
+        .eq('id', profileId)
+        .maybeSingle();
+
+      if (data && !data.created_at) {
+        await supabase
+          .from('profiles')
+          .update({ created_at: new Date().toISOString() })
+          .eq('id', profileId);
+      }
+    } catch (e) {
+      console.error('[AuthScreen] Erro ao atualizar created_at:', e);
+    }
+  };
+
   const handleRegister = async () => {
     setError('');
     if (!regNameValid) { setError('Digite seu nome (pelo menos 2 letras).'); return; }
@@ -1658,6 +2069,15 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         null,
         email
       );
+
+      // Verificação de segurança pós-registro para garantir created_at
+      const { data: createdProf } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle();
+      if (createdProf?.id) await ensureCreatedAt(createdProf.id);
+
     } catch (err) {
       setError(friendlyAuthError(err, 'Erro ao cadastrar. Tente novamente.'));
     } finally {
@@ -1673,7 +2093,16 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       if (!loginPhoneValid) { setError('WhatsApp deve ter 10 ou 11 dígitos.'); return; }
       setLoading(true);
       try {
-        await onLogin(getPhoneDigits(loginPhone), loginPassword || null, null, 'phone');
+        const phoneDigits = getPhoneDigits(loginPhone);
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('phone', phoneDigits)
+          .maybeSingle();
+
+        if (prof?.id) await ensureCreatedAt(prof.id);
+
+        await onLogin(phoneDigits, loginPassword || null, null, 'phone');
       } catch (err) {
         setError(err.message || 'Não foi possível entrar. Verifique telefone e senha.');
       } finally {
@@ -1688,6 +2117,14 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     setLoading(true);
     try {
       const email = loginEmail.trim().toLowerCase();
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (prof?.id) await ensureCreatedAt(prof.id);
+
       await onLogin(email, loginPassword, null, 'email');
     } catch (err) {
       setError(err.message || 'Não encontramos uma conta com este e-mail.');
@@ -1723,7 +2160,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
   };
 
   // Verifica se há sessão de login social (Google/Apple).
-  // Se já existe perfil -> entra direto. Se não existe -> pede telefone (primeiro login).
   const checkSocialSession = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     const provider = user?.app_metadata?.provider;
@@ -1748,6 +2184,10 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     }
 
     if (existingProfile) {
+      if (!existingProfile.created_at) {
+        await ensureCreatedAt(existingProfile.id);
+        existingProfile.created_at = new Date().toISOString();
+      }
       try { await onLogin(existingProfile.phone, null, existingProfile); }
       catch (err) { setError(err.message || 'Erro ao entrar com ' + (provider === 'apple' ? 'Apple.' : 'Google.')); }
     } else {
@@ -1786,7 +2226,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
       });
       if (signInErr) throw signInErr;
 
-      // A Apple só envia o nome UMA vez (no primeiro login): salvar imediatamente
       const given = result.givenName || '';
       const family = result.familyName || '';
       const fullName = (given + ' ' + family).trim();
@@ -1841,6 +2280,8 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
         { ...socialUser, name: finalName },
         socialUser.email,
       );
+
+      if (socialUser?.id) await ensureCreatedAt(socialUser.id);
     } catch (err) {
       setError(friendlyAuthError(err, 'Erro ao finalizar cadastro.'));
     } finally {
@@ -2092,7 +2533,6 @@ const AuthScreen = ({ userType, onBack, onLogin, onRegister, isDark, onToggleDar
     </div>
   );
 };
-
 const BarberOnboarding = ({ user, onComplete, onSkip, supabase: sb }) => {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -7167,7 +7607,7 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                     })}
                   </div>
 
-                  {/* Legenda */}
+{/* Legenda */}
                   <div className="flex flex-wrap gap-3 mb-4">
                     <div className="flex items-center gap-1.5">
                       <div className="w-3 h-3 bg-green-600 rounded-sm" />
@@ -7260,6 +7700,59 @@ const BarberDashboard = ({ user, appointments, onUpdateStatus, onLogout, onUpdat
                 </div>
               )}
             </section>
+
+            {/* ── PEDIR PUSH EMERGENCIAL ── */}
+            <div className="pt-2 pb-1 text-center">
+              <div className="inline-block p-4 bg-blue-50/50 rounded-2xl border border-blue-200 w-full text-left">
+                <h3 className="text-sm font-black text-blue-900 mb-1 flex items-center gap-1.5">
+                  🔔 Solicitar Notificação Push
+                </h3>
+                <p className="text-[10px] text-blue-700 font-bold mb-3 leading-tight">
+                  Você tem <b className="text-blue-900">3 usos de push emergencial</b> para comunicados urgentes ou promoções relâmpago. O administrador será notificado na hora para aprovar e disparar aos seus clientes.
+                </p>
+                <form onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (isGuestBarber) {
+                    alert('Funcionalidade indisponível no modo demonstração.');
+                    return;
+                  }
+                  const btn = e.target.querySelector('button');
+                  const title = e.target.title.value.trim();
+                  const body = e.target.body.value.trim();
+                  if (!title || !body) return;
+                  
+                  const originalText = btn.innerText;
+                  btn.disabled = true;
+                  btn.innerText = 'Enviando...';
+                  
+                  try {
+                    const { error } = await supabase.from('push_requests').insert({
+                      barber_id: effectiveUser.id,
+                      barber_name: effectiveUser.name,
+                      title, 
+                      body, 
+                      status: 'pendente'
+                    });
+                    if (error) throw error;
+                    alert('✅ Solicitação enviada ao Admin com sucesso! Você será avisado quando for aprovada.');
+                    e.target.reset();
+                  } catch(err) {
+                    alert('Erro ao pedir push: ' + err.message);
+                  }
+                  
+                  btn.disabled = false;
+                  btn.innerText = originalText;
+                }} className="space-y-2 mt-3">
+                  <input name="title" placeholder="Título (ex: Promoção de Sexta!)" maxLength={50} required
+                    className="w-full bg-white border border-blue-200 text-slate-900 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 transition-colors placeholder-slate-400" />
+                  <textarea name="body" placeholder="Mensagem curta para os clientes (máx 140 carac.)" maxLength={140} rows={2} required
+                    className="w-full bg-white border border-blue-200 text-slate-900 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500 resize-none transition-colors placeholder-slate-400" />
+                  <button type="submit" className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black active:scale-95 transition-all">
+                    Solicitar Envio ao Admin
+                  </button>
+                </form>
+              </div>
+            </div>
 
             {/* Status do plano */}
             <div className="pt-2 text-center">
